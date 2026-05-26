@@ -22,38 +22,49 @@ struct LiveSubtitleOverlayPayload: Equatable {
             targetLanguageIdentifier: targetLanguageIdentifier
         )
 
-        let validSegments = segments.compactMap { segment -> (segment: TranscriptSegment, entry: Entry)? in
-            guard sourceMode.includesSpeakerLabel(segment.speakerLabel) else { return nil }
-            guard let primaryText = segment.displayText.nilIfBlank else { return nil }
-            return (
-                segment,
-                Entry(
-                    primaryText: primaryText,
-                    secondaryText: showsTranslation ? segment.displayTranslatedText : nil
-                )
-            )
-        }
+        var latestConfirmedEntriesReversed: [Entry] = []
+        var entriesAroundUnconfirmedReversed: [Entry] = []
+        var foundUnconfirmed = false
 
-        guard !validSegments.isEmpty else { return nil }
+        for segment in segments.reversed() {
+            guard let entry = entry(
+                for: segment,
+                sourceMode: sourceMode,
+                showsTranslation: showsTranslation
+            ) else { continue }
 
-        if let latestUnconfirmedIndex = validSegments.lastIndex(where: { !$0.segment.isConfirmed }) {
-            var selectedIndices = [latestUnconfirmedIndex]
-            var candidateIndex = latestUnconfirmedIndex - 1
-
-            while candidateIndex >= 0, selectedIndices.count < clampedMaxEntries {
-                selectedIndices.append(candidateIndex)
-                candidateIndex -= 1
+            if foundUnconfirmed {
+                entriesAroundUnconfirmedReversed.append(entry)
+            } else if segment.isConfirmed {
+                if latestConfirmedEntriesReversed.count < clampedMaxEntries {
+                    latestConfirmedEntriesReversed.append(entry)
+                }
+            } else {
+                foundUnconfirmed = true
+                entriesAroundUnconfirmedReversed.append(entry)
             }
 
-            let entries = selectedIndices
-                .sorted()
-                .map { validSegments[$0].entry }
-            return Self(entries: entries)
+            if foundUnconfirmed, entriesAroundUnconfirmedReversed.count >= clampedMaxEntries {
+                break
+            }
         }
 
-        let entries = validSegments
-            .suffix(clampedMaxEntries)
-            .map(\.entry)
-        return Self(entries: Array(entries))
+        let reversedEntries = foundUnconfirmed ? entriesAroundUnconfirmedReversed : latestConfirmedEntriesReversed
+        guard !reversedEntries.isEmpty else { return nil }
+        return Self(entries: Array(reversedEntries.reversed()))
+    }
+
+    private static func entry(
+        for segment: TranscriptSegment,
+        sourceMode: LiveSubtitleSourceMode,
+        showsTranslation: Bool
+    ) -> Entry? {
+        guard sourceMode.includesSpeakerLabel(segment.speakerLabel),
+              let primaryText = segment.displayText.nilIfBlank else { return nil }
+
+        return Entry(
+            primaryText: primaryText,
+            secondaryText: showsTranslation ? segment.displayTranslatedText : nil
+        )
     }
 }
