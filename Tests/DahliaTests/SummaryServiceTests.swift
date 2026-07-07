@@ -113,6 +113,25 @@ struct SummaryServiceTests {
     }
 
     @Test
+    func screenshotMetadataUsesRelativeTimestamp() throws {
+        let screenshotId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E6"))
+        let timeBase = Date(timeIntervalSince1970: 1_776_384_000)
+        let screenshot = MeetingScreenshotRecord(
+            id: screenshotId,
+            meetingId: UUID(),
+            capturedAt: timeBase.addingTimeInterval(754),
+            imageData: Data(),
+            mimeType: "image/jpeg"
+        )
+
+        let metadata = SummaryService.screenshotMetadata(for: screenshot, relativeTo: timeBase)
+
+        #expect(metadata.contains("<time>00:12:34</time>"))
+        #expect(metadata.contains("<image_id>\(screenshotId.uuidString).jpeg</image_id>"))
+        #expect(metadata.contains("<image_filename>\(screenshotId.uuidString).jpeg</image_filename>"))
+    }
+
+    @Test
     func defaultSummaryPromptRequiresScreenshotFilenameExtension() {
         #expect(AppSettings.defaultSummaryPrompt.contains("![[<image_filename>]]"))
         #expect(AppSettings.defaultSummaryPrompt.contains("including its file extension"))

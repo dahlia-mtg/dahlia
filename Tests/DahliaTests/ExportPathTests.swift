@@ -32,6 +32,33 @@ struct ExportPathTests {
     }
 
     @Test
+    func transcriptExportUsesCreatedAtRelativeTimestamps() throws {
+        let vaultURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        try FileManager.default.createDirectory(at: vaultURL, withIntermediateDirectories: true)
+
+        let meetingId = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_776_384_000)
+        let relativePath = try TranscriptExportService.exportTranscript(
+            vaultURL: vaultURL,
+            meetingId: meetingId,
+            projectName: "Test Project",
+            createdAt: createdAt,
+            segments: [
+                TranscriptSegment(
+                    startTime: createdAt.addingTimeInterval(754),
+                    text: "hello"
+                )
+            ]
+        )
+
+        let markdown = try String(contentsOf: vaultURL.appendingPathComponent(relativePath), encoding: .utf8)
+        #expect(markdown.contains("###### 00:12:34\nhello"))
+    }
+
+    @Test
     func screenshotExportWritesIntoDahliaScreenshotsDirectory() throws {
         let vaultURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

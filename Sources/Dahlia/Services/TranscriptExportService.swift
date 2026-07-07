@@ -37,7 +37,7 @@ enum TranscriptExportService {
         """
 
         let body: String = segments.map { (segment: TranscriptSegment) -> String in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+            let time = Formatters.elapsedHHmmss(from: createdAt, to: segment.startTime)
             return "###### \(time)\n\(segment.displayText)"
         }.joined(separator: "\n")
 

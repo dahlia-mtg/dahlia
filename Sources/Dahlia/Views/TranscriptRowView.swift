@@ -3,12 +3,13 @@ import SwiftUI
 /// 議事録の1セグメントを表示する行ビュー。
 struct TranscriptRowView: View, Equatable {
     let segment: TranscriptSegment
+    let timeBase: Date
     let showsTranslatedText: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             // タイムスタンプ
-            Text(Formatters.timeHHmmss.string(from: segment.startTime))
+            Text(Formatters.elapsedHHmmss(from: timeBase, to: segment.startTime))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .frame(width: 56, alignment: .leading)

@@ -1,12 +1,14 @@
 import Foundation
 
 enum Formatters {
-    static let timeHHmmss: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
-
+    /// 録音開始からの経過時間を "00:12:34" 固定幅(HH:mm:ss)で整形する。
+    static func elapsedHHmmss(from start: Date, to date: Date) -> String {
+        let totalSeconds = max(0, Int(date.timeIntervalSince(start)))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
 }
 
 extension Sequence<Locale> {

@@ -841,10 +841,11 @@ final class CaptionViewModel: ObservableObject {
         }
 
         var sourceErrors: [Error] = []
+        let recordingStartTime = Date()
 
         if isMicEnabled {
             do {
-                try await startMicrophonePipeline(locale: primaryLocale)
+                try await startMicrophonePipeline(locale: primaryLocale, recordingStartTime: recordingStartTime)
             } catch {
                 sourceErrors.append(error)
             }
@@ -852,7 +853,7 @@ final class CaptionViewModel: ObservableObject {
 
         if isSystemAudioEnabled {
             do {
-                try await startSystemAudioPipeline(locale: primaryLocale)
+                try await startSystemAudioPipeline(locale: primaryLocale, recordingStartTime: recordingStartTime)
             } catch {
                 sourceErrors.append(error)
             }
@@ -896,13 +897,17 @@ final class CaptionViewModel: ObservableObject {
         pipelines.removeAll()
     }
 
-    private func startMicrophonePipeline(locale: Locale) async throws {
+    private func startMicrophonePipeline(locale: Locale, recordingStartTime: Date) async throws {
         let hasMicPermission = await AudioCaptureManager.requestMicrophonePermission()
         guard hasMicPermission else {
             throw AudioCaptureError.microphonePermissionDenied
         }
 
-        let (service, bridge, format) = try await buildPipeline(locale: locale, speakerLabel: "mic")
+        let (service, bridge, format) = try await buildPipeline(
+            locale: locale,
+            speakerLabel: "mic",
+            recordingStartTime: recordingStartTime
+        )
         try startMicrophoneCapture(
             bridge: bridge,
             targetFormat: format,
@@ -911,8 +916,12 @@ final class CaptionViewModel: ObservableObject {
         pipelines.append((service: service, bridge: bridge))
     }
 
-    private func startSystemAudioPipeline(locale: Locale) async throws {
-        let (service, bridge, format) = try await buildPipeline(locale: locale, speakerLabel: "system")
+    private func startSystemAudioPipeline(locale: Locale, recordingStartTime: Date) async throws {
+        let (service, bridge, format) = try await buildPipeline(
+            locale: locale,
+            speakerLabel: "system",
+            recordingStartTime: recordingStartTime
+        )
         try await startSystemAudioCapture(bridge: bridge, targetFormat: format)
         pipelines.append((service: service, bridge: bridge))
     }
@@ -971,7 +980,15 @@ final class CaptionViewModel: ObservableObject {
         }
 
         pipelines.removeAll()
-        store.recordingStartTime = Date()
+        let recordingStartTime = Date()
+        if let existingMeetingId {
+            if store.recordingStartTime == nil {
+                let repo = MeetingRepository(dbQueue: dbQueue)
+                store.recordingStartTime = (try? repo.fetchMeeting(id: existingMeetingId))?.createdAt ?? recordingStartTime
+            }
+        } else {
+            store.recordingStartTime = recordingStartTime
+        }
         persistenceService = nil
         stopAutomaticScreenshotCapture()
 
@@ -980,10 +997,10 @@ final class CaptionViewModel: ObservableObject {
             try await SpeechTranscriberService.ensureModelInstalled(locale: primaryLocale)
 
             if isMicEnabled {
-                try await startMicrophonePipeline(locale: primaryLocale)
+                try await startMicrophonePipeline(locale: primaryLocale, recordingStartTime: recordingStartTime)
             }
             if isSystemAudioEnabled {
-                try await startSystemAudioPipeline(locale: primaryLocale)
+                try await startSystemAudioPipeline(locale: primaryLocale, recordingStartTime: recordingStartTime)
             }
 
             if let existingMeetingId {
@@ -1646,7 +1663,8 @@ final class CaptionViewModel: ObservableObject {
 
     private func buildPipeline(
         locale: Locale,
-        speakerLabel: String
+        speakerLabel: String,
+        recordingStartTime: Date
     ) async throws -> (service: SpeechTranscriberService, bridge: AudioBufferBridge, format: AVAudioFormat) {
         let service = SpeechTranscriberService(
             locale: locale,
@@ -1658,7 +1676,7 @@ final class CaptionViewModel: ObservableObject {
             throw AudioCaptureError.converterCreationFailed
         }
         let bridge = AudioBufferBridge(sampleRate: format.sampleRate)
-        try await service.startStreaming(store: store, bridge: bridge)
+        try await service.startStreaming(store: store, bridge: bridge, recordingStartTime: recordingStartTime)
         return (service: service, bridge: bridge, format: format)
     }
 

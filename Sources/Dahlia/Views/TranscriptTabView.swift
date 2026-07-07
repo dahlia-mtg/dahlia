@@ -79,6 +79,7 @@ struct TranscriptTabView: View {
                     ForEach(windowedSegments) { segment in
                         TranscriptRowView(
                             segment: segment,
+                            timeBase: store.timeBase,
                             showsTranslatedText: showsTranslatedText
                         )
                         .equatable()

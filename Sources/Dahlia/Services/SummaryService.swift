@@ -17,12 +17,6 @@ enum SummaryService {
         return f
     }()
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
-
     /// 要約を生成し、Markdown と関連メタデータを返す。
     @MainActor
     static func generateSummary(
@@ -81,10 +75,7 @@ enum SummaryService {
             }.value
             var parts: [LLMService.ContentPart] = [.text(transcriptContent)]
             for (screenshot, preparedImageDataURI) in zip(screenshots, preparedImageDataURIs) {
-                let time = timeFormatter.string(from: screenshot.capturedAt)
-                let imageFilename = ScreenshotExportService.filename(for: screenshot)
-                let imageMetadata = "<time>\(time)</time> <image_id>\(imageFilename)</image_id> <image_filename>\(imageFilename)</image_filename>"
-                parts.append(.text(imageMetadata))
+                parts.append(.text(screenshotMetadata(for: screenshot, relativeTo: createdAt)))
                 parts.append(.imageURL(preparedImageDataURI))
             }
             messages.append(.init(role: "user", parts: parts))
@@ -145,6 +136,12 @@ enum SummaryService {
             tags: tags,
             actionItems: actionItems
         )
+    }
+
+    static func screenshotMetadata(for screenshot: MeetingScreenshotRecord, relativeTo timeBase: Date) -> String {
+        let time = Formatters.elapsedHHmmss(from: timeBase, to: screenshot.capturedAt)
+        let imageFilename = ScreenshotExportService.filename(for: screenshot)
+        return "<time>\(time)</time> <image_id>\(imageFilename)</image_id> <image_filename>\(imageFilename)</image_filename>"
     }
 
     /// 要約保存先ディレクトリ内の `.md` ファイルを走査し、frontmatter の `meeting_id` が一致するファイルを返す。

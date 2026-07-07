@@ -7,6 +7,39 @@ import Testing
 @MainActor
 struct TranscriptSegmentTests {
     @Test
+    func elapsedHHmmssFormatsDurationFromStartTime() {
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+
+        #expect(Formatters.elapsedHHmmss(from: start, to: start) == "00:00:00")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(754)) == "00:12:34")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(3_947)) == "01:05:47")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(-1)) == "00:00:00")
+    }
+
+    @Test
+    func transcriptStoreExportsRelativeTimestampsFromRecordingStartTime() {
+        let store = TranscriptStore()
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+        store.recordingStartTime = start
+        store.loadSegments([
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(754),
+                text: "First",
+                isConfirmed: true,
+                speakerLabel: "mic"
+            ),
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(3_947),
+                text: "Second",
+                isConfirmed: true
+            ),
+        ])
+
+        #expect(store.exportAsText() == "[00:12:34] [mic] First\n[01:05:47] Second")
+        #expect(store.exportForSummary() == "<time>00:12:34</time> First\n<time>01:05:47</time> Second")
+    }
+
+    @Test
     func transcriptStoreUpdatesTranslatedTextForMatchingSegmentOnly() {
         let store = TranscriptStore()
         let first = TranscriptSegment(
@@ -140,6 +173,37 @@ import XCTest
 
 @MainActor
 final class TranscriptSegmentTests: XCTestCase {
+    func testElapsedHHmmssFormatsDurationFromStartTime() {
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+
+        XCTAssertEqual(Formatters.elapsedHHmmss(from: start, to: start), "00:00:00")
+        XCTAssertEqual(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(754)), "00:12:34")
+        XCTAssertEqual(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(3_947)), "01:05:47")
+        XCTAssertEqual(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(-1)), "00:00:00")
+    }
+
+    func testTranscriptStoreExportsRelativeTimestampsFromRecordingStartTime() {
+        let store = TranscriptStore()
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+        store.recordingStartTime = start
+        store.loadSegments([
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(754),
+                text: "First",
+                isConfirmed: true,
+                speakerLabel: "mic"
+            ),
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(3_947),
+                text: "Second",
+                isConfirmed: true
+            ),
+        ])
+
+        XCTAssertEqual(store.exportAsText(), "[00:12:34] [mic] First\n[01:05:47] Second")
+        XCTAssertEqual(store.exportForSummary(), "<time>00:12:34</time> First\n<time>01:05:47</time> Second")
+    }
+
     func testTranscriptStoreUpdatesTranslatedTextForMatchingSegmentOnly() {
         let store = TranscriptStore()
         let first = TranscriptSegment(

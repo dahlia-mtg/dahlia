@@ -90,13 +90,17 @@ actor SpeechTranscriberService {
     }
 
     /// ストリーミング文字起こしを開始する。
-    func startStreaming(store: TranscriptStore, bridge: AudioBufferBridge) async throws {
+    func startStreaming(store: TranscriptStore, bridge: AudioBufferBridge, recordingStartTime providedRecordingStartTime: Date? = nil) async throws {
         guard let analyzer, let transcriber else { return }
 
         // SpeechAnalyzer にオーディオストリームを渡して解析開始
         try await analyzer.start(inputSequence: bridge.stream)
 
-        let recordingStartTime = await store.recordingStartTime ?? Date()
+        let recordingStartTime: Date = if let providedRecordingStartTime {
+            providedRecordingStartTime
+        } else {
+            await store.recordingStartTime ?? Date()
+        }
 
         // SpeechTranscriber の結果を非同期でイテレーションし、TranscriptStore に反映
         resultTask = Task { [weak self] in

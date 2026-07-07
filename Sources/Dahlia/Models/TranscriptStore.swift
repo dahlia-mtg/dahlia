@@ -15,6 +15,10 @@ final class TranscriptStore: ObservableObject {
 
     var recordingStartTime: Date?
 
+    var timeBase: Date {
+        recordingStartTime ?? segments.first?.startTime ?? Date()
+    }
+
     // MARK: - Unconfirmed Segment Throttle (per source)
 
     private var unconfirmedThrottleTasks: [String: Task<Void, Never>] = [:]
@@ -135,8 +139,9 @@ final class TranscriptStore: ObservableObject {
     }
 
     func exportAsText() -> String {
-        segments.map { segment in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+        let timeBase = self.timeBase
+        return segments.map { segment in
+            let time = Formatters.elapsedHHmmss(from: timeBase, to: segment.startTime)
             let speaker = segment.speakerLabel.map { "[\($0)] " } ?? ""
             return "[\(time)] \(speaker)\(segment.displayText)"
         }.joined(separator: "\n")
@@ -144,8 +149,9 @@ final class TranscriptStore: ObservableObject {
 
     /// LLM 要約用のテキスト。スピーカーラベルを含めない。
     func exportForSummary() -> String {
-        segments.map { segment in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+        let timeBase = self.timeBase
+        return segments.map { segment in
+            let time = Formatters.elapsedHHmmss(from: timeBase, to: segment.startTime)
             return "<time>\(time)</time> \(segment.displayText)"
         }.joined(separator: "\n")
     }
