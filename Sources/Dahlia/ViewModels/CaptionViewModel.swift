@@ -385,6 +385,7 @@ final class CaptionViewModel: ObservableObject {
 
     private struct LoadedMeetingData {
         let createdAt: Date?
+        let recordingSessions: [RecordingSessionTimeline]
         let segments: [TranscriptSegment]
         let screenshots: [MeetingScreenshotRecord]
         let summary: String?
@@ -401,6 +402,7 @@ final class CaptionViewModel: ObservableObject {
     ) throws -> LoadedMeetingData {
         let repo = MeetingRepository(dbQueue: dbQueue)
         let detail = try repo.fetchMeetingDetail(id: meetingId)
+        let recordingSessions = detail.recordingSessions.map(RecordingSessionTimeline.init)
         let segments = detail.segments.map(TranscriptSegment.init(from:))
 
         let lastSummaryURL = SummaryService.findSummaryFile(
@@ -411,6 +413,7 @@ final class CaptionViewModel: ObservableObject {
 
         return LoadedMeetingData(
             createdAt: detail.meeting?.createdAt,
+            recordingSessions: recordingSessions,
             segments: segments,
             screenshots: detail.screenshots,
             summary: detail.summary?.summary,
@@ -483,6 +486,7 @@ final class CaptionViewModel: ObservableObject {
             guard !Task.isCancelled, self.currentMeetingId == meetingId else { return }
 
             self.store.recordingStartTime = loaded.createdAt
+            self.store.loadRecordingSessions(loaded.recordingSessions)
             self.store.loadSegments(loaded.segments)
             self.applyLoadedDetail(loaded)
         }
@@ -841,10 +845,16 @@ final class CaptionViewModel: ObservableObject {
         }
 
         var sourceErrors: [Error] = []
+        let recordingStartTime = Date()
+        let recordingSessionId = persistenceService?.recordingSessionId ?? UUID.v7()
 
         if isMicEnabled {
             do {
-                try await startMicrophonePipeline(locale: primaryLocale)
+                try await startMicrophonePipeline(
+                    locale: primaryLocale,
+                    recordingStartTime: recordingStartTime,
+                    recordingSessionId: recordingSessionId
+                )
             } catch {
                 sourceErrors.append(error)
             }
@@ -852,7 +862,11 @@ final class CaptionViewModel: ObservableObject {
 
         if isSystemAudioEnabled {
             do {
-                try await startSystemAudioPipeline(locale: primaryLocale)
+                try await startSystemAudioPipeline(
+                    locale: primaryLocale,
+                    recordingStartTime: recordingStartTime,
+                    recordingSessionId: recordingSessionId
+                )
             } catch {
                 sourceErrors.append(error)
             }
@@ -896,13 +910,18 @@ final class CaptionViewModel: ObservableObject {
         pipelines.removeAll()
     }
 
-    private func startMicrophonePipeline(locale: Locale) async throws {
+    private func startMicrophonePipeline(locale: Locale, recordingStartTime: Date, recordingSessionId: UUID) async throws {
         let hasMicPermission = await AudioCaptureManager.requestMicrophonePermission()
         guard hasMicPermission else {
             throw AudioCaptureError.microphonePermissionDenied
         }
 
-        let (service, bridge, format) = try await buildPipeline(locale: locale, speakerLabel: "mic")
+        let (service, bridge, format) = try await buildPipeline(
+            locale: locale,
+            speakerLabel: "mic",
+            recordingStartTime: recordingStartTime,
+            recordingSessionId: recordingSessionId
+        )
         try startMicrophoneCapture(
             bridge: bridge,
             targetFormat: format,
@@ -911,8 +930,13 @@ final class CaptionViewModel: ObservableObject {
         pipelines.append((service: service, bridge: bridge))
     }
 
-    private func startSystemAudioPipeline(locale: Locale) async throws {
-        let (service, bridge, format) = try await buildPipeline(locale: locale, speakerLabel: "system")
+    private func startSystemAudioPipeline(locale: Locale, recordingStartTime: Date, recordingSessionId: UUID) async throws {
+        let (service, bridge, format) = try await buildPipeline(
+            locale: locale,
+            speakerLabel: "system",
+            recordingStartTime: recordingStartTime,
+            recordingSessionId: recordingSessionId
+        )
         try await startSystemAudioCapture(bridge: bridge, targetFormat: format)
         pipelines.append((service: service, bridge: bridge))
     }
@@ -971,7 +995,27 @@ final class CaptionViewModel: ObservableObject {
         }
 
         pipelines.removeAll()
-        store.recordingStartTime = Date()
+        let recordingStartTime = Date()
+        let recordingSessionId = UUID.v7()
+        let appendContext: MeetingRepository.AppendRecordingContext?
+        if let existingMeetingId {
+            let repo = MeetingRepository(dbQueue: dbQueue)
+            appendContext = try? repo.fetchAppendRecordingContext(forMeetingId: existingMeetingId)
+            if let recordingSessions = appendContext?.recordingSessions, !recordingSessions.isEmpty {
+                store.loadRecordingSessions(recordingSessions.map(RecordingSessionTimeline.init))
+            }
+            if store.recordingStartTime == nil {
+                if let firstSegmentStartTime = appendContext?.firstSegmentStartTime {
+                    store.recordingStartTime = appendContext?.meetingCreatedAt ?? firstSegmentStartTime
+                } else {
+                    store.recordingStartTime = recordingStartTime
+                    try? repo.updateMeetingCreatedAt(id: existingMeetingId, createdAt: recordingStartTime)
+                }
+            }
+        } else {
+            appendContext = nil
+            store.recordingStartTime = recordingStartTime
+        }
         persistenceService = nil
         stopAutomaticScreenshotCapture()
 
@@ -980,21 +1024,30 @@ final class CaptionViewModel: ObservableObject {
             try await SpeechTranscriberService.ensureModelInstalled(locale: primaryLocale)
 
             if isMicEnabled {
-                try await startMicrophonePipeline(locale: primaryLocale)
+                try await startMicrophonePipeline(
+                    locale: primaryLocale,
+                    recordingStartTime: recordingStartTime,
+                    recordingSessionId: recordingSessionId
+                )
             }
             if isSystemAudioEnabled {
-                try await startSystemAudioPipeline(locale: primaryLocale)
+                try await startSystemAudioPipeline(
+                    locale: primaryLocale,
+                    recordingStartTime: recordingStartTime,
+                    recordingSessionId: recordingSessionId
+                )
             }
 
             if let existingMeetingId {
                 // 追記モード: 既存セグメント ID を取得して PersistenceService に渡す
-                let repo = MeetingRepository(dbQueue: dbQueue)
-                let existingIds = (try? repo.fetchSegmentIds(forMeetingId: existingMeetingId)) ?? []
-                persistenceService = MeetingPersistenceService(
+                persistenceService = try MeetingPersistenceService(
                     store: store,
                     dbQueue: dbQueue,
                     existingMeetingId: existingMeetingId,
-                    existingSegmentIds: existingIds
+                    existingSegmentIds: appendContext?.segmentIds ?? [],
+                    recordingStartDate: recordingStartTime,
+                    recordingOffsetSeconds: appendContext?.nextOffsetSeconds ?? 0,
+                    recordingSessionId: recordingSessionId
                 )
                 currentMeetingId = existingMeetingId
             } else {
@@ -1005,7 +1058,8 @@ final class CaptionViewModel: ObservableObject {
                     vaultId: vaultId,
                     projectId: projectId,
                     initialName: initialName,
-                    calendarEvent: activeDraftMeeting?.linkedCalendarEvent
+                    calendarEvent: activeDraftMeeting?.linkedCalendarEvent,
+                    recordingSessionId: recordingSessionId
                 )
                 currentMeetingId = persistenceService?.meetingId
                 draftMeeting = nil
@@ -1040,8 +1094,9 @@ final class CaptionViewModel: ObservableObject {
         let meetingId = ctx?.meetingId ?? currentMeetingId
         let projectName = ctx?.projectName ?? selectedProjectName
         let vaultURL = ctx?.vaultURL ?? currentVaultURL
-        let recordingStart = activeStore.recordingStartTime ?? Date()
+        let recordingStart = activeStore.timeBase
         let segments = activeStore.segments
+        let recordingSessions = activeStore.recordingSessions
         recordingContext = nil
 
         guard let vaultURL else { return }
@@ -1057,7 +1112,8 @@ final class CaptionViewModel: ObservableObject {
                     meetingId: meetingId,
                     projectName: projectName ?? "",
                     createdAt: recordingStart,
-                    segments: segments
+                    segments: segments,
+                    recordingSessions: recordingSessions
                 )
             }
         }
@@ -1083,9 +1139,10 @@ final class CaptionViewModel: ObservableObject {
               let vaultURL = currentVaultURL else { return }
         let projectURL = currentProjectURL
         let transcriptText = store.exportForSummary()
-        let createdAt = store.recordingStartTime ?? Date()
+        let createdAt = store.timeBase
         let projectName = selectedProjectName ?? ""
         let segments = store.segments
+        let recordingSessions = store.recordingSessions
         requestShowSummaryTab = true
         Task {
             await generateSummary(
@@ -1095,7 +1152,8 @@ final class CaptionViewModel: ObservableObject {
                 createdAt: createdAt,
                 vaultURL: vaultURL,
                 projectName: projectName,
-                segments: segments
+                segments: segments,
+                recordingSessions: recordingSessions
             )
         }
     }
@@ -1107,7 +1165,8 @@ final class CaptionViewModel: ObservableObject {
         createdAt: Date,
         vaultURL: URL,
         projectName: String,
-        segments: [TranscriptSegment]
+        segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline]
     ) async {
         guard !transcriptText.isEmpty else { return }
 
@@ -1156,6 +1215,7 @@ final class CaptionViewModel: ObservableObject {
                 transcriptText: transcriptText,
                 noteText: currentNoteText.isEmpty ? nil : currentNoteText,
                 screenshots: screenshots,
+                recordingSessions: recordingSessions,
                 repository: repo
             )
 
@@ -1184,6 +1244,7 @@ final class CaptionViewModel: ObservableObject {
                 createdAt: createdAt,
                 projectName: projectName,
                 segments: segments,
+                recordingSessions: recordingSessions,
                 screenshots: screenshots,
                 summaryFileName: generatedSummary.fileName,
                 summaryMarkdown: generatedSummary.markdown
@@ -1265,7 +1326,8 @@ final class CaptionViewModel: ObservableObject {
         meetingId: UUID,
         projectName: String,
         createdAt: Date,
-        segments: [TranscriptSegment]
+        segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline]
     ) async {
         var screenshots: [MeetingScreenshotRecord] = []
         if let dbQueue = currentDbQueue {
@@ -1278,6 +1340,7 @@ final class CaptionViewModel: ObservableObject {
             projectName: projectName,
             createdAt: createdAt,
             segments: segments,
+            recordingSessions: recordingSessions,
             screenshots: screenshots
         )
     }
@@ -1289,6 +1352,7 @@ final class CaptionViewModel: ObservableObject {
         projectName: String,
         createdAt: Date,
         segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline],
         screenshots: [MeetingScreenshotRecord]
     ) async {
         async let transcriptPath = Task.detached {
@@ -1297,7 +1361,8 @@ final class CaptionViewModel: ObservableObject {
                 meetingId: meetingId,
                 projectName: projectName,
                 createdAt: createdAt,
-                segments: segments
+                segments: segments,
+                recordingSessions: recordingSessions
             )
         }.value
 
@@ -1362,6 +1427,7 @@ final class CaptionViewModel: ObservableObject {
                 try await persistScreenshot(
                     cgImage,
                     meetingId: meetingId,
+                    sessionId: persistenceService?.recordingSessionId,
                     dbQueue: dbQueue,
                     shouldRefreshVisibleScreenshots: shouldRefreshVisibleScreenshots
                 )
@@ -1469,6 +1535,7 @@ final class CaptionViewModel: ObservableObject {
             try await persistScreenshot(
                 cgImage,
                 meetingId: meetingId,
+                sessionId: persistenceService?.recordingSessionId,
                 dbQueue: dbQueue,
                 shouldRefreshVisibleScreenshots: shouldRefreshVisibleScreenshots
             )
@@ -1518,6 +1585,7 @@ final class CaptionViewModel: ObservableObject {
     private func persistScreenshot(
         _ cgImage: CGImage,
         meetingId: UUID,
+        sessionId: UUID?,
         dbQueue: DatabaseQueue,
         shouldRefreshVisibleScreenshots: Bool
     ) async throws {
@@ -1531,6 +1599,7 @@ final class CaptionViewModel: ObservableObject {
         let record = MeetingScreenshotRecord(
             id: UUID.v7(),
             meetingId: meetingId,
+            sessionId: sessionId,
             capturedAt: Date(),
             imageData: imageData,
             mimeType: ImageEncoder.preferredMIMEType
@@ -1646,7 +1715,9 @@ final class CaptionViewModel: ObservableObject {
 
     private func buildPipeline(
         locale: Locale,
-        speakerLabel: String
+        speakerLabel: String,
+        recordingStartTime: Date,
+        recordingSessionId: UUID
     ) async throws -> (service: SpeechTranscriberService, bridge: AudioBufferBridge, format: AVAudioFormat) {
         let service = SpeechTranscriberService(
             locale: locale,
@@ -1658,7 +1729,12 @@ final class CaptionViewModel: ObservableObject {
             throw AudioCaptureError.converterCreationFailed
         }
         let bridge = AudioBufferBridge(sampleRate: format.sampleRate)
-        try await service.startStreaming(store: store, bridge: bridge)
+        try await service.startStreaming(
+            store: store,
+            bridge: bridge,
+            recordingStartTime: recordingStartTime,
+            recordingSessionId: recordingSessionId
+        )
         return (service: service, bridge: bridge, format: format)
     }
 

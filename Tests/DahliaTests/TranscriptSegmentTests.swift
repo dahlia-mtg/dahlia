@@ -7,6 +7,79 @@ import Testing
 @MainActor
 struct TranscriptSegmentTests {
     @Test
+    func elapsedHHmmssFormatsDurationFromStartTime() {
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+
+        #expect(Formatters.elapsedHHmmss(from: start, to: start) == "00:00:00")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(754)) == "00:12:34")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(3_947)) == "01:05:47")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(-1)) == "00:00:00")
+    }
+
+    @Test
+    func transcriptStoreExportsRelativeTimestampsFromRecordingStartTime() {
+        let store = TranscriptStore()
+        let start = Date(timeIntervalSince1970: 1_776_384_000)
+        store.recordingStartTime = start
+        store.loadSegments([
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(754),
+                text: "First",
+                isConfirmed: true,
+                speakerLabel: "mic"
+            ),
+            TranscriptSegment(
+                startTime: start.addingTimeInterval(3_947),
+                text: "Second",
+                isConfirmed: true
+            ),
+        ])
+
+        #expect(store.exportAsText() == "[00:12:34] [mic] First\n[01:05:47] Second")
+        #expect(store.exportForSummary() == "<time>00:12:34</time> First\n<time>01:05:47</time> Second")
+    }
+
+    @Test
+    func transcriptStoreExportsSessionOffsetTimestampsAcrossPausedRecording() {
+        let store = TranscriptStore()
+        let meetingStart = Date(timeIntervalSince1970: 1_776_384_000)
+        let firstSessionId = UUID.v7()
+        let secondSessionId = UUID.v7()
+        store.recordingStartTime = meetingStart
+        store.loadRecordingSessions([
+            RecordingSessionTimeline(
+                id: firstSessionId,
+                startedAt: meetingStart,
+                endedAt: meetingStart.addingTimeInterval(10),
+                offsetSeconds: 0
+            ),
+            RecordingSessionTimeline(
+                id: secondSessionId,
+                startedAt: meetingStart.addingTimeInterval(300),
+                endedAt: nil,
+                offsetSeconds: 10
+            ),
+        ])
+        store.loadSegments([
+            TranscriptSegment(
+                sessionId: firstSessionId,
+                startTime: meetingStart.addingTimeInterval(5),
+                text: "Before pause",
+                isConfirmed: true
+            ),
+            TranscriptSegment(
+                sessionId: secondSessionId,
+                startTime: meetingStart.addingTimeInterval(303),
+                text: "After pause",
+                isConfirmed: true
+            ),
+        ])
+
+        #expect(store.exportAsText() == "[00:00:05] Before pause\n[00:00:13] After pause")
+        #expect(store.exportForSummary() == "<time>00:00:05</time> Before pause\n<time>00:00:13</time> After pause")
+    }
+
+    @Test
     func transcriptStoreUpdatesTranslatedTextForMatchingSegmentOnly() {
         let store = TranscriptStore()
         let first = TranscriptSegment(

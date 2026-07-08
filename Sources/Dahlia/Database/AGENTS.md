@@ -10,7 +10,7 @@ SQLite の実体は `~/Library/Application Support/Dahlia/dahlia.sqlite`（`AppD
 
 ## テーブル
 
-`vaults`、`projects`（vault スコープ・パスベース）、`meetings`、`transcript_segments`、`tags`、`meeting_tags`、`notes`、`screenshots`、`summaries`、`action_items`、`calendar_events`、`instructions`
+`vaults`、`projects`（vault スコープ・パスベース）、`meetings`、`recording_sessions`、`transcript_segments`、`tags`、`meeting_tags`、`notes`、`screenshots`、`summaries`、`action_items`、`calendar_events`、`instructions`
 
 - すべての ID は UUID v7（`UUID.v7()`、時系列ソート可能）。
 - `projects` はファイルシステム上のフォルダに対応し、`VaultSyncService`（FSEvents）が DB と同期する。

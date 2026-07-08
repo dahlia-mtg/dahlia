@@ -12,8 +12,13 @@ final class TranscriptStore: ObservableObject {
     }
 
     @Published var segments: [TranscriptSegment] = []
+    @Published var recordingSessions: [RecordingSessionTimeline] = []
 
     var recordingStartTime: Date?
+
+    var timeBase: Date {
+        recordingStartTime ?? recordingSessions.first?.startedAt ?? segments.first?.startTime ?? Date()
+    }
 
     // MARK: - Unconfirmed Segment Throttle (per source)
 
@@ -91,6 +96,7 @@ final class TranscriptStore: ObservableObject {
         let existingSegment = existingUnconfirmedSegment(forSource: sourceLabel)
         return TranscriptSegment(
             id: existingSegment?.id ?? segment.id,
+            sessionId: segment.sessionId ?? existingSegment?.sessionId,
             startTime: segment.startTime,
             endTime: segment.endTime,
             text: segment.text,
@@ -119,6 +125,25 @@ final class TranscriptStore: ObservableObject {
         segments = newSegments
     }
 
+    /// DB から読み込んだ録音セッションを一括セットする。
+    func loadRecordingSessions(_ sessions: [RecordingSessionTimeline]) {
+        recordingSessions = sessions.sorted { lhs, rhs in
+            if lhs.offsetSeconds == rhs.offsetSeconds {
+                return lhs.startedAt < rhs.startedAt
+            }
+            return lhs.offsetSeconds < rhs.offsetSeconds
+        }
+    }
+
+    func upsertRecordingSession(_ session: RecordingSessionTimeline) {
+        if let index = recordingSessions.firstIndex(where: { $0.id == session.id }) {
+            recordingSessions[index] = session
+        } else {
+            recordingSessions.append(session)
+        }
+        loadRecordingSessions(recordingSessions)
+    }
+
     func updateTranslatedText(for segmentID: UUID, translatedText: String?) {
         guard let index = segments.firstIndex(where: { $0.id == segmentID }) else { return }
         guard segments[index].translatedText != translatedText else { return }
@@ -127,6 +152,7 @@ final class TranscriptStore: ObservableObject {
 
     func clear() {
         segments.removeAll()
+        recordingSessions.removeAll()
         recordingStartTime = nil
         unconfirmedThrottleTasks.values.forEach { $0.cancel() }
         unconfirmedThrottleTasks.removeAll()
@@ -135,8 +161,15 @@ final class TranscriptStore: ObservableObject {
     }
 
     func exportAsText() -> String {
-        segments.map { segment in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+        let timeBase = self.timeBase
+        let sessions = recordingSessions
+        return segments.map { segment in
+            let time = Formatters.elapsedHHmmss(
+                at: segment.startTime,
+                sessionId: segment.sessionId,
+                sessions: sessions,
+                fallbackTimeBase: timeBase
+            )
             let speaker = segment.speakerLabel.map { "[\($0)] " } ?? ""
             return "[\(time)] \(speaker)\(segment.displayText)"
         }.joined(separator: "\n")
@@ -144,8 +177,15 @@ final class TranscriptStore: ObservableObject {
 
     /// LLM 要約用のテキスト。スピーカーラベルを含めない。
     func exportForSummary() -> String {
-        segments.map { segment in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+        let timeBase = self.timeBase
+        let sessions = recordingSessions
+        return segments.map { segment in
+            let time = Formatters.elapsedHHmmss(
+                at: segment.startTime,
+                sessionId: segment.sessionId,
+                sessions: sessions,
+                fallbackTimeBase: timeBase
+            )
             return "<time>\(time)</time> \(segment.displayText)"
         }.joined(separator: "\n")
     }

@@ -168,8 +168,16 @@ private struct RecordingStatusBar: View {
         return trimmed.isEmpty ? L10n.newMeeting : trimmed
     }
 
-    private var recordingStartTime: Date? {
-        viewModel.activeTranscriptStore.recordingStartTime ?? recordingMeetingItem?.createdAt
+    private var activeRecordingSession: RecordingSessionTimeline? {
+        let sessions = viewModel.activeTranscriptStore.recordingSessions
+        return sessions.last(where: { $0.endedAt == nil }) ?? sessions.last
+    }
+
+    private var recordingTimelineStart: Date {
+        activeRecordingSession?.startedAt
+            ?? viewModel.activeTranscriptStore.recordingStartTime
+            ?? recordingMeetingItem?.createdAt
+            ?? Date()
     }
 
     var body: some View {
@@ -240,7 +248,7 @@ private struct RecordingStatusBar: View {
     }
 
     private var elapsedText: some View {
-        TimelineView(.periodic(from: recordingStartTime ?? Date(), by: 1)) { context in
+        TimelineView(.periodic(from: recordingTimelineStart, by: 1)) { context in
             Text(formatElapsedTime(at: context.date))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -388,8 +396,12 @@ private struct RecordingStatusBar: View {
     }
 
     private func formatElapsedTime(at date: Date) -> String {
-        guard let recordingStartTime else { return "00:00" }
-        let totalSeconds = max(0, Int(date.timeIntervalSince(recordingStartTime).rounded(.down)))
+        let elapsedSeconds = if let activeRecordingSession {
+            activeRecordingSession.offsetSeconds + date.timeIntervalSince(activeRecordingSession.startedAt)
+        } else {
+            date.timeIntervalSince(recordingTimelineStart)
+        }
+        let totalSeconds = max(0, Int(elapsedSeconds.rounded(.down)))
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60

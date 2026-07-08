@@ -2,7 +2,7 @@ import Foundation
 
 /// 要約関連ファイルを Vault に書き出すサービス。
 enum VaultSummaryExportService {
-    typealias TranscriptExporter = @Sendable (URL, UUID, String, Date, [TranscriptSegment]) throws -> String
+    typealias TranscriptExporter = @Sendable (URL, UUID, String, Date, [TranscriptSegment], [RecordingSessionTimeline]) throws -> String
     typealias ScreenshotExporter = @Sendable (URL, [MeetingScreenshotRecord]) throws -> [String]
     typealias SummaryWriter = @Sendable (URL, String) throws -> URL
 
@@ -13,6 +13,7 @@ enum VaultSummaryExportService {
         createdAt: Date,
         projectName: String,
         segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline] = [],
         screenshots: [MeetingScreenshotRecord],
         summaryFileName: String,
         summaryMarkdown: String
@@ -24,6 +25,7 @@ enum VaultSummaryExportService {
             createdAt: createdAt,
             projectName: projectName,
             segments: segments,
+            recordingSessions: recordingSessions,
             screenshots: screenshots,
             summaryFileName: summaryFileName,
             summaryMarkdown: summaryMarkdown,
@@ -40,6 +42,7 @@ enum VaultSummaryExportService {
         createdAt: Date,
         projectName: String,
         segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline] = [],
         screenshots: [MeetingScreenshotRecord],
         summaryFileName: String,
         summaryMarkdown: String,
@@ -59,7 +62,7 @@ enum VaultSummaryExportService {
                 try writeSummary(summaryFileURL, summaryMarkdown)
             }
             group.addTask {
-                _ = try exportTranscript(vaultURL, meetingId, projectName, createdAt, segments)
+                _ = try exportTranscript(vaultURL, meetingId, projectName, createdAt, segments, recordingSessions)
                 return nil
             }
             if !screenshots.isEmpty {

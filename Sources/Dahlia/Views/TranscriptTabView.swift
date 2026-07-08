@@ -76,9 +76,17 @@ struct TranscriptTabView: View {
                             }
                     }
 
+                    let timeBase = store.timeBase
+                    let recordingSessions = store.recordingSessions
                     ForEach(windowedSegments) { segment in
                         TranscriptRowView(
                             segment: segment,
+                            timestamp: Formatters.elapsedHHmmss(
+                                at: segment.startTime,
+                                sessionId: segment.sessionId,
+                                sessions: recordingSessions,
+                                fallbackTimeBase: timeBase
+                            ),
                             showsTranslatedText: showsTranslatedText
                         )
                         .equatable()

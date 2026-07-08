@@ -22,7 +22,8 @@ enum TranscriptExportService {
         meetingId: UUID,
         projectName: String,
         createdAt: Date,
-        segments: [TranscriptSegment]
+        segments: [TranscriptSegment],
+        recordingSessions: [RecordingSessionTimeline] = []
     ) throws -> String {
         let transcriptsDir = transcriptsDirectoryURL(in: vaultURL)
         try FileManager.default.createDirectory(at: transcriptsDir, withIntermediateDirectories: true)
@@ -37,7 +38,12 @@ enum TranscriptExportService {
         """
 
         let body: String = segments.map { (segment: TranscriptSegment) -> String in
-            let time = Formatters.timeHHmmss.string(from: segment.startTime)
+            let time = Formatters.elapsedHHmmss(
+                at: segment.startTime,
+                sessionId: segment.sessionId,
+                sessions: recordingSessions,
+                fallbackTimeBase: createdAt
+            )
             return "###### \(time)\n\(segment.displayText)"
         }.joined(separator: "\n")
 
