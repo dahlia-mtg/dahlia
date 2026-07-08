@@ -137,7 +137,10 @@
 "Automatically add screenshots while recording." = "Automatically add screenshots while recording.";
 "Screenshot Interval" = "Screenshot Interval";
 "Choose how often Dahlia checks the screen for meaningful changes." = "Choose how often Dahlia checks the screen for meaningful changes.";
+"Screenshot Change Threshold" = "Screenshot Change Threshold";
+"Save a new screenshot when at least this much of the screen changes." = "Save a new screenshot when at least this much of the screen changes.";
 "%lld seconds" = "%lld seconds";
+"%lld%%" = "%lld%%";
 "Show Live Subtitles" = "Show Live Subtitles";
 "Hide Live Subtitles" = "Hide Live Subtitles";
 "Live Subtitle Overlay" = "Live Subtitle Overlay";

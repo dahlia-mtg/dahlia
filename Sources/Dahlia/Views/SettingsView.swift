@@ -7,6 +7,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case calendar
     case cloudStorage
     case transcription
+    case screenshots
     case aiSummary
     case instructions
     case developer
@@ -19,6 +20,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .calendar: L10n.calendar
         case .cloudStorage: L10n.cloudStorage
         case .transcription: L10n.transcription
+        case .screenshots: L10n.screenshots
         case .aiSummary: L10n.aiSummary
         case .instructions: L10n.instructions
         case .developer: L10n.developerSettings
@@ -31,6 +33,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .calendar: "calendar"
         case .cloudStorage: "externaldrive.badge.icloud"
         case .transcription: "waveform"
+        case .screenshots: "photo.on.rectangle.angled"
         case .aiSummary: "sparkle.text.clipboard"
         case .instructions: "list.bullet.clipboard"
         case .developer: "wrench.and.screwdriver"
@@ -94,6 +97,8 @@ struct SettingsView: View {
             CloudStorageSettingsView()
         case .transcription:
             TranscriptionSettingsView()
+        case .screenshots:
+            ScreenshotSettingsView()
         case .aiSummary:
             AISummarySettingsView()
         case .instructions:

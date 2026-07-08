@@ -137,7 +137,10 @@
 "Automatically add screenshots while recording." = "録音中にスクリーンショットを自動追加します。";
 "Screenshot Interval" = "スクリーンショット間隔";
 "Choose how often Dahlia checks the screen for meaningful changes." = "Dahlia が画面の変化を確認する間隔を選びます。";
+"Screenshot Change Threshold" = "画面変化の閾値";
+"Save a new screenshot when at least this much of the screen changes." = "画面の変化率がこの値以上になったときに新しいスクリーンショットを保存します。";
 "%lld seconds" = "%lld 秒";
+"%lld%%" = "%lld%%";
 "Show Live Subtitles" = "ライブ字幕を表示";
 "Hide Live Subtitles" = "ライブ字幕を隠す";
 "Live Subtitle Overlay" = "ライブ字幕オーバーレイ";
