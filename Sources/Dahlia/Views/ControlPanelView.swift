@@ -119,7 +119,7 @@ private struct ScreenshotOverlayView: View {
 /// スクリーンショットのサムネイル表示。
 private struct ScreenshotThumbnailView: View {
     let screenshot: MeetingScreenshotRecord
-    let timeBase: Date
+    let timestamp: String
     let viewModel: CaptionViewModel
     @Binding var expandedScreenshot: MeetingScreenshotRecord?
 
@@ -142,7 +142,7 @@ private struct ScreenshotThumbnailView: View {
                 .accessibilityLabel(L10n.open)
             }
             HStack {
-                Text(Formatters.elapsedHHmmss(from: timeBase, to: screenshot.capturedAt))
+                Text(timestamp)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -619,10 +619,16 @@ struct ControlPanelView: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
                     let timeBase = screenshotTimeBase
+                    let recordingSessions = viewModel.store.recordingSessions
                     ForEach(viewModel.screenshots, id: \.id) { screenshot in
                         ScreenshotThumbnailView(
                             screenshot: screenshot,
-                            timeBase: timeBase,
+                            timestamp: Formatters.elapsedHHmmss(
+                                at: screenshot.capturedAt,
+                                sessionId: screenshot.sessionId,
+                                sessions: recordingSessions,
+                                fallbackTimeBase: timeBase
+                            ),
                             viewModel: viewModel,
                             expandedScreenshot: $expandedScreenshot
                         )

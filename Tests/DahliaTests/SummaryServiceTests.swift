@@ -132,6 +132,35 @@ struct SummaryServiceTests {
     }
 
     @Test
+    func screenshotMetadataUsesRecordingSessionOffset() throws {
+        let sessionId = UUID.v7()
+        let timeBase = Date(timeIntervalSince1970: 1_776_384_000)
+        let screenshot = MeetingScreenshotRecord(
+            id: UUID.v7(),
+            meetingId: UUID(),
+            sessionId: sessionId,
+            capturedAt: timeBase.addingTimeInterval(303),
+            imageData: Data(),
+            mimeType: "image/jpeg"
+        )
+
+        let metadata = SummaryService.screenshotMetadata(
+            for: screenshot,
+            relativeTo: timeBase,
+            recordingSessions: [
+                RecordingSessionTimeline(
+                    id: sessionId,
+                    startedAt: timeBase.addingTimeInterval(300),
+                    endedAt: nil,
+                    offsetSeconds: 10
+                ),
+            ]
+        )
+
+        #expect(metadata.contains("<time>00:00:13</time>"))
+    }
+
+    @Test
     func defaultSummaryPromptRequiresScreenshotFilenameExtension() {
         #expect(AppSettings.defaultSummaryPrompt.contains("![[<image_filename>]]"))
         #expect(AppSettings.defaultSummaryPrompt.contains("including its file extension"))

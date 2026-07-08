@@ -40,6 +40,46 @@ struct TranscriptSegmentTests {
     }
 
     @Test
+    func transcriptStoreExportsSessionOffsetTimestampsAcrossPausedRecording() {
+        let store = TranscriptStore()
+        let meetingStart = Date(timeIntervalSince1970: 1_776_384_000)
+        let firstSessionId = UUID.v7()
+        let secondSessionId = UUID.v7()
+        store.recordingStartTime = meetingStart
+        store.loadRecordingSessions([
+            RecordingSessionTimeline(
+                id: firstSessionId,
+                startedAt: meetingStart,
+                endedAt: meetingStart.addingTimeInterval(10),
+                offsetSeconds: 0
+            ),
+            RecordingSessionTimeline(
+                id: secondSessionId,
+                startedAt: meetingStart.addingTimeInterval(300),
+                endedAt: nil,
+                offsetSeconds: 10
+            ),
+        ])
+        store.loadSegments([
+            TranscriptSegment(
+                sessionId: firstSessionId,
+                startTime: meetingStart.addingTimeInterval(5),
+                text: "Before pause",
+                isConfirmed: true
+            ),
+            TranscriptSegment(
+                sessionId: secondSessionId,
+                startTime: meetingStart.addingTimeInterval(303),
+                text: "After pause",
+                isConfirmed: true
+            ),
+        ])
+
+        #expect(store.exportAsText() == "[00:00:05] Before pause\n[00:00:13] After pause")
+        #expect(store.exportForSummary() == "<time>00:00:05</time> Before pause\n<time>00:00:13</time> After pause")
+    }
+
+    @Test
     func transcriptStoreUpdatesTranslatedTextForMatchingSegmentOnly() {
         let store = TranscriptStore()
         let first = TranscriptSegment(

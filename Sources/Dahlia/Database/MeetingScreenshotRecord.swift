@@ -7,6 +7,7 @@ struct MeetingScreenshotRecord: Codable, FetchableRecord, PersistableRecord {
 
     var id: UUID
     var meetingId: UUID
+    var sessionId: UUID? = nil
     var capturedAt: Date
     var imageData: Data
     var mimeType: String

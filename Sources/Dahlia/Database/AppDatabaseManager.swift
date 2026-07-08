@@ -57,6 +57,10 @@ final class AppDatabaseManager: Sendable {
             try normalizeLegacyMeetingStatus(in: db)
         }
 
+        migrator.registerMigration("v8_recordingSessions") { db in
+            try addRecordingSessionSchemaIfNeeded(in: db)
+        }
+
         return migrator
     }()
 
@@ -326,5 +330,139 @@ final class AppDatabaseManager: Sendable {
 
     private static func addTranscriptSegmentTranslatedTextColumnIfNeeded(in db: Database) throws {
         try addColumnIfNeeded(in: db, table: "transcript_segments", column: "translatedText", type: .text)
+    }
+
+    private static func addRecordingSessionSchemaIfNeeded(in db: Database) throws {
+        if try db.tableExists("meetings") {
+            try createRecordingSessionsTableIfNeeded(in: db)
+        }
+
+        try addColumnIfNeeded(in: db, table: "transcript_segments", column: "sessionId", type: .blob)
+        try addColumnIfNeeded(in: db, table: "screenshots", column: "sessionId", type: .blob)
+
+        if try db.tableExists("meetings"),
+           try db.tableExists("recording_sessions") {
+            try backfillRecordingSessions(in: db)
+        }
+    }
+
+    private static func createRecordingSessionsTableIfNeeded(in db: Database) throws {
+        guard try !db.tableExists("recording_sessions") else { return }
+        try db.create(table: "recording_sessions") { t in
+            t.primaryKey("id", .blob)
+            t.column("meetingId", .blob).notNull()
+                .references("meetings", onDelete: .cascade)
+            t.column("startedAt", .datetime).notNull()
+            t.column("endedAt", .datetime)
+            t.column("duration", .double)
+            t.column("offsetSeconds", .double).notNull().defaults(to: 0)
+            t.column("createdAt", .datetime).notNull()
+            t.column("updatedAt", .datetime).notNull()
+        }
+        try db.create(
+            index: "recording_sessions_on_meetingId",
+            on: "recording_sessions",
+            columns: ["meetingId"]
+        )
+        try db.create(
+            index: "recording_sessions_on_meetingId_startedAt",
+            on: "recording_sessions",
+            columns: ["meetingId", "startedAt"]
+        )
+    }
+
+    private static func backfillRecordingSessions(in db: Database) throws {
+        let hasTranscriptSegments = try db.tableExists("transcript_segments")
+        let hasScreenshots = try db.tableExists("screenshots")
+
+        let rows: [Row] = if hasTranscriptSegments {
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    meetings.id AS meetingId,
+                    meetings.createdAt AS meetingCreatedAt,
+                    meetings.duration AS meetingDuration,
+                    MIN(transcript_segments.startTime) AS firstSegmentStartTime,
+                    MAX(COALESCE(transcript_segments.endTime, transcript_segments.startTime)) AS lastSegmentEndTime
+                FROM meetings
+                LEFT JOIN transcript_segments ON transcript_segments.meetingId = meetings.id
+                LEFT JOIN recording_sessions ON recording_sessions.meetingId = meetings.id
+                WHERE recording_sessions.id IS NULL
+                GROUP BY meetings.id
+                """
+            )
+        } else {
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    meetings.id AS meetingId,
+                    meetings.createdAt AS meetingCreatedAt,
+                    meetings.duration AS meetingDuration,
+                    NULL AS firstSegmentStartTime,
+                    NULL AS lastSegmentEndTime
+                FROM meetings
+                LEFT JOIN recording_sessions ON recording_sessions.meetingId = meetings.id
+                WHERE recording_sessions.id IS NULL
+                GROUP BY meetings.id
+                """
+            )
+        }
+
+        for row in rows {
+            let meetingId: UUID = row["meetingId"]
+            let meetingCreatedAt: Date = row["meetingCreatedAt"]
+            let meetingDuration: TimeInterval? = row["meetingDuration"]
+            let firstSegmentStartTime: Date? = row["firstSegmentStartTime"]
+            let lastSegmentEndTime: Date? = row["lastSegmentEndTime"]
+            let startedAt = firstSegmentStartTime ?? meetingCreatedAt
+            let transcriptDuration = lastSegmentEndTime.map { max(0, $0.timeIntervalSince(startedAt)) }
+            let duration = transcriptDuration ?? meetingDuration
+            let endedAt = lastSegmentEndTime
+                ?? duration.map { startedAt.addingTimeInterval($0) }
+            let sessionId = UUID.v7()
+
+            try db.execute(
+                sql: """
+                INSERT INTO recording_sessions (
+                    id, meetingId, startedAt, endedAt, duration, offsetSeconds, createdAt, updatedAt
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    sessionId,
+                    meetingId,
+                    startedAt,
+                    endedAt,
+                    duration,
+                    0,
+                    startedAt,
+                    endedAt ?? startedAt,
+                ]
+            )
+
+            if hasTranscriptSegments {
+                try db.execute(
+                    sql: """
+                    UPDATE transcript_segments
+                    SET sessionId = ?
+                    WHERE meetingId = ? AND sessionId IS NULL
+                    """,
+                    arguments: [sessionId, meetingId]
+                )
+            }
+
+            if hasScreenshots {
+                try db.execute(
+                    sql: """
+                    UPDATE screenshots
+                    SET sessionId = ?
+                    WHERE meetingId = ? AND sessionId IS NULL
+                    """,
+                    arguments: [sessionId, meetingId]
+                )
+            }
+        }
     }
 }

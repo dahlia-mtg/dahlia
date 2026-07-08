@@ -40,6 +40,132 @@ struct AppDatabaseManagerTests {
     }
 
     @Test
+    func initializesInMemoryDatabaseWithRecordingSessionsSchema() throws {
+        let database = try AppDatabaseManager(path: ":memory:")
+
+        let result = try database.dbQueue.read { db in
+            (
+                try db.tableExists("recording_sessions"),
+                try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('transcript_segments')"),
+                try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('screenshots')")
+            )
+        }
+
+        #expect(result.0)
+        #expect(result.1.contains("sessionId"))
+        #expect(result.2.contains("sessionId"))
+    }
+
+    @Test
+    func existingV7DatabaseBackfillsRecordingSessionsWithoutDataLoss() throws {
+        let databaseURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("sqlite")
+        let meetingID = UUID.v7()
+        let segmentID = UUID.v7()
+        let screenshotID = UUID.v7()
+        let meetingStart = Date(timeIntervalSince1970: 1_776_384_000)
+        let segmentStart = meetingStart.addingTimeInterval(5)
+        let segmentEnd = meetingStart.addingTimeInterval(20)
+
+        defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+        let legacyQueue = try DatabaseQueue(path: databaseURL.path)
+        try legacyQueue.write { db in
+            try db.execute(
+                sql: """
+                CREATE TABLE meetings (
+                    id BLOB PRIMARY KEY,
+                    vaultId BLOB NOT NULL,
+                    projectId BLOB,
+                    name TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'READY',
+                    duration DOUBLE,
+                    createdAt DATETIME NOT NULL,
+                    updatedAt DATETIME NOT NULL
+                )
+                """
+            )
+            try db.execute(
+                sql: """
+                CREATE TABLE transcript_segments (
+                    id BLOB PRIMARY KEY,
+                    meetingId BLOB NOT NULL,
+                    startTime DATETIME NOT NULL,
+                    endTime DATETIME,
+                    text TEXT NOT NULL,
+                    translatedText TEXT,
+                    isConfirmed BOOLEAN NOT NULL DEFAULT 0,
+                    speakerLabel TEXT
+                )
+                """
+            )
+            try db.execute(
+                sql: """
+                CREATE TABLE screenshots (
+                    id BLOB PRIMARY KEY,
+                    meetingId BLOB NOT NULL,
+                    capturedAt DATETIME NOT NULL,
+                    imageData BLOB NOT NULL,
+                    mimeType TEXT NOT NULL
+                )
+                """
+            )
+            try db.create(table: "grdb_migrations") { t in
+                t.column("identifier", .text).primaryKey()
+            }
+            for migration in [
+                "v3_googleDriveFolderSchema",
+                "v4_instructionsSchema",
+                "v5_summaryGoogleFileId",
+                "v6_transcriptSegmentTranslation",
+                "v7_normalizeLegacyMeetingStatus",
+            ] {
+                try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES (?)", arguments: [migration])
+            }
+            try db.execute(
+                sql: """
+                INSERT INTO meetings (id, vaultId, name, status, duration, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [meetingID, UUID.v7(), "Legacy", MeetingStatus.ready.rawValue, nil as TimeInterval?, meetingStart, meetingStart]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO transcript_segments (id, meetingId, startTime, endTime, text, isConfirmed, speakerLabel)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [segmentID, meetingID, segmentStart, segmentEnd, "Hello world", true, "mic"]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO screenshots (id, meetingId, capturedAt, imageData, mimeType)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                arguments: [screenshotID, meetingID, segmentStart, Data([0x00]), "image/png"]
+            )
+        }
+
+        let migrated = try AppDatabaseManager(path: databaseURL.path)
+        let result = try migrated.dbQueue.read { db in
+            (
+                try RecordingSessionRecord.filter(Column("meetingId") == meetingID).fetchAll(db),
+                try #require(TranscriptSegmentRecord.fetchOne(db, key: segmentID)),
+                try #require(MeetingScreenshotRecord.fetchOne(db, key: screenshotID))
+            )
+        }
+
+        let session = try #require(result.0.first)
+        #expect(result.0.count == 1)
+        #expect(session.startedAt == segmentStart)
+        #expect(session.duration == 15)
+        #expect(session.offsetSeconds == 0)
+        #expect(result.1.sessionId == session.id)
+        #expect(result.1.text == "Hello world")
+        #expect(result.2.sessionId == session.id)
+    }
+
+    @Test
     func repositoryUpdatesProjectGoogleDriveFolder() throws {
         let database = try AppDatabaseManager(path: ":memory:")
         let repository = MeetingRepository(dbQueue: database.dbQueue)

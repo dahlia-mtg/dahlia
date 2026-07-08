@@ -7,6 +7,7 @@ struct TranscriptSegmentRecord: Codable, FetchableRecord, PersistableRecord {
 
     var id: UUID
     var meetingId: UUID
+    var sessionId: UUID? = nil
     var startTime: Date
     var endTime: Date?
     var text: String
@@ -17,9 +18,10 @@ struct TranscriptSegmentRecord: Codable, FetchableRecord, PersistableRecord {
 
 extension TranscriptSegmentRecord {
     /// TranscriptSegment から TranscriptSegmentRecord を生成する。
-    init(from segment: TranscriptSegment, meetingId: UUID) {
+    init(from segment: TranscriptSegment, meetingId: UUID, defaultSessionId: UUID? = nil) {
         self.id = segment.id
         self.meetingId = meetingId
+        self.sessionId = segment.sessionId ?? defaultSessionId
         self.startTime = segment.startTime
         self.endTime = segment.endTime
         self.text = segment.text

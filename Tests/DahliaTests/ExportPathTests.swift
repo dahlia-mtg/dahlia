@@ -59,6 +59,56 @@ struct ExportPathTests {
     }
 
     @Test
+    func transcriptExportUsesRecordingSessionOffsetsAcrossPausedRecording() throws {
+        let vaultURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        try FileManager.default.createDirectory(at: vaultURL, withIntermediateDirectories: true)
+
+        let meetingId = UUID()
+        let meetingStart = Date(timeIntervalSince1970: 1_776_384_000)
+        let firstSessionId = UUID.v7()
+        let secondSessionId = UUID.v7()
+        let relativePath = try TranscriptExportService.exportTranscript(
+            vaultURL: vaultURL,
+            meetingId: meetingId,
+            projectName: "Test Project",
+            createdAt: meetingStart,
+            segments: [
+                TranscriptSegment(
+                    sessionId: firstSessionId,
+                    startTime: meetingStart.addingTimeInterval(5),
+                    text: "before"
+                ),
+                TranscriptSegment(
+                    sessionId: secondSessionId,
+                    startTime: meetingStart.addingTimeInterval(303),
+                    text: "after"
+                ),
+            ],
+            recordingSessions: [
+                RecordingSessionTimeline(
+                    id: firstSessionId,
+                    startedAt: meetingStart,
+                    endedAt: meetingStart.addingTimeInterval(10),
+                    offsetSeconds: 0
+                ),
+                RecordingSessionTimeline(
+                    id: secondSessionId,
+                    startedAt: meetingStart.addingTimeInterval(300),
+                    endedAt: nil,
+                    offsetSeconds: 10
+                ),
+            ]
+        )
+
+        let markdown = try String(contentsOf: vaultURL.appendingPathComponent(relativePath), encoding: .utf8)
+        #expect(markdown.contains("###### 00:00:05\nbefore"))
+        #expect(markdown.contains("###### 00:00:13\nafter"))
+    }
+
+    @Test
     func screenshotExportWritesIntoDahliaScreenshotsDirectory() throws {
         let vaultURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

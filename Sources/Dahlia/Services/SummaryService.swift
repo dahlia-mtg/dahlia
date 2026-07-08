@@ -26,6 +26,7 @@ enum SummaryService {
         transcriptText: String,
         noteText: String? = nil,
         screenshots: [MeetingScreenshotRecord] = [],
+        recordingSessions: [RecordingSessionTimeline] = [],
         repository: MeetingRepository? = nil
     ) async throws -> GeneratedSummary {
         let settings = AppSettings.shared
@@ -75,7 +76,7 @@ enum SummaryService {
             }.value
             var parts: [LLMService.ContentPart] = [.text(transcriptContent)]
             for (screenshot, preparedImageDataURI) in zip(screenshots, preparedImageDataURIs) {
-                parts.append(.text(screenshotMetadata(for: screenshot, relativeTo: createdAt)))
+                parts.append(.text(screenshotMetadata(for: screenshot, relativeTo: createdAt, recordingSessions: recordingSessions)))
                 parts.append(.imageURL(preparedImageDataURI))
             }
             messages.append(.init(role: "user", parts: parts))
@@ -138,8 +139,17 @@ enum SummaryService {
         )
     }
 
-    static func screenshotMetadata(for screenshot: MeetingScreenshotRecord, relativeTo timeBase: Date) -> String {
-        let time = Formatters.elapsedHHmmss(from: timeBase, to: screenshot.capturedAt)
+    static func screenshotMetadata(
+        for screenshot: MeetingScreenshotRecord,
+        relativeTo timeBase: Date,
+        recordingSessions: [RecordingSessionTimeline] = []
+    ) -> String {
+        let time = Formatters.elapsedHHmmss(
+            at: screenshot.capturedAt,
+            sessionId: screenshot.sessionId,
+            sessions: recordingSessions,
+            fallbackTimeBase: timeBase
+        )
         let imageFilename = ScreenshotExportService.filename(for: screenshot)
         return "<time>\(time)</time> <image_id>\(imageFilename)</image_id> <image_filename>\(imageFilename)</image_filename>"
     }

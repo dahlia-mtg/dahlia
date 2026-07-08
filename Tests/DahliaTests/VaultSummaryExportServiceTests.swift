@@ -129,7 +129,7 @@ struct VaultSummaryExportServiceTests {
                 screenshots: [],
                 summaryFileName: "summary.md",
                 summaryMarkdown: "summary",
-                exportTranscript: { _, _, _, _, _ in
+                exportTranscript: { _, _, _, _, _, _ in
                     throw ExpectedError.transcriptFailed
                 },
                 exportScreenshots: { _, _ in [] },

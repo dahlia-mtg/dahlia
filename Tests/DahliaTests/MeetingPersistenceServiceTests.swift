@@ -48,7 +48,7 @@ struct MeetingPersistenceServiceTests {
             ).insert(db)
         }
 
-        _ = MeetingPersistenceService(
+        _ = try MeetingPersistenceService(
             store: TranscriptStore(),
             dbQueue: database.dbQueue,
             existingMeetingId: meetingId,
@@ -85,7 +85,7 @@ struct MeetingPersistenceServiceTests {
             ).insert(db)
         }
 
-        let service = MeetingPersistenceService(
+        let service = try MeetingPersistenceService(
             store: store,
             dbQueue: database.dbQueue,
             existingMeetingId: meetingId,
@@ -99,6 +99,75 @@ struct MeetingPersistenceServiceTests {
         }
 
         #expect((persisted.duration ?? .greatestFiniteMagnitude) < 10)
+    }
+
+    @Test
+    func appendModePersistsSegmentsWithNewRecordingSessionOffset() throws {
+        let database = try makeDatabase()
+        let meetingId = UUID.v7()
+        let firstSessionId = UUID.v7()
+        let secondSessionStart = Date()
+        let firstSessionStart = secondSessionStart.addingTimeInterval(-300)
+        let store = TranscriptStore()
+        store.recordingStartTime = firstSessionStart
+
+        try database.dbQueue.write { db in
+            try MeetingRecord(
+                id: meetingId,
+                vaultId: testVault.id,
+                projectId: nil,
+                name: "Existing meeting",
+                status: .ready,
+                duration: 10,
+                createdAt: firstSessionStart,
+                updatedAt: firstSessionStart.addingTimeInterval(10)
+            ).insert(db)
+            try RecordingSessionRecord(
+                id: firstSessionId,
+                meetingId: meetingId,
+                startedAt: firstSessionStart,
+                endedAt: firstSessionStart.addingTimeInterval(10),
+                duration: 10,
+                offsetSeconds: 0,
+                createdAt: firstSessionStart,
+                updatedAt: firstSessionStart.addingTimeInterval(10)
+            ).insert(db)
+        }
+
+        let service = try MeetingPersistenceService(
+            store: store,
+            dbQueue: database.dbQueue,
+            existingMeetingId: meetingId,
+            existingSegmentIds: [],
+            recordingStartDate: secondSessionStart,
+            recordingOffsetSeconds: 10
+        )
+        let segment = TranscriptSegment(
+            startTime: secondSessionStart.addingTimeInterval(3),
+            text: "After pause",
+            isConfirmed: true,
+            speakerLabel: "mic"
+        )
+
+        store.loadSegments([segment])
+        service.stop()
+
+        let persisted = try database.dbQueue.read { db in
+            (
+                try RecordingSessionRecord
+                    .filter(Column("meetingId") == meetingId)
+                    .order(Column("offsetSeconds").asc)
+                    .fetchAll(db),
+                try #require(TranscriptSegmentRecord.fetchOne(db, key: segment.id)),
+                try #require(MeetingRecord.fetchOne(db, key: meetingId))
+            )
+        }
+
+        let secondSession = try #require(persisted.0.first(where: { $0.id == service.recordingSessionId }))
+        #expect(secondSession.offsetSeconds == 10)
+        #expect(persisted.1.sessionId == secondSession.id)
+        #expect((persisted.2.duration ?? 0) >= 10)
+        #expect((persisted.2.duration ?? 0) < 20)
     }
 
     @Test
@@ -193,7 +262,7 @@ struct MeetingPersistenceServiceTests {
             ).insert(db)
         }
 
-        let service = MeetingPersistenceService(
+        let service = try MeetingPersistenceService(
             store: TranscriptStore(),
             dbQueue: database.dbQueue,
             existingMeetingId: meetingId,
@@ -487,7 +556,7 @@ final class MeetingPersistenceServiceTests: XCTestCase {
             ).insert(db)
         }
 
-        let service = MeetingPersistenceService(
+        let service = try MeetingPersistenceService(
             store: TranscriptStore(),
             dbQueue: database.dbQueue,
             existingMeetingId: meetingId,
