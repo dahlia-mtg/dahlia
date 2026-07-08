@@ -47,6 +47,7 @@ enum SummaryService {
         - "summary": the full summary in Markdown format
         - "tags": an array of relevant short Obsidian-compatible tags for categorization (empty array if none)
           - Tags MUST contain no spaces.
+          - Tags MUST not be numeric-only.
           - Tags MUST use only letters, numbers, "_" and "-".
           - Use "_" or "-" to join words instead of spaces or punctuation.
           - Do not include "#", slashes, emojis, quotes, brackets, commas, or other symbols.
@@ -398,7 +399,7 @@ enum SummaryService {
         }
 
         let tag = normalized.trimmingCharacters(in: tagTrimCharacters)
-        guard tag.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+        guard tag.contains(where: { !$0.isNumber }) else { return nil }
         return tag
     }
 }

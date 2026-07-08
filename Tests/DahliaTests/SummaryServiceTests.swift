@@ -245,6 +245,7 @@ struct SummaryServiceTests {
           - context tag
           - "Q&A"
           - customer-meeting
+          - 2026
         ---
         """
 
@@ -255,6 +256,9 @@ struct SummaryServiceTests {
                 "sales/enterprise",
                 "risk:high",
                 "team-check_in",
+                "2026",
+                "#123",
+                "2026-q1",
                 "!!!",
             ],
             contextContent: context,
@@ -265,6 +269,7 @@ struct SummaryServiceTests {
             "sales_enterprise",
             "risk_high",
             "team-check_in",
+            "2026-q1",
             "context_tag",
             "Q_A",
             "customer-meeting",
