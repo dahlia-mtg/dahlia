@@ -1,7 +1,7 @@
 import Foundation
 
 /// 表示用の録音セッション情報。
-struct RecordingSessionTimeline: Identifiable, Equatable, Sendable {
+struct RecordingSessionTimeline: Identifiable, Equatable {
     let id: UUID
     let startedAt: Date
     var endedAt: Date?
