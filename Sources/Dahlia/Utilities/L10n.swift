@@ -200,7 +200,13 @@ enum L10n {
         localized: "Choose how often Dahlia checks the screen for meaningful changes.",
         bundle: bundle
     ) }
+    static var screenshotChangeThreshold: String { String(localized: "Screenshot Change Threshold", bundle: bundle) }
+    static var screenshotChangeThresholdDescription: String { String(
+        localized: "Save a new screenshot when at least this much of the screen changes.",
+        bundle: bundle
+    ) }
     static func seconds(_ count: Int) -> String { String(localized: "\(count) seconds", bundle: bundle) }
+    static func percent(_ count: Int) -> String { String(localized: "\(count)%", bundle: bundle) }
     static var showLiveSubtitles: String { String(localized: "Show Live Subtitles", bundle: bundle) }
     static var hideLiveSubtitles: String { String(localized: "Hide Live Subtitles", bundle: bundle) }
     static var liveSubtitleOverlay: String { String(localized: "Live Subtitle Overlay", bundle: bundle) }

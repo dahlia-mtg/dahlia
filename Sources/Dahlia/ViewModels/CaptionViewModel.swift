@@ -1520,9 +1520,14 @@ final class CaptionViewModel: ObservableObject {
                   screenshotCaptureSource.isSelected
             else { return }
             guard let fingerprint = await screenshotFingerprint(for: cgImage) else { return }
+            let changeThresholdRatio = AppSettings.shared.automaticScreenshotChangeThresholdRatio
 
             let shouldSave = lastSavedAutomaticScreenshotFingerprint.map {
-                ScreenshotChangeDetector.isSignificantlyDifferent($0, fingerprint)
+                ScreenshotChangeDetector.isSignificantlyDifferent(
+                    $0,
+                    fingerprint,
+                    changedPixelRatioThreshold: changeThresholdRatio
+                )
             } ?? true
 
             guard shouldSave,

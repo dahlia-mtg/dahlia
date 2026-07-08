@@ -80,6 +80,23 @@ enum LLMProvider: String, CaseIterable, Identifiable {
 @MainActor
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
+    nonisolated static let automaticScreenshotIntervalOptions = [
+        5,
+        10,
+        20,
+        30,
+    ]
+    nonisolated static let automaticScreenshotChangeThresholdPercentOptions = [
+        5,
+        10,
+        20,
+        30,
+        50,
+    ]
+    nonisolated static let automaticScreenshotIntervalSecondsUserDefaultsKey = "automaticScreenshotIntervalSeconds"
+    nonisolated static let automaticScreenshotChangeThresholdPercentUserDefaultsKey = "automaticScreenshotChangeThresholdPercent"
+    fileprivate nonisolated static let defaultAutomaticScreenshotIntervalSeconds = 30
+    fileprivate nonisolated static let defaultAutomaticScreenshotChangeThresholdPercent = 20
 
     // MARK: - 表示言語
 
@@ -99,7 +116,48 @@ final class AppSettings: ObservableObject {
     @AppStorage("liveSubtitleOverlaySegmentCount") var liveSubtitleOverlaySegmentCount = 2
     @AppStorage("liveSubtitleSourceMode") var liveSubtitleSourceModeRawValue = LiveSubtitleSourceMode.includeMicrophone.rawValue
     @AppStorage("automaticScreenshotEnabled") var automaticScreenshotEnabled = true
-    @AppStorage("automaticScreenshotIntervalSeconds") var automaticScreenshotIntervalSeconds = 30
+    @AppStorage(AppSettings.automaticScreenshotIntervalSecondsUserDefaultsKey) private var storedAutomaticScreenshotIntervalSeconds =
+        AppSettings.defaultAutomaticScreenshotIntervalSeconds
+    @AppStorage(AppSettings.automaticScreenshotChangeThresholdPercentUserDefaultsKey) private var storedAutomaticScreenshotChangeThresholdPercent =
+        AppSettings.defaultAutomaticScreenshotChangeThresholdPercent
+
+    var automaticScreenshotIntervalSeconds: Int {
+        get {
+            Self.normalizedOption(
+                storedAutomaticScreenshotIntervalSeconds,
+                options: Self.automaticScreenshotIntervalOptions,
+                defaultValue: Self.defaultAutomaticScreenshotIntervalSeconds
+            )
+        }
+        set {
+            storedAutomaticScreenshotIntervalSeconds = Self.normalizedOption(
+                newValue,
+                options: Self.automaticScreenshotIntervalOptions,
+                defaultValue: Self.defaultAutomaticScreenshotIntervalSeconds
+            )
+        }
+    }
+
+    var automaticScreenshotChangeThresholdPercent: Int {
+        get {
+            Self.normalizedOption(
+                storedAutomaticScreenshotChangeThresholdPercent,
+                options: Self.automaticScreenshotChangeThresholdPercentOptions,
+                defaultValue: Self.defaultAutomaticScreenshotChangeThresholdPercent
+            )
+        }
+        set {
+            storedAutomaticScreenshotChangeThresholdPercent = Self.normalizedOption(
+                newValue,
+                options: Self.automaticScreenshotChangeThresholdPercentOptions,
+                defaultValue: Self.defaultAutomaticScreenshotChangeThresholdPercent
+            )
+        }
+    }
+
+    var automaticScreenshotChangeThresholdRatio: Double {
+        Double(automaticScreenshotChangeThresholdPercent) / 100.0
+    }
 
     var liveSubtitleSourceMode: LiveSubtitleSourceMode {
         get { LiveSubtitleSourceMode(rawValue: liveSubtitleSourceModeRawValue) ?? .includeMicrophone }
@@ -111,6 +169,14 @@ final class AppSettings: ObservableObject {
             transcriptionLocaleIdentifier: transcriptionLocale,
             targetLanguageIdentifier: transcriptTranslationTargetLanguage
         )
+    }
+
+    nonisolated private static func normalizedOption(_ value: Int, options: [Int], defaultValue: Int) -> Int {
+        guard !options.isEmpty else { return defaultValue }
+        if options.contains(value) {
+            return value
+        }
+        return options.first(where: { value <= $0 }) ?? options[options.count - 1]
     }
 
     // MARK: - 表示言語設定
@@ -450,7 +516,13 @@ extension UserDefaults {
     }
 
     @objc dynamic var automaticScreenshotIntervalSeconds: Int {
-        object(forKey: "automaticScreenshotIntervalSeconds") as? Int ?? 30
+        object(forKey: AppSettings.automaticScreenshotIntervalSecondsUserDefaultsKey) as? Int
+            ?? AppSettings.defaultAutomaticScreenshotIntervalSeconds
+    }
+
+    @objc dynamic var automaticScreenshotChangeThresholdPercent: Int {
+        object(forKey: AppSettings.automaticScreenshotChangeThresholdPercentUserDefaultsKey) as? Int
+            ?? AppSettings.defaultAutomaticScreenshotChangeThresholdPercent
     }
 
     @objc dynamic var calendarSource: String? {
