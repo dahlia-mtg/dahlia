@@ -23,7 +23,8 @@ struct MeetingPersistenceServiceTests {
         )
 
         let persisted = try database.dbQueue.read { db in
-            try #require(MeetingRecord.fetchOne(db, key: service.meetingId))
+            let meeting = try MeetingRecord.fetchOne(db, key: service.meetingId)
+            return try #require(meeting)
         }
 
         #expect(persisted.status == .ready)
@@ -56,7 +57,8 @@ struct MeetingPersistenceServiceTests {
         )
 
         let persisted = try database.dbQueue.read { db in
-            try #require(MeetingRecord.fetchOne(db, key: meetingId))
+            let meeting = try MeetingRecord.fetchOne(db, key: meetingId)
+            return try #require(meeting)
         }
 
         #expect(persisted.status == .transcriptNotFound)
@@ -95,7 +97,8 @@ struct MeetingPersistenceServiceTests {
         service.stop()
 
         let persisted = try database.dbQueue.read { db in
-            try #require(MeetingRecord.fetchOne(db, key: meetingId))
+            let meeting = try MeetingRecord.fetchOne(db, key: meetingId)
+            return try #require(meeting)
         }
 
         #expect((persisted.duration ?? .greatestFiniteMagnitude) < 10)
@@ -153,13 +156,16 @@ struct MeetingPersistenceServiceTests {
         service.stop()
 
         let persisted = try database.dbQueue.read { db in
-            (
-                try RecordingSessionRecord
-                    .filter(Column("meetingId") == meetingId)
-                    .order(Column("offsetSeconds").asc)
-                    .fetchAll(db),
-                try #require(TranscriptSegmentRecord.fetchOne(db, key: segment.id)),
-                try #require(MeetingRecord.fetchOne(db, key: meetingId))
+            let sessions = try RecordingSessionRecord
+                .filter(Column("meetingId") == meetingId)
+                .order(Column("offsetSeconds").asc)
+                .fetchAll(db)
+            let segmentRecord = try TranscriptSegmentRecord.fetchOne(db, key: segment.id)
+            let meetingRecord = try MeetingRecord.fetchOne(db, key: meetingId)
+            return (
+                sessions,
+                try #require(segmentRecord),
+                try #require(meetingRecord)
             )
         }
 
@@ -188,9 +194,11 @@ struct MeetingPersistenceServiceTests {
         service.stop()
 
         let persisted = try database.dbQueue.read { db in
-            (
-                try #require(MeetingRecord.fetchOne(db, key: service.meetingId)),
-                try #require(CalendarEventRecord.filter(Column("meetingId") == service.meetingId).fetchOne(db))
+            let meeting = try MeetingRecord.fetchOne(db, key: service.meetingId)
+            let calendarEvent = try CalendarEventRecord.filter(Column("meetingId") == service.meetingId).fetchOne(db)
+            return (
+                try #require(meeting),
+                try #require(calendarEvent)
             )
         }
 
@@ -222,7 +230,8 @@ struct MeetingPersistenceServiceTests {
         service.stop()
 
         let persisted = try database.dbQueue.read { db in
-            try #require(CalendarEventRecord.filter(Column("meetingId") == service.meetingId).fetchOne(db))
+            let calendarEvent = try CalendarEventRecord.filter(Column("meetingId") == service.meetingId).fetchOne(db)
+            return try #require(calendarEvent)
         }
 
         #expect(persisted.platform == "MacOSCalendar")
@@ -412,7 +421,8 @@ struct MeetingPersistenceServiceTests {
         service.stop()
 
         let persisted = try database.dbQueue.read { db in
-            try #require(TranscriptSegmentRecord.fetchOne(db, key: segment.id))
+            let segmentRecord = try TranscriptSegmentRecord.fetchOne(db, key: segment.id)
+            return try #require(segmentRecord)
         }
 
         #expect(persisted.text == "Hello world")
@@ -447,8 +457,9 @@ struct MeetingPersistenceServiceTests {
         try await Task.sleep(for: .milliseconds(700))
         service.stop()
 
-        let persisted = try database.dbQueue.read { db in
-            try #require(TranscriptSegmentRecord.fetchOne(db, key: segment.id))
+        let persisted = try await database.dbQueue.read { db in
+            let segmentRecord = try TranscriptSegmentRecord.fetchOne(db, key: segment.id)
+            return try #require(segmentRecord)
         }
 
         #expect(persisted.translatedText == "こんにちは、世界")

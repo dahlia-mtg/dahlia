@@ -12,7 +12,7 @@ struct TranscriptSegmentTests {
 
         #expect(Formatters.elapsedHHmmss(from: start, to: start) == "00:00:00")
         #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(754)) == "00:12:34")
-        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(3_947)) == "01:05:47")
+        #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(3947)) == "01:05:47")
         #expect(Formatters.elapsedHHmmss(from: start, to: start.addingTimeInterval(-1)) == "00:00:00")
     }
 
@@ -29,7 +29,7 @@ struct TranscriptSegmentTests {
                 speakerLabel: "mic"
             ),
             TranscriptSegment(
-                startTime: start.addingTimeInterval(3_947),
+                startTime: start.addingTimeInterval(3947),
                 text: "Second",
                 isConfirmed: true
             ),
@@ -103,7 +103,7 @@ struct TranscriptSegmentTests {
     }
 
     @Test
-    func transcriptStoreReusesUnconfirmedSegmentIDAndPreservesTranslatedText() {
+    func transcriptStoreReusesUnconfirmedSegmentIDAndPreservesTranslatedText() async {
         let store = TranscriptStore()
         let first = store.updateUnconfirmedSegment(
             TranscriptSegment(
@@ -126,14 +126,14 @@ struct TranscriptSegmentTests {
         )
 
         #expect(first.id == second.id)
-        #expect(store.segments.count == 1)
+        #expect(await waitForSegments(in: store) { $0.count == 1 && $0[0].text == "Hello world" })
         #expect(store.segments[0].id == first.id)
         #expect(store.segments[0].translatedText == "こんにちは")
         #expect(store.segments[0].text == "Hello world")
     }
 
     @Test
-    func clearUnconfirmedSegmentsOnlyRemovesMatchingSource() {
+    func clearUnconfirmedSegmentsOnlyRemovesMatchingSource() async {
         let store = TranscriptStore()
         store.loadSegments([
             TranscriptSegment(
@@ -164,6 +164,12 @@ struct TranscriptSegmentTests {
 
         store.clearUnconfirmedSegments(forSource: "mic")
 
+        #expect(await waitForSegments(in: store) { segments in
+            segments.count == 2
+                && segments.contains(where: { $0.text == "Confirmed" && $0.isConfirmed })
+                && segments.contains(where: { $0.text == "System preview" && !$0.isConfirmed })
+                && !segments.contains(where: { $0.text == "Mic preview" })
+        })
         #expect(store.segments.count == 2)
         #expect(store.segments.contains(where: { $0.text == "Confirmed" && $0.isConfirmed }))
         #expect(store.segments.contains(where: { $0.text == "System preview" && !$0.isConfirmed }))
@@ -208,6 +214,7 @@ struct TranscriptSegmentTests {
         #expect(blankSegment.visibleTranslatedText(isEnabled: true) == nil)
     }
 }
+
 #elseif canImport(XCTest)
 import XCTest
 
@@ -235,7 +242,7 @@ final class TranscriptSegmentTests: XCTestCase {
         XCTAssertEqual(store.segments[1].translatedText, "2つ目")
     }
 
-    func testTranscriptStoreReusesUnconfirmedSegmentIDAndPreservesTranslatedText() {
+    func testTranscriptStoreReusesUnconfirmedSegmentIDAndPreservesTranslatedText() async {
         let store = TranscriptStore()
         let first = store.updateUnconfirmedSegment(
             TranscriptSegment(
@@ -258,13 +265,15 @@ final class TranscriptSegmentTests: XCTestCase {
         )
 
         XCTAssertEqual(first.id, second.id)
+        let didApplyThrottledUpdate = await waitForSegments(in: store) { $0.count == 1 && $0[0].text == "Hello world" }
+        XCTAssertTrue(didApplyThrottledUpdate)
         XCTAssertEqual(store.segments.count, 1)
         XCTAssertEqual(store.segments[0].id, first.id)
         XCTAssertEqual(store.segments[0].translatedText, "こんにちは")
         XCTAssertEqual(store.segments[0].text, "Hello world")
     }
 
-    func testClearUnconfirmedSegmentsOnlyRemovesMatchingSource() {
+    func testClearUnconfirmedSegmentsOnlyRemovesMatchingSource() async {
         let store = TranscriptStore()
         store.loadSegments([
             TranscriptSegment(
@@ -295,6 +304,13 @@ final class TranscriptSegmentTests: XCTestCase {
 
         store.clearUnconfirmedSegments(forSource: "mic")
 
+        let didClearMatchingSource = await waitForSegments(in: store) { segments in
+            segments.count == 2
+                && segments.contains(where: { $0.text == "Confirmed" && $0.isConfirmed })
+                && segments.contains(where: { $0.text == "System preview" && !$0.isConfirmed })
+                && !segments.contains(where: { $0.text == "Mic preview" })
+        }
+        XCTAssertTrue(didClearMatchingSource)
         XCTAssertEqual(store.segments.count, 2)
         XCTAssertTrue(store.segments.contains(where: { $0.text == "Confirmed" && $0.isConfirmed }))
         XCTAssertTrue(store.segments.contains(where: { $0.text == "System preview" && !$0.isConfirmed }))
@@ -338,3 +354,22 @@ final class TranscriptSegmentTests: XCTestCase {
     }
 }
 #endif
+
+@MainActor
+private func waitForSegments(
+    in store: TranscriptStore,
+    timeout: Duration = .seconds(1),
+    condition: @escaping ([TranscriptSegment]) -> Bool
+) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+
+    while clock.now < deadline {
+        if condition(store.segments) {
+            return true
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+
+    return condition(store.segments)
+}
