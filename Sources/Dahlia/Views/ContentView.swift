@@ -32,6 +32,12 @@ struct ContentView: View {
                 .labelStyle(.iconOnly)
                 .help(L10n.newMeeting)
 
+                Button(action: returnToCalendarSchedule) {
+                    Label(L10n.showUpcomingSchedule, systemImage: "calendar")
+                }
+                .labelStyle(.iconOnly)
+                .help(L10n.showUpcomingSchedule)
+
                 Button {
                     openWindow(id: WindowID.projectManager)
                 } label: {
@@ -39,12 +45,6 @@ struct ContentView: View {
                 }
                 .labelStyle(.iconOnly)
                 .help(L10n.manageProjects)
-
-                Button(action: returnToCalendarSchedule) {
-                    Label(L10n.showUpcomingSchedule, systemImage: "calendar")
-                }
-                .labelStyle(.iconOnly)
-                .help(L10n.showUpcomingSchedule)
 
                 SettingsLink {
                     Label(L10n.settingsMenuItem, systemImage: "gearshape")
