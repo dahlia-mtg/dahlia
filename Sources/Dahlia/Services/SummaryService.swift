@@ -270,25 +270,25 @@ enum SummaryService {
     private static func contentByAttaching(_ ref: TranscriptReference, to content: SummaryBlockContent) -> SummaryBlockContent {
         switch content {
         case let .paragraph(text):
-            return .paragraph(text.withFallbackTranscriptRef(ref))
+            .paragraph(text.withFallbackTranscriptRef(ref))
         case let .bulletedList(items):
-            return .bulletedList(items: items.map { $0.withFallbackTranscriptRef(ref) })
+            .bulletedList(items: items.map { $0.withFallbackTranscriptRef(ref) })
         case let .numberedList(items):
-            return .numberedList(items: items.map { $0.withFallbackTranscriptRef(ref) })
+            .numberedList(items: items.map { $0.withFallbackTranscriptRef(ref) })
         case let .checklist(items):
-            return .checklist(items: items.map { item in
+            .checklist(items: items.map { item in
                 .init(text: item.text.withFallbackTranscriptRef(ref), checked: item.checked)
             })
         case let .quote(text):
-            return .quote(text.withFallbackTranscriptRef(ref))
+            .quote(text.withFallbackTranscriptRef(ref))
         case let .code(language, text):
-            return .code(language: language, content: text.withFallbackTranscriptRef(ref))
+            .code(language: language, content: text.withFallbackTranscriptRef(ref))
         case let .image(screenshotId, caption):
-            return .image(screenshotId: screenshotId, caption: caption.withFallbackTranscriptRef(ref))
+            .image(screenshotId: screenshotId, caption: caption.withFallbackTranscriptRef(ref))
         case let .heading(level, text):
-            return .heading(level: level, content: text.withFallbackTranscriptRef(ref))
+            .heading(level: level, content: text.withFallbackTranscriptRef(ref))
         case let .table(headers, rows):
-            return .table(
+            .table(
                 headers: headers.map { $0.withFallbackTranscriptRef(ref) },
                 rows: rows.map { $0.map { $0.withFallbackTranscriptRef(ref) } }
             )

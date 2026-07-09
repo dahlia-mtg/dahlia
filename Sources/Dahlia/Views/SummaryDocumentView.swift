@@ -204,7 +204,6 @@ struct SummaryDocumentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    @ViewBuilder
     private func summaryTextView(_ summaryText: SummaryText) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if !summaryText.text.isEmpty {
@@ -215,7 +214,6 @@ struct SummaryDocumentView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    @ViewBuilder
     private func tableCellView(_ summaryText: SummaryText) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             if !summaryText.text.isEmpty {
