@@ -546,7 +546,8 @@ struct ControlPanelView: View {
 
     @ViewBuilder
     private var summaryTabContent: some View {
-        if let summary = viewModel.sanitizedMeetingSummary {
+        if let document = viewModel.currentSummaryDocument,
+           viewModel.hasCurrentMeetingSummary {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(spacing: 12) {
@@ -572,8 +573,15 @@ struct ControlPanelView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    MarkdownContentView(markdown: summary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SummaryDocumentView(
+                        document: document,
+                        imageProvider: { screenshotId in
+                            guard let record = viewModel.screenshots.first(where: { $0.id == screenshotId }) else { return nil }
+                            return NSImage(data: record.imageData)
+                        },
+                        transcriptTextProvider: summaryTranscriptText
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -674,6 +682,22 @@ struct ControlPanelView: View {
 
     private var screenshotTimeBase: Date {
         viewModel.store.timeBase
+    }
+
+    private func summaryTranscriptText(for reference: TranscriptReference) -> String? {
+        let time = reference.time.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !time.isEmpty else { return nil }
+
+        let timeBase = viewModel.store.timeBase
+        let recordingSessions = viewModel.store.recordingSessions
+        return viewModel.store.segments.first { segment in
+            Formatters.elapsedHHmmss(
+                at: segment.startTime,
+                sessionId: segment.sessionId,
+                sessions: recordingSessions,
+                fallbackTimeBase: timeBase
+            ) == time
+        }?.displayText.nilIfBlank
     }
 
     private var displayedMeetingTitle: String? {

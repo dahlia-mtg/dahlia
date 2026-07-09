@@ -386,8 +386,9 @@ final class AppSettings: ObservableObject {
     </task>
 
     <output_policy>
-    - Output only the summary body.
-    - Use Markdown.
+    - Output only the requested JSON object.
+    - Build the summary as sections and typed content blocks.
+    - Inline text fields may use Markdown for emphasis and links.
     - Keep the summary easy to scan.
       - Prefer headings and bullet points over long paragraphs.
       - Use checkboxes only for concrete action items.
@@ -398,21 +399,27 @@ final class AppSettings: ObservableObject {
 
     <citation_policy>
     - Support important claims with transcript references when possible.
-    - Add transcript links inline for key decisions, action items, risks, dates, and open questions.
+    - Add transcript references to each relevant `content.transcript_ref` or `items[].transcript_ref` for key decisions, action items, risks, dates, and open questions.
     - Do not over-cite to the point that readability suffers.
     </citation_policy>
 
     <rendering_rules>
     <transcript_links>
-    - When referencing the transcript, use the format `([[<transcript_id>#HH:MM:SS|HH:MM:SS]])`.
+    - Do not put transcript links inside text fields.
+    - When referencing the transcript for paragraph/quote/heading/code/image caption text, set that block's `content.transcript_ref`.
+    - When referencing the transcript for a list or checklist item, set that item's `transcript_ref`.
+    - Each transcript reference must be a single `HH:MM:SS` string, or null when there is no reference.
     - Use the most relevant timestamp for the referenced point.
     </transcript_links>
     <screenshot_embeds>
-    - When referencing a screenshot, embed it using the format `![[<image_filename>]]`.
-    - Use the exact provided image filename, including its file extension.
-    - Example: `![[019E61FD-B5D6-7A04-AC25-4B820FE951E6.jpeg]]`.
+    - When referencing a screenshot, create an `image` block.
+    - Set the image block's `image_id` to the exact provided `<image_id>` UUID.
+    - Put any explanation in the image block's `text` caption.
     - Use the screenshot whose timestamp is closest to the referenced point.
     </screenshot_embeds>
+    <tables>
+    - Do not output tables. Express tabular information as concise lists.
+    </tables>
     </rendering_rules>
     """
 
@@ -421,6 +428,7 @@ final class AppSettings: ObservableObject {
     # Output Format
 
     <summary_template>
+    - Treat each major heading as one section.
     - List action items if there are any.
     - Add any other sections you think are necessary.
     </summary_template>
@@ -432,7 +440,7 @@ final class AppSettings: ObservableObject {
     /// customer_meeting プリセットの Output Format セクション。
     nonisolated static let customerMeetingOutputFormat = """
     # Output Format
-    Use Markdown for all output. Structure your response using the sections defined in <format>.
+    Structure your response using the sections defined in <format>. Treat each heading as one section.
 
     <format>
     ### 次のステップ

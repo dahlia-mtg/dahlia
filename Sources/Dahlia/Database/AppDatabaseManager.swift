@@ -61,6 +61,10 @@ final class AppDatabaseManager: Sendable {
             try addRecordingSessionSchemaIfNeeded(in: db)
         }
 
+        migrator.registerMigration("v9_summaryDocument") { db in
+            try addSummaryDocumentColumnIfNeeded(in: db)
+        }
+
         return migrator
     }()
 
@@ -344,6 +348,10 @@ final class AppDatabaseManager: Sendable {
            try db.tableExists("recording_sessions") {
             try backfillRecordingSessions(in: db)
         }
+    }
+
+    private static func addSummaryDocumentColumnIfNeeded(in db: Database) throws {
+        try addColumnIfNeeded(in: db, table: "summaries", column: "document", type: .text)
     }
 
     private static func createRecordingSessionsTableIfNeeded(in db: Database) throws {
