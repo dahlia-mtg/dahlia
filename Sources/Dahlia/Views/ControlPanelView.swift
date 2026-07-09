@@ -546,7 +546,8 @@ struct ControlPanelView: View {
 
     @ViewBuilder
     private var summaryTabContent: some View {
-        if let document = viewModel.currentSummaryDocument {
+        if let document = viewModel.currentSummaryDocument,
+           viewModel.hasCurrentMeetingSummary {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(spacing: 12) {

@@ -9,6 +9,9 @@ struct SummaryMarkdownRenderResult: Equatable {
 enum ObsidianMarkdownSummaryRenderer {
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -66,41 +69,51 @@ enum ObsidianMarkdownSummaryRenderer {
 
     private static func renderBlock(_ block: SummaryBlock, context: SummaryRenderContext) -> String? {
         let rendered: String?
+        let referencePlacement: ReferencePlacement
         switch block.content {
         case let .paragraph(text):
             rendered = renderInlineMarkdown(text, meetingId: context.meetingId).nilIfBlank
+            referencePlacement = .inline
         case let .bulletedList(items):
             rendered = items
                 .map { "- \(renderInlineMarkdown($0, meetingId: context.meetingId))" }
                 .joined(separator: "\n")
                 .nilIfBlank
+            referencePlacement = .inline
         case let .numberedList(items):
             rendered = items.enumerated()
                 .map { "\($0.offset + 1). \(renderInlineMarkdown($0.element, meetingId: context.meetingId))" }
                 .joined(separator: "\n")
                 .nilIfBlank
+            referencePlacement = .inline
         case let .checklist(items):
             rendered = items
                 .map { "- [\($0.checked ? "x" : " ")] \(renderInlineMarkdown($0.text, meetingId: context.meetingId))" }
                 .joined(separator: "\n")
                 .nilIfBlank
+            referencePlacement = .inline
         case let .quote(text):
             let quoted = renderInlineMarkdown(text, meetingId: context.meetingId)
                 .components(separatedBy: .newlines)
                 .map { "> \($0)" }
                 .joined(separator: "\n")
             rendered = quoted.nilIfBlank
+            referencePlacement = .inline
         case let .code(language, code):
             rendered = "```\(language)\n\(code)\n```"
+            referencePlacement = .separateParagraph
         case let .image(screenshotId, caption):
             let image = "![[\(screenshotFilename(for: screenshotId, context: context))]]"
-            guard let caption = renderInlineMarkdown(caption, meetingId: context.meetingId).nilIfBlank else {
-                return image
+            if let caption = renderInlineMarkdown(caption, meetingId: context.meetingId).nilIfBlank {
+                rendered = "\(image)\n\n\(caption)"
+            } else {
+                rendered = image
             }
-            return "\(image)\n\n\(caption)"
+            referencePlacement = .separateParagraph
         case let .heading(level, text):
             let clampedLevel = max(3, min(level, 6))
             rendered = "\(String(repeating: "#", count: clampedLevel)) \(renderInlineMarkdown(text, meetingId: context.meetingId))"
+            referencePlacement = .inline
         case let .table(headers, rows):
             if headers.isEmpty {
                 rendered = nil
@@ -113,20 +126,36 @@ enum ObsidianMarkdownSummaryRenderer {
                 }
                 rendered = ([header, separator] + rowLines).joined(separator: "\n")
             }
+            referencePlacement = .separateParagraph
         }
 
         guard let rendered else { return nil }
-        return appendReferences(to: rendered, refs: block.transcriptRefs, meetingId: context.meetingId)
+        return appendReferences(to: rendered, refs: block.transcriptRefs, meetingId: context.meetingId, placement: referencePlacement)
     }
 
-    private static func appendReferences(to text: String, refs: [TranscriptReference], meetingId: UUID) -> String {
+    private enum ReferencePlacement {
+        case inline
+        case separateParagraph
+    }
+
+    private static func appendReferences(
+        to text: String,
+        refs: [TranscriptReference],
+        meetingId: UUID,
+        placement: ReferencePlacement
+    ) -> String {
         guard !refs.isEmpty else { return text }
         let referenceText: String = refs
             .map { ref -> String in
-                "[[" + meetingId.uuidString + "#" + ref.time + "|" + ref.time + "]]"
+                "[[" + meetingId.uuidString + "#" + ref.time + "|" + obsidianAlias(ref.label) + "]]"
             }
             .joined(separator: ", ")
-        return "\(text) (\(referenceText))"
+        switch placement {
+        case .inline:
+            return "\(text) (\(referenceText))"
+        case .separateParagraph:
+            return "\(text)\n\n(\(referenceText))"
+        }
     }
 
     private static func renderInlineMarkdown(_ text: String, meetingId: UUID) -> String {
@@ -137,11 +166,20 @@ enum ObsidianMarkdownSummaryRenderer {
         let matches = regex.matches(in: rendered, range: NSRange(rendered.startIndex..., in: rendered))
         for match in matches.reversed() {
             guard let fullRange = Range(match.range(at: 0), in: rendered),
+                  let labelRange = Range(match.range(at: 1), in: rendered),
                   let timeRange = Range(match.range(at: 2), in: rendered) else { continue }
+            let label = String(rendered[labelRange])
             let time = String(rendered[timeRange])
-            rendered.replaceSubrange(fullRange, with: "[[" + meetingId.uuidString + "#" + time + "|" + time + "]]")
+            rendered.replaceSubrange(fullRange, with: "[[" + meetingId.uuidString + "#" + time + "|" + obsidianAlias(label) + "]]")
         }
         return rendered
+    }
+
+    private static func obsidianAlias(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "|", with: "/")
+            .replacingOccurrences(of: "]", with: "")
+            .nilIfBlank ?? ""
     }
 
     private static func screenshotFilename(for screenshotId: UUID, context: SummaryRenderContext) -> String {

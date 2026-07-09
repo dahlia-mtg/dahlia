@@ -352,48 +352,6 @@ final class AppDatabaseManager: Sendable {
 
     private static func addSummaryDocumentColumnIfNeeded(in db: Database) throws {
         try addColumnIfNeeded(in: db, table: "summaries", column: "document", type: .text)
-        try backfillSummaryDocuments(in: db)
-    }
-
-    private static func backfillSummaryDocuments(in db: Database) throws {
-        guard try db.tableExists("summaries") else { return }
-        let columns = try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('summaries')")
-        guard columns.contains("document") else { return }
-
-        let rows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT meetingId, title, summary, createdAt
-            FROM summaries
-            WHERE document IS NULL OR TRIM(document) = ''
-            """
-        )
-        guard !rows.isEmpty else { return }
-
-        for row in rows {
-            let meetingId: UUID = row["meetingId"]
-            let title: String = row["title"]
-            let summary: String = row["summary"]
-            let createdAt: Date = row["createdAt"]
-            let context = try summaryBackfillContext(in: db, meetingId: meetingId, createdAt: createdAt)
-            let document = LegacyMarkdownSummaryParser.parse(markdown: summary, title: title, context: context)
-            try db.execute(
-                sql: "UPDATE summaries SET document = ? WHERE meetingId = ?",
-                arguments: [document.databaseJSONString(), meetingId]
-            )
-        }
-    }
-
-    private static func summaryBackfillContext(in db: Database, meetingId: UUID, createdAt: Date) throws -> SummaryRenderContext {
-        let screenshots = if try db.tableExists("screenshots") {
-            try MeetingScreenshotRecord
-                .filter(Column("meetingId") == meetingId)
-                .fetchAll(db)
-        } else {
-            [MeetingScreenshotRecord]()
-        }
-
-        return SummaryRenderContext(meetingId: meetingId, createdAt: createdAt, screenshots: screenshots)
     }
 
     private static func createRecordingSessionsTableIfNeeded(in db: Database) throws {

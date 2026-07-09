@@ -110,6 +110,8 @@ struct SummaryDocumentView: View {
             case let .table(headers, rows):
                 tableView(headers: headers, rows: rows)
             }
+
+            transcriptReferencesView(block.transcriptRefs)
         }
     }
 
@@ -186,6 +188,29 @@ struct SummaryDocumentView: View {
         }
         .border(Color.primary.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    @ViewBuilder
+    private func transcriptReferencesView(_ refs: [TranscriptReference]) -> some View {
+        if !refs.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(Array(refs.enumerated()), id: \.offset) { _, ref in
+                    Text(transcriptReferenceText(ref))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func transcriptReferenceText(_ ref: TranscriptReference) -> String {
+        let label = ref.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty, label != ref.time else { return ref.time }
+        return "\(label) · \(ref.time)"
     }
 
     @ViewBuilder

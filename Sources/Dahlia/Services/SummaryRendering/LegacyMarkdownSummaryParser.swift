@@ -48,12 +48,16 @@ enum LegacyMarkdownSummaryParser {
 
             if let match = trimmed.firstMatch(of: /^(#{1,6})\s+(.+)$/) {
                 let level = match.1.count
-                let normalized = normalizedTextAndRefs(String(match.2))
+                let parsed = inlineTextAndImages(String(match.2), context: context)
                 if level <= 2 {
                     finishCurrentSection()
-                    currentSection.heading = normalized.text
+                    currentSection.heading = parsed.text
+                    currentSection.blocks.append(contentsOf: parsed.images)
                 } else {
-                    currentSection.blocks.append(.heading(level: level, text: normalized.text, transcriptRefs: normalized.refs))
+                    if !parsed.text.isEmpty {
+                        currentSection.blocks.append(.heading(level: level, text: parsed.text, transcriptRefs: parsed.refs))
+                    }
+                    currentSection.blocks.append(contentsOf: parsed.images)
                 }
                 i += 1
                 continue
@@ -61,22 +65,26 @@ enum LegacyMarkdownSummaryParser {
 
             if isTableStart(lines: lines, index: i) {
                 var tableRefs: [TranscriptReference] = []
+                var tableImages: [SummaryBlock] = []
                 let headers = parsePipeRow(trimmed).map { text in
-                    let normalized = normalizedTextAndRefs(text)
-                    tableRefs.append(contentsOf: normalized.refs)
-                    return normalized.text
+                    let parsed = inlineTextAndImages(text, context: context)
+                    tableRefs.append(contentsOf: parsed.refs)
+                    tableImages.append(contentsOf: parsed.images)
+                    return parsed.text
                 }
                 i += 2
                 var rows: [[String]] = []
                 while i < lines.count, lines[i].trimmingCharacters(in: .whitespaces).contains("|") {
                     rows.append(parsePipeRow(lines[i]).map { text in
-                        let normalized = normalizedTextAndRefs(text)
-                        tableRefs.append(contentsOf: normalized.refs)
-                        return normalized.text
+                        let parsed = inlineTextAndImages(text, context: context)
+                        tableRefs.append(contentsOf: parsed.refs)
+                        tableImages.append(contentsOf: parsed.images)
+                        return parsed.text
                     })
                     i += 1
                 }
                 currentSection.blocks.append(.table(headers: headers, rows: rows, transcriptRefs: tableRefs))
+                currentSection.blocks.append(contentsOf: tableImages)
                 continue
             }
 
@@ -88,61 +96,90 @@ enum LegacyMarkdownSummaryParser {
                     quoteLines.append(content)
                     i += 1
                 }
-                let normalized = normalizedTextAndRefs(quoteLines.joined(separator: " "))
-                currentSection.blocks.append(.quote(normalized.text, transcriptRefs: normalized.refs))
+                let parsed = inlineTextAndImages(quoteLines.joined(separator: " "), context: context)
+                if !parsed.text.isEmpty {
+                    currentSection.blocks.append(.quote(parsed.text, transcriptRefs: parsed.refs))
+                }
+                currentSection.blocks.append(contentsOf: parsed.images)
                 continue
             }
 
             if let checklistMatch = checklistItem(in: trimmed) {
                 var items: [SummaryBlock.ChecklistItem] = []
                 var refs: [TranscriptReference] = []
-                let first = normalizedTextAndRefs(checklistMatch.text)
+                var images: [SummaryBlock] = []
+                let first = inlineTextAndImages(checklistMatch.text, context: context)
                 refs.append(contentsOf: first.refs)
-                items.append(.init(text: first.text, checked: checklistMatch.checked))
+                images.append(contentsOf: first.images)
+                if !first.text.isEmpty {
+                    items.append(.init(text: first.text, checked: checklistMatch.checked))
+                }
                 i += 1
                 while i < lines.count,
                       let next = checklistItem(in: lines[i].trimmingCharacters(in: .whitespaces)) {
-                    let normalized = normalizedTextAndRefs(next.text)
-                    refs.append(contentsOf: normalized.refs)
-                    items.append(.init(text: normalized.text, checked: next.checked))
+                    let parsed = inlineTextAndImages(next.text, context: context)
+                    refs.append(contentsOf: parsed.refs)
+                    images.append(contentsOf: parsed.images)
+                    if !parsed.text.isEmpty {
+                        items.append(.init(text: parsed.text, checked: next.checked))
+                    }
                     i += 1
                 }
-                currentSection.blocks.append(.checklist(items: items, transcriptRefs: refs))
+                if !items.isEmpty {
+                    currentSection.blocks.append(.checklist(items: items, transcriptRefs: refs))
+                }
+                currentSection.blocks.append(contentsOf: images)
                 continue
             }
 
             if let item = unorderedListItem(in: trimmed) {
                 var refs: [TranscriptReference] = []
-                let first = normalizedTextAndRefs(item)
+                var images: [SummaryBlock] = []
+                let first = inlineTextAndImages(item, context: context)
                 refs.append(contentsOf: first.refs)
-                var items = [first.text]
+                images.append(contentsOf: first.images)
+                var items = first.text.isEmpty ? [] : [first.text]
                 i += 1
                 while i < lines.count,
                       let next = unorderedListItem(in: lines[i].trimmingCharacters(in: .whitespaces)),
                       checklistItem(in: lines[i].trimmingCharacters(in: .whitespaces)) == nil {
-                    let normalized = normalizedTextAndRefs(next)
-                    refs.append(contentsOf: normalized.refs)
-                    items.append(normalized.text)
+                    let parsed = inlineTextAndImages(next, context: context)
+                    refs.append(contentsOf: parsed.refs)
+                    images.append(contentsOf: parsed.images)
+                    if !parsed.text.isEmpty {
+                        items.append(parsed.text)
+                    }
                     i += 1
                 }
-                currentSection.blocks.append(.bulletedList(items: items, transcriptRefs: refs))
+                if !items.isEmpty {
+                    currentSection.blocks.append(.bulletedList(items: items, transcriptRefs: refs))
+                }
+                currentSection.blocks.append(contentsOf: images)
                 continue
             }
 
             if let item = orderedListItem(in: trimmed) {
                 var refs: [TranscriptReference] = []
-                let first = normalizedTextAndRefs(item)
+                var images: [SummaryBlock] = []
+                let first = inlineTextAndImages(item, context: context)
                 refs.append(contentsOf: first.refs)
-                var items = [first.text]
+                images.append(contentsOf: first.images)
+                var items = first.text.isEmpty ? [] : [first.text]
                 i += 1
                 while i < lines.count,
                       let next = orderedListItem(in: lines[i].trimmingCharacters(in: .whitespaces)) {
-                    let normalized = normalizedTextAndRefs(next)
-                    refs.append(contentsOf: normalized.refs)
-                    items.append(normalized.text)
+                    let parsed = inlineTextAndImages(next, context: context)
+                    refs.append(contentsOf: parsed.refs)
+                    images.append(contentsOf: parsed.images)
+                    if !parsed.text.isEmpty {
+                        items.append(parsed.text)
+                    }
                     i += 1
                 }
-                currentSection.blocks.append(.numberedList(items: items, transcriptRefs: refs))
+                if !items.isEmpty {
+                    currentSection.blocks.append(.numberedList(items: items, transcriptRefs: refs))
+                }
+                currentSection.blocks.append(contentsOf: images)
                 continue
             }
 
@@ -166,8 +203,9 @@ enum LegacyMarkdownSummaryParser {
     static func parseInlineBlocks(_ text: String, context: SummaryRenderContext? = nil) -> [SummaryBlock] {
         let matches = obsidianImageEmbedRegex.matches(in: text, range: NSRange(text.startIndex..., in: text))
         guard !matches.isEmpty else {
-            let normalized = normalizeInlineMarkdown(text).trimmingCharacters(in: .whitespacesAndNewlines)
-            return normalized.isEmpty ? [] : [.paragraph(normalized)]
+            let normalized = normalizedTextAndRefs(text)
+            let paragraph = normalized.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return paragraph.isEmpty ? [] : [.paragraph(paragraph, transcriptRefs: normalized.refs)]
         }
 
         var blocks: [SummaryBlock] = []
@@ -268,7 +306,7 @@ enum LegacyMarkdownSummaryParser {
     )
 
     private static let obsidianLinkRegex = try! NSRegularExpression(
-        pattern: #"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"#
+        pattern: #"(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"#
     )
 
     private static func bodyWithoutFrontmatter(_ markdown: String) -> String {
@@ -292,6 +330,36 @@ enum LegacyMarkdownSummaryParser {
         blocks.append(.paragraph(paragraph, transcriptRefs: normalized.refs))
     }
 
+    private static func inlineTextAndImages(_ text: String, context: SummaryRenderContext?) -> (
+        text: String,
+        refs: [TranscriptReference],
+        images: [SummaryBlock]
+    ) {
+        var textParts: [String] = []
+        var refs: [TranscriptReference] = []
+        var images: [SummaryBlock] = []
+
+        for block in parseInlineBlocks(text, context: context) {
+            switch block.content {
+            case let .paragraph(text):
+                if !text.isEmpty {
+                    textParts.append(text)
+                    refs.append(contentsOf: block.transcriptRefs)
+                }
+            case .image:
+                images.append(block)
+            default:
+                break
+            }
+        }
+
+        return (
+            text: textParts.joined(separator: " "),
+            refs: uniqueReferences(refs),
+            images: images
+        )
+    }
+
     private static func resolvedScreenshotId(for target: String, context: SummaryRenderContext?) -> UUID? {
         let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -308,20 +376,20 @@ enum LegacyMarkdownSummaryParser {
 
     private static func transcriptReference(for target: String, alias: String?) -> (replacement: String, ref: TranscriptReference?) {
         guard let hashIndex = target.lastIndex(of: "#") else {
-            return (alias ?? "", nil)
+            return (alias?.nilIfBlank ?? target, nil)
         }
         let timestamp = String(target[target.index(after: hashIndex)...])
         guard timestamp.firstMatch(of: /^\d{2}:\d{2}:\d{2}$/) != nil else {
-            return (alias ?? "", nil)
+            return (alias?.nilIfBlank ?? target, nil)
         }
         let label = alias?.nilIfBlank ?? timestamp
         return (label, TranscriptReference(time: timestamp, label: label))
     }
 
     private static func cleanupReferenceWhitespace(_ text: String) -> String {
-        var cleaned = text.replacingOccurrences(of: #"\(\s*\)"#, with: "", options: .regularExpression)
-        cleaned = cleaned.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
-        cleaned = cleaned.replacingOccurrences(of: #"\s+([,.;:!?])"#, with: "$1", options: .regularExpression)
+        var cleaned = text.replacingOccurrences(of: #"(^|[ \t])\([ \t]*\)"#, with: "$1", options: .regularExpression)
+        cleaned = cleaned.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+        cleaned = cleaned.replacingOccurrences(of: #"[ \t]+([,.;:!?])"#, with: "$1", options: .regularExpression)
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -380,8 +448,44 @@ enum LegacyMarkdownSummaryParser {
     }
 
     private static func parsePipeRow(_ line: String) -> [String] {
-        line.split(separator: "|")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        var cells: [String] = []
+        var current = ""
+        var index = line.startIndex
+        var obsidianLinkDepth = 0
+
+        while index < line.endIndex {
+            let nextIndex = line.index(after: index)
+            let character = line[index]
+            if character == "[", nextIndex < line.endIndex, line[nextIndex] == "[" {
+                obsidianLinkDepth += 1
+                current.append(character)
+                current.append(line[nextIndex])
+                index = line.index(after: nextIndex)
+                continue
+            }
+            if character == "]", nextIndex < line.endIndex, line[nextIndex] == "]", obsidianLinkDepth > 0 {
+                obsidianLinkDepth -= 1
+                current.append(character)
+                current.append(line[nextIndex])
+                index = line.index(after: nextIndex)
+                continue
+            }
+            if character == "|", obsidianLinkDepth == 0 {
+                let cell = current.trimmingCharacters(in: .whitespaces)
+                if !cell.isEmpty {
+                    cells.append(cell)
+                }
+                current = ""
+            } else {
+                current.append(character)
+            }
+            index = nextIndex
+        }
+
+        let cell = current.trimmingCharacters(in: .whitespaces)
+        if !cell.isEmpty {
+            cells.append(cell)
+        }
+        return cells
     }
 }

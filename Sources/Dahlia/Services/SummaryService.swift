@@ -214,15 +214,11 @@ enum SummaryService {
     }
 
     private static func blocks(from dto: SummaryDocumentResponse.BlockDTO, context: SummaryRenderContext) -> [SummaryBlock] {
-        let normalizedText = LegacyMarkdownSummaryParser.normalizedTextAndRefs(dto.text)
-        let refs = normalizedTranscriptRefs(dto.transcriptRefs) + normalizedText.refs
+        let refs = normalizedTranscriptRefs(dto.transcriptRefs)
 
         switch dto.type {
         case "paragraph":
-            return LegacyMarkdownSummaryParser.parseInlineBlocks(normalizedText.text, context: context)
-                .map { block in
-                    SummaryBlock(id: block.id, transcriptRefs: refs + block.transcriptRefs, content: block.content)
-                }
+            return blocksByAttaching(refs, to: LegacyMarkdownSummaryParser.parseInlineBlocks(dto.text, context: context))
         case "bulleted_list":
             let normalizedItems = normalizedItemTexts(dto.items)
             return normalizedItems.texts.isEmpty ? [] : [.bulletedList(items: normalizedItems.texts, transcriptRefs: refs + normalizedItems.refs)]
@@ -233,31 +229,38 @@ enum SummaryService {
             let normalizedItems = normalizedChecklistItems(dto.items)
             return normalizedItems.items.isEmpty ? [] : [.checklist(items: normalizedItems.items, transcriptRefs: refs + normalizedItems.refs)]
         case "quote":
-            return normalizedText.text.isEmpty ? [] : [.quote(normalizedText.text, transcriptRefs: refs)]
+            let normalizedText = LegacyMarkdownSummaryParser.normalizedTextAndRefs(dto.text)
+            return normalizedText.text.isEmpty ? [] : [.quote(normalizedText.text, transcriptRefs: refs + normalizedText.refs)]
         case "code":
-            return [.code(language: dto.language, code: normalizedText.text, transcriptRefs: refs)]
+            return dto.text.isEmpty ? [] : [.code(language: dto.language, code: dto.text, transcriptRefs: refs)]
         case "image":
+            let normalizedText = LegacyMarkdownSummaryParser.normalizedTextAndRefs(dto.text)
             guard let screenshotId = UUID(uuidString: dto.imageId),
                   context.screenshots.contains(where: { $0.id == screenshotId }) else {
-                return LegacyMarkdownSummaryParser.parseInlineBlocks(normalizedText.text, context: context)
-                    .map { block in
-                        SummaryBlock(id: block.id, transcriptRefs: refs + block.transcriptRefs, content: block.content)
-                    }
+                return blocksByAttaching(refs, to: LegacyMarkdownSummaryParser.parseInlineBlocks(dto.text, context: context))
             }
             return [
                 .image(
                     screenshotId: screenshotId,
                     caption: normalizedText.text,
-                    transcriptRefs: refs
+                    transcriptRefs: refs + normalizedText.refs
                 ),
             ]
         case "heading":
-            return normalizedText.text.isEmpty ? [] : [.heading(level: max(3, dto.level), text: normalizedText.text, transcriptRefs: refs)]
+            let normalizedText = LegacyMarkdownSummaryParser.normalizedTextAndRefs(dto.text)
+            return normalizedText.text.isEmpty ? [] : [.heading(
+                level: max(3, dto.level),
+                text: normalizedText.text,
+                transcriptRefs: refs + normalizedText.refs
+            )]
         default:
-            return LegacyMarkdownSummaryParser.parseInlineBlocks(normalizedText.text, context: context)
-                .map { block in
-                    SummaryBlock(id: block.id, transcriptRefs: refs + block.transcriptRefs, content: block.content)
-                }
+            return blocksByAttaching(refs, to: LegacyMarkdownSummaryParser.parseInlineBlocks(dto.text, context: context))
+        }
+    }
+
+    private static func blocksByAttaching(_ refs: [TranscriptReference], to blocks: [SummaryBlock]) -> [SummaryBlock] {
+        blocks.map { block in
+            SummaryBlock(id: block.id, transcriptRefs: refs + block.transcriptRefs, content: block.content)
         }
     }
 

@@ -403,7 +403,7 @@ struct AppDatabaseManagerTests {
     }
 
     @Test
-    func existingV8DatabaseMigratesSummaryDocumentColumnWithoutDataLoss() throws {
+    func existingV8DatabaseAddsSummaryDocumentColumnWithoutBackfill() throws {
         let databaseURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("sqlite")
@@ -481,11 +481,7 @@ struct AppDatabaseManagerTests {
         #expect(result.0.contains("document"))
         #expect(result.1?["title"] == "Legacy")
         #expect(result.1?["summary"] == "## Summary\n\n![[\(screenshotID.uuidString).jpeg|Valid]]\n\n![[\(missingScreenshotID.uuidString).jpeg]]")
-        let documentJSON = try #require(result.1?["document"] as String?)
-        let document = try JSONDecoder().decode(SummaryDocument.self, from: Data(documentJSON.utf8))
-        #expect(document.title == "Legacy")
-        #expect(document.sections.first?.heading == "Summary")
-        #expect(document.sections.first?.blocks == [.image(screenshotId: screenshotID, caption: "Valid")])
+        #expect(result.1?["document"] == nil as String?)
         #expect(result.1?["googleFileId"] == "google-123")
     }
 }

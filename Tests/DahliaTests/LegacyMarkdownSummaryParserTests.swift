@@ -59,5 +59,60 @@ import Foundation
             #expect(document.sections[1].heading == "Risks")
             #expect(document.sections[1].blocks == [.quote("Timing is tight")])
         }
+
+        @Test
+        func preservesImagesInListQuoteHeadingAndTableCells() throws {
+            let meetingId = UUID.v7()
+            let listImageId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E6"))
+            let quoteImageId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E7"))
+            let headingImageId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E8"))
+            let tableImageId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E9"))
+            let screenshots = [listImageId, quoteImageId, headingImageId, tableImageId].map { id in
+                MeetingScreenshotRecord(
+                    id: id,
+                    meetingId: meetingId,
+                    capturedAt: Date(timeIntervalSince1970: 0),
+                    imageData: Data(),
+                    mimeType: "image/jpeg"
+                )
+            }
+            let context = SummaryRenderContext(meetingId: meetingId, createdAt: Date(timeIntervalSince1970: 0), screenshots: screenshots)
+            let markdown = """
+            ## Summary
+
+            - Reviewed ![[\(listImageId.uuidString).jpeg|List image]]
+
+            > Quote ![[\(quoteImageId.uuidString).jpeg|Quote image]]
+
+            ### Heading ![[\(headingImageId.uuidString).jpeg|Heading image]]
+
+            | Topic |
+            | --- |
+            | Cell ![[\(tableImageId.uuidString).jpeg|Table image]] |
+            """
+
+            let document = LegacyMarkdownSummaryParser.parse(markdown: markdown, title: "Images", context: context)
+
+            #expect(document.sections.first?.blocks == [
+                .bulletedList(items: ["Reviewed"]),
+                .image(screenshotId: listImageId, caption: "List image"),
+                .quote("Quote"),
+                .image(screenshotId: quoteImageId, caption: "Quote image"),
+                .heading(level: 3, text: "Heading"),
+                .image(screenshotId: headingImageId, caption: "Heading image"),
+                .table(headers: ["Topic"], rows: [["Cell"]]),
+                .image(screenshotId: tableImageId, caption: "Table image"),
+            ])
+        }
+
+        @Test
+        func keepsAliaslessWikiLinkText() {
+            let document = LegacyMarkdownSummaryParser.parse(
+                markdown: "## Summary\n\nSee [[Project Alpha]] for details",
+                title: "Wiki"
+            )
+
+            #expect(document.sections.first?.blocks == [.paragraph("See Project Alpha for details")])
+        }
     }
 #endif

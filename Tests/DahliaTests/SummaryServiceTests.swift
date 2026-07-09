@@ -119,7 +119,91 @@ struct SummaryServiceTests {
     }
 
     @Test
-    func decodeSummaryDocumentFallsBackToLegacySummaryResult() throws {
+    func decodeSummaryDocumentPreservesCodeBodyAndExplicitRefs() {
+        let context = SummaryRenderContext(meetingId: UUID.v7(), createdAt: Date(timeIntervalSince1970: 0))
+        let json = """
+        {
+          "title": "Code",
+          "sections": [
+            {
+              "heading": "Example",
+              "blocks": [
+                {
+                  "type": "code",
+                  "level": 0,
+                  "text": "func f() {\\n    return foo()\\n}",
+                  "items": [],
+                  "transcript_refs": [
+                    {"time": "00:10:00", "label": "Swift example"}
+                  ],
+                  "language": "swift",
+                  "image_id": ""
+                }
+              ]
+            }
+          ],
+          "tags": [],
+          "action_items": []
+        }
+        """
+
+        let document = SummaryService.decodeSummaryDocument(from: json, context: context)
+
+        #expect(document.sections.first?.blocks == [
+            .code(
+                language: "swift",
+                code: "func f() {\n    return foo()\n}",
+                transcriptRefs: [TranscriptReference(time: "00:10:00", label: "Swift example")]
+            ),
+        ])
+    }
+
+    @Test
+    func decodeSummaryDocumentSalvagesLegacyImageEmbedInStructuredParagraph() throws {
+        let meetingId = UUID.v7()
+        let screenshotId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E6"))
+        let screenshot = MeetingScreenshotRecord(
+            id: screenshotId,
+            meetingId: meetingId,
+            capturedAt: Date(timeIntervalSince1970: 0),
+            imageData: Data(),
+            mimeType: "image/jpeg"
+        )
+        let context = SummaryRenderContext(meetingId: meetingId, createdAt: screenshot.capturedAt, screenshots: [screenshot])
+        let json = """
+        {
+          "title": "Image",
+          "sections": [
+            {
+              "heading": "Summary",
+              "blocks": [
+                {
+                  "type": "paragraph",
+                  "level": 0,
+                  "text": "Review ![[\(screenshotId.uuidString).jpeg|Dashboard]]",
+                  "items": [],
+                  "transcript_refs": [],
+                  "language": "",
+                  "image_id": ""
+                }
+              ]
+            }
+          ],
+          "tags": [],
+          "action_items": []
+        }
+        """
+
+        let document = SummaryService.decodeSummaryDocument(from: json, context: context)
+
+        #expect(document.sections.first?.blocks == [
+            .paragraph("Review"),
+            .image(screenshotId: screenshotId, caption: "Dashboard"),
+        ])
+    }
+
+    @Test
+    func decodeSummaryDocumentFallsBackToLegacySummaryResult() {
         let context = SummaryRenderContext(meetingId: UUID.v7(), createdAt: Date(timeIntervalSince1970: 0))
         let json = """
         {
@@ -147,7 +231,7 @@ struct SummaryServiceTests {
     }
 
     @Test
-    func decodeSummaryDocumentDropsEmptyStructuredBlocksAndSections() throws {
+    func decodeSummaryDocumentDropsEmptyStructuredBlocksAndSections() {
         let context = SummaryRenderContext(meetingId: UUID.v7(), createdAt: Date(timeIntervalSince1970: 0))
         let json = """
         {
@@ -200,7 +284,7 @@ struct SummaryServiceTests {
     }
 
     @Test
-    func screenshotMetadataUsesRecordingSessionOffset() throws {
+    func screenshotMetadataUsesRecordingSessionOffset() {
         let sessionId = UUID.v7()
         let timeBase = Date(timeIntervalSince1970: 1_776_384_000)
         let screenshot = MeetingScreenshotRecord(
@@ -329,7 +413,7 @@ struct SummaryServiceTests {
                 "2026-q1",
                 "!!!",
             ],
-            contextContent: context,
+            contextContent: context
         )
 
         #expect(tags == [

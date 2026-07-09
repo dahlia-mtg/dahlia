@@ -46,13 +46,45 @@ import Foundation
             #expect(rendered.markdown.contains("meeting_id: \"\(meetingId.uuidString)\""))
             #expect(rendered.markdown.contains("title: \"Weekly Sync/Review\""))
             #expect(rendered.markdown.contains("tags:\n  - team"))
-            #expect(rendered.body.contains("[[\(meetingId.uuidString)#00:10:00|00:10:00]]"))
-            #expect(!rendered.body.contains("[[\(meetingId.uuidString)#00:10:00|Decision]]"))
+            #expect(rendered.body.contains("[[\(meetingId.uuidString)#00:10:00|Decision]]"))
             #expect(rendered.body.contains("![[\(screenshotId.uuidString).jpeg]]"))
             #expect(rendered.body.contains("![[\(screenshotId.uuidString).jpeg]]\n\nScreen"))
-            #expect(!rendered.body.contains("00:11:00"))
-            #expect(!rendered.body.contains("Screen shown"))
+            #expect(rendered.body.contains("[[\(meetingId.uuidString)#00:11:00|Screen shown]]"))
             #expect(!rendered.body.contains("SQL(elements:"))
+        }
+
+        @Test
+        func rendersCodeAndTableReferencesWithoutBreakingBlockMarkdown() throws {
+            let meetingId = try #require(UUID(uuidString: "019E61FD-B5D6-7A04-AC25-4B820FE951E6"))
+            let createdAt = Date(timeIntervalSince1970: 1_783_598_400)
+            let document = SummaryDocument(
+                title: "Refs",
+                sections: [
+                    SummarySection(
+                        id: UUID.v7(),
+                        heading: "Summary",
+                        blocks: [
+                            .code(
+                                language: "swift",
+                                code: "func f() {\n    return 1\n}",
+                                transcriptRefs: [TranscriptReference(time: "00:10:00", label: "Code")]
+                            ),
+                            .table(
+                                headers: ["Topic"],
+                                rows: [["Launch"]],
+                                transcriptRefs: [TranscriptReference(time: "00:11:00", label: "Table")]
+                            ),
+                        ]
+                    ),
+                ]
+            )
+            let context = SummaryRenderContext(meetingId: meetingId, createdAt: createdAt)
+
+            let rendered = ObsidianMarkdownSummaryRenderer.render(document: document, context: context)
+
+            #expect(rendered.body.contains("```swift\nfunc f() {\n    return 1\n}\n```\n\n([[\(meetingId.uuidString)#00:10:00|Code]])"))
+            #expect(!rendered.body.contains("``` ([["))
+            #expect(rendered.body.contains("| Launch |\n\n([[\(meetingId.uuidString)#00:11:00|Table]])"))
         }
 
         @Test
