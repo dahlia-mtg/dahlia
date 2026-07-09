@@ -133,7 +133,7 @@ struct SummaryServiceTests {
         #expect(document.title == "Legacy")
         #expect(document.tags == ["team"])
         #expect(document.sections.first?.heading == "Summary")
-        #expect(document.sections.first?.blocks == [.bulletedList(items: ["Decide [00:10:00](transcript://00:10:00)"])])
+        #expect(document.sections.first?.blocks == [.bulletedList(items: ["Decide ([00:10:00](transcript://00:10:00))"])])
         #expect(document.actionItems == [SummaryActionItem(title: "Follow up [00:11:00](transcript://00:11:00)", assignee: "me")])
     }
 
