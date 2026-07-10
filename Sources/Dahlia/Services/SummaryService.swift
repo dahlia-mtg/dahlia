@@ -36,7 +36,7 @@ enum SummaryService {
         # Response Format
         Your response MUST be a JSON object with exactly four keys:
         - "title": a concise title for this meeting/transcript (one line, no quotes)
-        - "sections": an array of sections. Each section has:
+        - "sections": an array of summary body sections that exclude action items. Each section has:
           - "heading": the section heading, or an empty string for an intro section
           - "blocks": an array of content blocks in reading order
         - "tags": an array of relevant short Obsidian-compatible tags for categorization (empty array if none)
@@ -45,7 +45,7 @@ enum SummaryService {
           - Tags MUST use only letters, numbers, "_" and "-".
           - Use "_" or "-" to join words instead of spaces or punctuation.
           - Do not include "#", slashes, emojis, quotes, brackets, commas, or other symbols.
-        - "action_items": an array of objects with exactly two keys:
+        - "action_items": the only location for action items; an array of objects with exactly two keys:
           - "title": the concrete action item
           - "assignee": who owns it, or an empty string if unclear
 

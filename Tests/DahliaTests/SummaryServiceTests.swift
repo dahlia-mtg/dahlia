@@ -66,6 +66,8 @@ struct SummaryServiceTests {
         #expect((content["additionalProperties"] as? Bool) == false)
         #expect((blockListItem["additionalProperties"] as? Bool) == false)
         #expect((items["additionalProperties"] as? Bool) == false)
+        #expect((sections["description"] as? String)?.contains("Do not include an Action Items section") == true)
+        #expect((actionItems["description"] as? String)?.contains("only location") == true)
     }
 
     @Test
@@ -376,6 +378,12 @@ struct SummaryServiceTests {
         #expect(AppSettings.defaultSummaryPrompt.contains("create an `image` block"))
         #expect(AppSettings.defaultSummaryPrompt.contains("content.transcript_ref"))
         #expect(AppSettings.defaultSummaryPrompt.contains("items[].transcript_ref"))
+    }
+
+    @Test
+    func summaryPromptsKeepActionItemsOutOfBodySections() {
+        #expect(AppSettings.defaultSummaryPrompt.contains("Do not add an Action Items section"))
+        #expect(!AppSettings.defaultSummaryPrompt.contains("List action items if there are any"))
     }
 
     @Test

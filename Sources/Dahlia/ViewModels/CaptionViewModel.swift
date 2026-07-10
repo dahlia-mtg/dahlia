@@ -169,7 +169,7 @@ final class CaptionViewModel: ObservableObject {
 
     var hasCurrentMeetingSummary: Bool {
         guard let currentSummaryDocument else { return false }
-        return !currentSummaryDocument.sections.isEmpty
+        return !currentSummaryDocument.sections.isEmpty || !currentSummaryDocument.actionItems.isEmpty
     }
 
     var canShareCurrentSummary: Bool {

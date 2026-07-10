@@ -28,6 +28,8 @@ struct SummaryDocumentView: View {
             ForEach(document.sections) { section in
                 sectionView(section)
             }
+
+            SummaryActionItemsView(actionItems: document.actionItems)
         }
         .textSelection(.enabled)
     }

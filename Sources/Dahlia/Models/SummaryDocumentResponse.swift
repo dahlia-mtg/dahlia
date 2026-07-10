@@ -114,6 +114,7 @@ struct SummaryDocumentResponse: Decodable {
                 "title": ["type": "string"],
                 "sections": [
                     "type": "array",
+                    "description": "Summary body sections only. Do not include an Action Items section or repeat action items here.",
                     "items": [
                         "type": "object",
                         "properties": [
@@ -133,6 +134,7 @@ struct SummaryDocumentResponse: Decodable {
                 ],
                 "action_items": [
                     "type": "array",
+                    "description": "The only location for concrete action items.",
                     "items": actionItemSchema,
                 ],
             ],
