@@ -649,11 +649,22 @@ final class CaptionViewModel: ObservableObject {
         let recordingSessions = detail.recordingSessions.map(RecordingSessionTimeline.init)
         let segments = detail.segments.map(TranscriptSegment.init(from:))
 
-        let lastSummaryURL = SummaryService.findSummaryFile(
-            projectURL: projectURL,
-            vaultURL: vaultURL,
-            meetingId: meetingId
-        )
+        let lastSummaryURL: URL? = if let summary = detail.summary {
+            SummaryService.findSummaryFile(
+                storedRelativePath: summary.vaultRelativePath,
+                projectURL: projectURL,
+                vaultURL: vaultURL,
+                meetingId: meetingId
+            )
+        } else {
+            nil
+        }
+
+        if let lastSummaryURL,
+           let relativePath = VaultSummaryFileLocator.relativePath(for: lastSummaryURL, vaultURL: vaultURL),
+           relativePath != detail.summary?.vaultRelativePath {
+            try repo.updateSummaryVaultRelativePath(forMeetingId: meetingId, relativePath: relativePath)
+        }
 
         return LoadedMeetingData(
             createdAt: detail.meeting?.createdAt,
@@ -1856,6 +1867,9 @@ final class CaptionViewModel: ObservableObject {
 
             do {
                 let fileURL = try await vaultExport
+                if let relativePath = VaultSummaryFileLocator.relativePath(for: fileURL, vaultURL: vaultURL) {
+                    try repo?.updateSummaryVaultRelativePath(forMeetingId: meetingId, relativePath: relativePath)
+                }
                 summaryProgress.vaultExport = .completed
                 if currentMeetingId == meetingId {
                     lastSummaryURL = fileURL

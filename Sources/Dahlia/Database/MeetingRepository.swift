@@ -343,6 +343,7 @@ final class MeetingRepository {
                 title: trimmedTitle.isEmpty ? (existingSummary?.title ?? "") : trimmedTitle,
                 summary: renderedBody,
                 document: document.databaseJSONString(),
+                vaultRelativePath: existingSummary?.vaultRelativePath,
                 googleFileId: existingSummary?.googleFileId,
                 createdAt: existingSummary?.createdAt ?? Date()
             )
@@ -521,6 +522,15 @@ final class MeetingRepository {
             try db.execute(
                 sql: "UPDATE summaries SET googleFileId = ? WHERE meetingId = ?",
                 arguments: [googleFileId?.nilIfBlank, meetingId]
+            )
+        }
+    }
+
+    nonisolated func updateSummaryVaultRelativePath(forMeetingId meetingId: UUID, relativePath: String?) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE summaries SET vaultRelativePath = ? WHERE meetingId = ?",
+                arguments: [relativePath?.nilIfBlank, meetingId]
             )
         }
     }

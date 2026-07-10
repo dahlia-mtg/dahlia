@@ -133,32 +133,19 @@ enum SummaryService {
         return "<time>\(time)</time> <image_id>\(screenshot.id.uuidString)</image_id> <image_filename>\(imageFilename)</image_filename>"
     }
 
-    /// 要約保存先ディレクトリ内の `.md` ファイルを走査し、frontmatter の `meeting_id` が一致するファイルを返す。
-    static func findSummaryFile(projectURL: URL?, vaultURL: URL, meetingId: UUID) -> URL? {
-        let fm = FileManager.default
-        let targetId = meetingId.uuidString.lowercased()
-        let directoryURL = projectURL ?? vaultURL
-
-        guard let enumerator = fm.enumerator(
-            at: directoryURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else { return nil }
-
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension == "md" else { continue }
-            guard let handle = try? FileHandle(forReadingFrom: fileURL) else { continue }
-            defer { try? handle.close() }
-            guard let data = try? handle.read(upToCount: 512),
-                  let head = String(data: data, encoding: .utf8) else { continue }
-            // frontmatter 内の meeting_id を case-insensitive で照合
-            let lowered = head.lowercased()
-            if lowered.contains("meeting_id:"),
-               lowered.contains(targetId) {
-                return fileURL
-            }
-        }
-        return nil
+    /// DB の Vault 相対パスを優先し、旧データや外部移動時だけ frontmatter を走査する。
+    static func findSummaryFile(
+        storedRelativePath: String? = nil,
+        projectURL: URL?,
+        vaultURL: URL,
+        meetingId: UUID
+    ) -> URL? {
+        VaultSummaryFileLocator.findSummaryFile(
+            storedRelativePath: storedRelativePath,
+            projectURL: projectURL,
+            vaultURL: vaultURL,
+            meetingId: meetingId
+        )
     }
 
     static func resolvedTags(resultTags: [String], contextContent: String?) -> [String] {
