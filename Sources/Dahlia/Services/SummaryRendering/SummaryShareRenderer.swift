@@ -200,9 +200,9 @@ enum SummaryShareRenderer {
         case let .paragraph(text):
             htmlParagraph(text.text, destination: destination)
         case let .bulletedList(items):
-            htmlList(items.map(\.text), kind: .bulleted, destination: destination)
+            htmlList(items.map(\.text), kind: .bulleted)
         case let .numberedList(items):
-            htmlList(items.map(\.text), kind: .numbered, destination: destination)
+            htmlList(items.map(\.text), kind: .numbered)
         case let .checklist(items):
             htmlChecklist(items, destination: destination)
         case let .quote(text):
@@ -242,43 +242,31 @@ enum SummaryShareRenderer {
 
     private static func htmlList(
         _ items: [String],
-        kind: HTMLListKind,
-        destination: Destination
+        kind: HTMLListKind
     ) -> String? {
         let renderedItems = items.compactMap { item -> String? in
             normalizedInlineMarkdown(item).nilIfBlank.map(renderInlineHTML)
         }
         guard !renderedItems.isEmpty else { return nil }
-
-        switch destination {
-        case .googleDocs:
-            return wrapHTMLList(renderedItems.map { "<li>\($0)</li>" }, element: kind.element)
-        case .slack:
-            let lines = renderedItems.enumerated().map { index, item in
-                switch kind {
-                case .bulleted:
-                    "• \(item)"
-                case .numbered:
-                    "\(index + 1). \(item)"
-                }
-            }
-            return lines.joined(separator: "<br>\n")
-        }
+        return wrapHTMLList(renderedItems.map { "<li>\($0)</li>" }, element: kind.element)
     }
 
     private static func htmlChecklist(_ items: [SummaryBlock.ChecklistItem], destination: Destination) -> String? {
-        let renderedItems = items.compactMap { item -> String? in
+        let renderedItems = items.compactMap { item -> (html: String, checked: Bool)? in
             guard let text = normalizedInlineMarkdown(item.text.text).nilIfBlank else { return nil }
-            let marker = item.checked ? "☑" : "☐"
-            return "\(marker) \(renderInlineHTML(text))"
+            return (renderInlineHTML(text), item.checked)
         }
         guard !renderedItems.isEmpty else { return nil }
 
         switch destination {
         case .googleDocs:
-            return wrapHTMLList(renderedItems.map { "<li>\($0)</li>" }, element: "ul")
+            let listItems = renderedItems.map { item in
+                let marker = item.checked ? "☑" : "☐"
+                return "<li>\(marker) \(item.html)</li>"
+            }
+            return wrapHTMLList(listItems, element: "ul")
         case .slack:
-            return renderedItems.joined(separator: "<br>\n")
+            return wrapHTMLList(renderedItems.map { "<li>\($0.html)</li>" }, element: "ul")
         }
     }
 
@@ -327,16 +315,16 @@ enum SummaryShareRenderer {
 
         let renderedItems = items.map { item in
             let assignee = item.assignee.map { " (\(renderInlineHTML($0)))" } ?? ""
-            return "☐ \(renderInlineHTML(item.title))\(assignee)"
+            return "\(renderInlineHTML(item.title))\(assignee)"
         }
         let heading = renderHTMLHeading(normalizedInlineMarkdown(heading), level: 2, destination: destination)
 
         switch destination {
         case .googleDocs:
-            let list = wrapHTMLList(renderedItems.map { "<li>\($0)</li>" }, element: "ul")
+            let list = wrapHTMLList(renderedItems.map { "<li>☐ \($0)</li>" }, element: "ul")
             return "<section>\n\(heading)\n\(list)\n</section>"
         case .slack:
-            let list = renderedItems.joined(separator: "<br>\n")
+            let list = wrapHTMLList(renderedItems.map { "<li>\($0)</li>" }, element: "ul")
             return joinHTMLBlocks([heading, list], destination: destination)
         }
     }

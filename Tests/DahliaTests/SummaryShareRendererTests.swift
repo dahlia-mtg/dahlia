@@ -81,6 +81,11 @@ import Foundation
                             .paragraph("More"),
                             .heading(level: 4, text: "Notes"),
                             .bulletedList(items: ["One", "Two"]),
+                            .numberedList(items: ["First", "Second"]),
+                            .checklist(items: [
+                                SummaryBlock.ChecklistItem(text: "Done", checked: true),
+                                SummaryBlock.ChecklistItem(text: "Pending", checked: false),
+                            ]),
                         ]
                     ),
                 ],
@@ -97,12 +102,17 @@ import Foundation
 
             #expect(content.html.contains("<strong><em>Weekly Sync</em></strong><br><br>\n<strong><u>Summary</u></strong>"))
             #expect(content.html.contains("Decision<br><br>\n<strong>Details</strong><br><br>\nMore<br><br>\nNotes"))
-            #expect(content.html.contains("Notes<br><br>\n• One<br>\n• Two"))
-            #expect(content.html.contains("<strong><u>Action Items</u></strong><br><br>\n☐ Send notes (Aki)"))
+            #expect(content.html.contains("Notes<br><br>\n<ul>\n<li>One</li>\n<li>Two</li>\n</ul>"))
+            #expect(content.html.contains("<ol>\n<li>First</li>\n<li>Second</li>\n</ol>"))
+            #expect(content.html.contains("<ul>\n<li>Done</li>\n<li>Pending</li>\n</ul>"))
+            #expect(content.html.contains("<strong><u>Action Items</u></strong><br><br>\n<ul>\n<li>Send notes (Aki)</li>\n</ul>"))
             #expect(!content.html.contains("<h1>"))
             #expect(!content.html.contains("<h2>"))
             #expect(!content.html.contains("<h3>"))
             #expect(!content.html.contains("<strong>Notes</strong>"))
+            #expect(!content.html.contains("• One"))
+            #expect(!content.html.contains("☑"))
+            #expect(!content.html.contains("☐"))
             #expect(content.markdown.contains("# Weekly Sync"))
             #expect(content.markdown.contains("## Summary"))
             #expect(content.markdown.contains("### Details"))
