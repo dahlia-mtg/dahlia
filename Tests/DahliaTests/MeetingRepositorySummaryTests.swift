@@ -56,12 +56,13 @@ import GRDB
         }
 
         @Test
-        func legacySummaryRecordLoadsDocumentFromMarkdownFallback() throws {
+        func legacySummaryRecordLoadsDocumentFromMarkdownFallback() {
             let record = SummaryRecord(
                 meetingId: UUID.v7(),
                 title: "Legacy",
                 summary: "## Summary\n\n- Decide [[meeting#00:10:00|00:10:00]]",
                 document: nil,
+                vaultRelativePath: nil,
                 googleFileId: nil,
                 createdAt: Date()
             )
@@ -75,6 +76,37 @@ import GRDB
                     items: [SummaryText("Decide", transcriptRef: TranscriptReference(time: "00:10:00"))]
                 ),
             ])
+        }
+
+        @Test
+        func regeneratingSummaryPreservesStoredVaultRelativePath() throws {
+            let context = try makeRepositoryContext()
+            try context.repo.upsertSummary(
+                SummaryRecord(
+                    meetingId: context.meeting.id,
+                    title: "Old",
+                    summary: "Old body",
+                    vaultRelativePath: "Acme/Existing.md",
+                    googleFileId: nil,
+                    createdAt: .now
+                )
+            )
+            let document = SummaryDocument(
+                title: "Updated",
+                sections: [SummarySection(id: .v7(), heading: "Summary", blocks: [.paragraph("New body")])],
+                tags: []
+            )
+
+            try context.repo.applyGeneratedSummary(
+                toMeetingId: context.meeting.id,
+                document: document,
+                renderedBody: "New body",
+                tags: []
+            )
+
+            let fetchedSummary = try context.repo.fetchSummary(forMeetingId: context.meeting.id)
+            let summary = try #require(fetchedSummary)
+            #expect(summary.vaultRelativePath == "Acme/Existing.md")
         }
 
         private func makeRepositoryContext() throws -> RepositoryContext {

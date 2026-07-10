@@ -8,6 +8,7 @@ final class VaultSyncService: @unchecked Sendable {
     private let vaultURL: URL
     private let dbQueue: DatabaseQueue
     private let vaultId: UUID
+    private let summaryPathSynchronizer: VaultSummaryPathSynchronizer
     private var stream: FSEventStreamRef?
     private let fileManager = FileManager.default
     private let callbackQueue = DispatchQueue(label: "com.dahlia.vault-sync", qos: .utility)
@@ -16,6 +17,7 @@ final class VaultSyncService: @unchecked Sendable {
         self.vaultURL = vaultURL
         self.dbQueue = dbQueue
         self.vaultId = vaultId
+        summaryPathSynchronizer = VaultSummaryPathSynchronizer(dbQueue: dbQueue, vaultId: vaultId)
     }
 
     deinit {
@@ -159,6 +161,7 @@ final class VaultSyncService: @unchecked Sendable {
     private func renameProjectsByPrefix(oldPrefix: String, newPrefix: String) {
         try? dbQueue.write { db in
             try ProjectRecord.renameByPrefix(oldPrefix: oldPrefix, newPrefix: newPrefix, vaultId: self.vaultId, in: db)
+            try summaryPathSynchronizer.renamePathsByPrefix(oldPrefix: oldPrefix, newPrefix: newPrefix, in: db)
         }
     }
 
@@ -193,87 +196,31 @@ final class VaultSyncService: @unchecked Sendable {
     // MARK: - FSEvents Handler
 
     func handleEvents(paths: [String], flags: [UInt32]) {
-        let vaultPath = vaultURL.path + "/"
-
-        var pendingRenames: [(path: String, exists: Bool)] = []
-        var newDirs: [String] = []
-        var removedDirs: [String] = []
-
-        for (i, path) in paths.enumerated() {
-            let flag = flags[i]
-            let isDir = (flag & UInt32(kFSEventStreamEventFlagItemIsDir)) != 0
-            guard isDir else { continue }
-
-            guard path.hasPrefix(vaultPath) else { continue }
-            let relativePath = String(path.dropFirst(vaultPath.count))
-            guard !relativePath.isEmpty else { continue }
-
-            let components = relativePath.split(separator: "/")
-            let shouldSkip = components.contains { $0.hasPrefix(".") || $0.hasPrefix("_") }
-            if shouldSkip { continue }
-
-            let isRenamed = (flag & UInt32(kFSEventStreamEventFlagItemRenamed)) != 0
-            let isCreated = (flag & UInt32(kFSEventStreamEventFlagItemCreated)) != 0
-            let isRemoved = (flag & UInt32(kFSEventStreamEventFlagItemRemoved)) != 0
-
-            if isRenamed {
-                let exists = fileManager.fileExists(atPath: path)
-                pendingRenames.append((path: relativePath, exists: exists))
-            } else if isRemoved {
-                if !fileManager.fileExists(atPath: path) {
-                    removedDirs.append(relativePath)
-                }
-            } else if isCreated {
-                if fileManager.fileExists(atPath: path) {
-                    newDirs.append(relativePath)
-                }
-            }
+        let events = VaultFileSystemEventBatch(paths: paths, flags: flags, vaultURL: vaultURL, fileManager: fileManager)
+        for rename in events.directoryRenames {
+            renameProjectsByPrefix(oldPrefix: rename.oldPath, newPrefix: rename.newPath)
+        }
+        for rename in events.summaryRenames {
+            summaryPathSynchronizer.renamePath(from: rename.oldPath, to: rename.newPath)
         }
 
-        // リネームペアの処理
-        var i = 0
-        while i < pendingRenames.count - 1 {
-            let first = pendingRenames[i]
-            let second = pendingRenames[i + 1]
-
-            if !first.exists, second.exists {
-                renameProjectsByPrefix(oldPrefix: first.path, newPrefix: second.path)
-                i += 2
-            } else if first.exists, !second.exists {
-                renameProjectsByPrefix(oldPrefix: second.path, newPrefix: first.path)
-                i += 2
-            } else {
-                if first.exists {
-                    newDirs.append(first.path)
-                } else {
-                    removedDirs.append(first.path)
-                }
-                i += 1
-            }
-        }
-        if i < pendingRenames.count {
-            if pendingRenames[i].exists {
-                newDirs.append(pendingRenames[i].path)
-            } else {
-                removedDirs.append(pendingRenames[i].path)
-            }
-        }
-
-        if !removedDirs.isEmpty {
+        if !events.removedDirectories.isEmpty {
             try? dbQueue.write { db in
-                try self.handleDirectoryRemovals(removedDirs, in: db)
+                try self.handleDirectoryRemovals(events.removedDirectories, in: db)
             }
         }
 
-        if !newDirs.isEmpty {
+        if !events.newDirectories.isEmpty {
             var allNames: Set<String> = []
-            for dir in newDirs {
-                for path in ProjectRecord.allIntermediatePaths(for: dir) {
+            for directory in events.newDirectories {
+                for path in ProjectRecord.allIntermediatePaths(for: directory) {
                     allNames.insert(path)
                 }
             }
             upsertProjects(names: Array(allNames))
         }
+
+        summaryPathSynchronizer.clearRemovedPaths(events.removedSummaryPaths)
     }
 }
 

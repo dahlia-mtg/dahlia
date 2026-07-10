@@ -77,6 +77,10 @@ final class AppDatabaseManager: Sendable {
             try addBatchDiscardedAtColumnIfNeeded(in: db)
         }
 
+        migrator.registerMigration("v13_summaryVaultRelativePath") { db in
+            try addSummaryVaultRelativePathColumnIfNeeded(in: db)
+        }
+
         return migrator
     }()
 
@@ -364,6 +368,10 @@ final class AppDatabaseManager: Sendable {
 
     private static func addSummaryDocumentColumnIfNeeded(in db: Database) throws {
         try addColumnIfNeeded(in: db, table: "summaries", column: "document", type: .text)
+    }
+
+    private static func addSummaryVaultRelativePathColumnIfNeeded(in db: Database) throws {
+        try addColumnIfNeeded(in: db, table: "summaries", column: "vaultRelativePath", type: .text)
     }
 
     private static func addBatchTranscriptionSchemaIfNeeded(in db: Database) throws {
