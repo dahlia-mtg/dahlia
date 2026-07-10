@@ -43,9 +43,9 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord {
         }
     }
 
-    static func updateVaultRelativePath(
-        _ relativePath: String,
-        meetingId: UUID,
+    static func renameVaultRelativePath(
+        from oldPath: String,
+        to newPath: String,
         vaultId: UUID,
         in db: Database
     ) throws {
@@ -53,10 +53,10 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord {
             sql: """
             UPDATE summaries
             SET vaultRelativePath = ?
-            WHERE meetingId = ?
+            WHERE vaultRelativePath = ?
               AND meetingId IN (SELECT id FROM meetings WHERE vaultId = ?)
             """,
-            arguments: [relativePath, meetingId, vaultId]
+            arguments: [newPath, oldPath, vaultId]
         )
     }
 

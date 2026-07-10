@@ -17,7 +17,7 @@ final class VaultSyncService: @unchecked Sendable {
         self.vaultURL = vaultURL
         self.dbQueue = dbQueue
         self.vaultId = vaultId
-        summaryPathSynchronizer = VaultSummaryPathSynchronizer(vaultURL: vaultURL, dbQueue: dbQueue, vaultId: vaultId)
+        summaryPathSynchronizer = VaultSummaryPathSynchronizer(dbQueue: dbQueue, vaultId: vaultId)
     }
 
     deinit {
@@ -29,13 +29,9 @@ final class VaultSyncService: @unchecked Sendable {
     /// vault 内の全ディレクトリをスキャンし、projects テーブルと同期する。
     func performInitialSync() {
         let diskNames = Set(scanAllDirectoryNames())
-        let summaryFiles = summaryPathSynchronizer.filesForInitialReconciliation()
         try? dbQueue.write { db in
             try ProjectRecord.upsertAll(names: Array(diskNames), vaultId: self.vaultId, in: db)
             try self.reconcileMissingProjects(diskNames: diskNames, in: db)
-            if !summaryFiles.isEmpty {
-                try self.summaryPathSynchronizer.reconcile(summaryFiles, in: db)
-            }
         }
     }
 
@@ -204,6 +200,9 @@ final class VaultSyncService: @unchecked Sendable {
         for rename in events.directoryRenames {
             renameProjectsByPrefix(oldPrefix: rename.oldPath, newPrefix: rename.newPath)
         }
+        for rename in events.summaryRenames {
+            summaryPathSynchronizer.renamePath(from: rename.oldPath, to: rename.newPath)
+        }
 
         if !events.removedDirectories.isEmpty {
             try? dbQueue.write { db in
@@ -221,7 +220,6 @@ final class VaultSyncService: @unchecked Sendable {
             upsertProjects(names: Array(allNames))
         }
 
-        summaryPathSynchronizer.syncFiles(at: events.changedSummaryPaths)
         summaryPathSynchronizer.clearRemovedPaths(events.removedSummaryPaths)
     }
 }

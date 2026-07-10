@@ -133,18 +133,14 @@ enum SummaryService {
         return "<time>\(time)</time> <image_id>\(screenshot.id.uuidString)</image_id> <image_filename>\(imageFilename)</image_filename>"
     }
 
-    /// DB の Vault 相対パスを優先し、旧データや外部移動時だけ frontmatter を走査する。
+    /// DB に保存した Vault 相対パスから要約ファイルを解決する。
     static func findSummaryFile(
-        storedRelativePath: String? = nil,
-        projectURL: URL?,
-        vaultURL: URL,
-        meetingId: UUID
+        storedRelativePath: String?,
+        vaultURL: URL
     ) -> URL? {
         VaultSummaryFileLocator.findSummaryFile(
             storedRelativePath: storedRelativePath,
-            projectURL: projectURL,
-            vaultURL: vaultURL,
-            meetingId: meetingId
+            vaultURL: vaultURL
         )
     }
 

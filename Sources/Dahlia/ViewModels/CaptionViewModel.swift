@@ -490,13 +490,11 @@ final class CaptionViewModel: ObservableObject {
         guard let dbQueue = currentDbQueue,
               let vaultURL = currentVaultURL,
               currentMeetingId == meetingId else { return }
-        let projectURL = currentProjectURL
         do {
             let loaded = try await Task.detached(priority: .userInitiated) {
                 try Self.fetchLoadedMeetingData(
                     meetingId: meetingId,
                     dbQueue: dbQueue,
-                    projectURL: projectURL,
                     vaultURL: vaultURL
                 )
             }.value
@@ -641,7 +639,6 @@ final class CaptionViewModel: ObservableObject {
     private nonisolated static func fetchLoadedMeetingData(
         meetingId: UUID,
         dbQueue: DatabaseQueue,
-        projectURL: URL?,
         vaultURL: URL
     ) throws -> LoadedMeetingData {
         let repo = MeetingRepository(dbQueue: dbQueue)
@@ -652,18 +649,10 @@ final class CaptionViewModel: ObservableObject {
         let lastSummaryURL: URL? = if let summary = detail.summary {
             SummaryService.findSummaryFile(
                 storedRelativePath: summary.vaultRelativePath,
-                projectURL: projectURL,
-                vaultURL: vaultURL,
-                meetingId: meetingId
+                vaultURL: vaultURL
             )
         } else {
             nil
-        }
-
-        if let lastSummaryURL,
-           let relativePath = VaultSummaryFileLocator.relativePath(for: lastSummaryURL, vaultURL: vaultURL),
-           relativePath != detail.summary?.vaultRelativePath {
-            try repo.updateSummaryVaultRelativePath(forMeetingId: meetingId, relativePath: relativePath)
         }
 
         return LoadedMeetingData(
@@ -720,7 +709,7 @@ final class CaptionViewModel: ObservableObject {
             vaultURL: vaultURL
         )
 
-        meetingLoadTask = Task { [weak self, meetingId, dbQueue, projectURL, vaultURL] in
+        meetingLoadTask = Task { [weak self, meetingId, dbQueue, vaultURL] in
             guard let self else { return }
 
             let loaded: LoadedMeetingData
@@ -729,7 +718,6 @@ final class CaptionViewModel: ObservableObject {
                     try Self.fetchLoadedMeetingData(
                         meetingId: meetingId,
                         dbQueue: dbQueue,
-                        projectURL: projectURL,
                         vaultURL: vaultURL
                     )
                 }.value
@@ -932,8 +920,7 @@ final class CaptionViewModel: ObservableObject {
         guard let meetingId = currentMeetingId,
               let dbQueue = currentDbQueue,
               let vaultURL = currentVaultURL else { return }
-        let projectURL = currentProjectURL
-        meetingLoadTask = Task { [weak self, meetingId, dbQueue, projectURL, vaultURL] in
+        meetingLoadTask = Task { [weak self, meetingId, dbQueue, vaultURL] in
             guard let self else { return }
             let loaded: LoadedMeetingData
             do {
@@ -941,7 +928,6 @@ final class CaptionViewModel: ObservableObject {
                     try Self.fetchLoadedMeetingData(
                         meetingId: meetingId,
                         dbQueue: dbQueue,
-                        projectURL: projectURL,
                         vaultURL: vaultURL
                     )
                 }.value
@@ -1833,6 +1819,7 @@ final class CaptionViewModel: ObservableObject {
             if currentMeetingId == meetingId {
                 currentSummaryDocument = generatedSummary.document
             }
+            let storedSummaryRelativePath = try repo?.fetchSummary(forMeetingId: meetingId)?.vaultRelativePath
 
             summaryProgress.vaultExport = .running
             if googleDriveFolderId != nil {
@@ -1842,6 +1829,7 @@ final class CaptionViewModel: ObservableObject {
             async let vaultExport: URL = VaultSummaryExportService.exportSummaryBundle(
                 projectURL: projectURL,
                 vaultURL: vaultURL,
+                storedSummaryRelativePath: storedSummaryRelativePath,
                 meetingId: meetingId,
                 createdAt: createdAt,
                 projectName: projectName,

@@ -9,6 +9,7 @@ enum VaultSummaryExportService {
     static func exportSummaryBundle(
         projectURL: URL?,
         vaultURL: URL,
+        storedSummaryRelativePath: String? = nil,
         meetingId: UUID,
         createdAt: Date,
         projectName: String,
@@ -21,6 +22,7 @@ enum VaultSummaryExportService {
         try await exportSummaryBundle(
             projectURL: projectURL,
             vaultURL: vaultURL,
+            storedSummaryRelativePath: storedSummaryRelativePath,
             meetingId: meetingId,
             createdAt: createdAt,
             projectName: projectName,
@@ -38,6 +40,7 @@ enum VaultSummaryExportService {
     static func exportSummaryBundle(
         projectURL: URL?,
         vaultURL: URL,
+        storedSummaryRelativePath: String? = nil,
         meetingId: UUID,
         createdAt: Date,
         projectName: String,
@@ -53,7 +56,7 @@ enum VaultSummaryExportService {
         let summaryFileURL = try resolveSummaryFileURL(
             projectURL: projectURL,
             vaultURL: vaultURL,
-            meetingId: meetingId,
+            storedSummaryRelativePath: storedSummaryRelativePath,
             summaryFileName: summaryFileName
         )
 
@@ -86,13 +89,12 @@ enum VaultSummaryExportService {
     static func resolveSummaryFileURL(
         projectURL: URL?,
         vaultURL: URL,
-        meetingId: UUID,
+        storedSummaryRelativePath: String?,
         summaryFileName: String
     ) throws -> URL {
         if let existing = SummaryService.findSummaryFile(
-            projectURL: projectURL,
-            vaultURL: vaultURL,
-            meetingId: meetingId
+            storedRelativePath: storedSummaryRelativePath,
+            vaultURL: vaultURL
         ) {
             return existing
         }

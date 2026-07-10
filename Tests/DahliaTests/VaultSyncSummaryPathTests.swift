@@ -9,13 +9,13 @@ import GRDB
     @MainActor
     struct VaultSyncSummaryPathTests {
         @Test
-        func markdownRenameUpdatesStoredSummaryPath() throws {
+        func markdownRenameUpdatesStoredSummaryPathWithoutReadingFrontmatter() throws {
             let context = try makeContext(projectName: "Project", summaryRelativePath: "Project/Original.md")
             defer { try? FileManager.default.removeItem(at: context.vaultURL) }
 
             let originalURL = context.vaultURL.appending(path: "Project/Original.md")
             let renamedURL = context.vaultURL.appending(path: "Project/Renamed.md")
-            try writeSummary(meetingId: context.meeting.id, to: originalURL)
+            try Data("Summary".utf8).write(to: originalURL, options: .atomic)
             try FileManager.default.moveItem(at: originalURL, to: renamedURL)
 
             let renameFlag = UInt32(kFSEventStreamEventFlagItemRenamed)
@@ -55,7 +55,7 @@ import GRDB
         }
 
         @Test
-        func initialSyncRepairsPathMovedWhileAppWasNotMonitoring() throws {
+        func initialSyncDoesNotGuessSummaryPathFromFrontmatter() throws {
             let context = try makeContext(projectName: "Project", summaryRelativePath: "Project/Original.md")
             defer { try? FileManager.default.removeItem(at: context.vaultURL) }
 
@@ -69,7 +69,7 @@ import GRDB
 
             let fetchedSummary = try context.repository.fetchSummary(forMeetingId: context.meeting.id)
             let summary = try #require(fetchedSummary)
-            #expect(summary.vaultRelativePath == "Archive/Moved.md")
+            #expect(summary.vaultRelativePath == "Project/Original.md")
         }
 
         private func makeContext(projectName: String, summaryRelativePath: String) throws -> TestContext {

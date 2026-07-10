@@ -5,39 +5,40 @@ struct VaultFileSystemEventBatch {
     let directoryRenames: [(oldPath: String, newPath: String)]
     let newDirectories: [String]
     let removedDirectories: [String]
-    let changedSummaryPaths: [String]
+    let summaryRenames: [(oldPath: String, newPath: String)]
     let removedSummaryPaths: [String]
 
     init(paths: [String], flags: [UInt32], vaultURL: URL, fileManager: FileManager = .default) {
         let vaultPath = vaultURL.path + "/"
-        var pendingRenames: [(path: String, exists: Bool)] = []
+        var pendingDirectoryRenames: [(path: String, exists: Bool)] = []
+        var pendingSummaryRenames: [(path: String, exists: Bool)] = []
         var newDirectories: [String] = []
         var removedDirectories: [String] = []
-        var changedSummaryPaths: [String] = []
         var removedSummaryPaths: [String] = []
 
         for (path, flag) in zip(paths, flags) {
             guard let event = Self.classify(path: path, flag: flag, vaultPath: vaultPath, fileManager: fileManager) else { continue }
             switch event {
             case let .directoryRename(path, exists):
-                pendingRenames.append((path, exists))
+                pendingDirectoryRenames.append((path, exists))
             case let .directoryCreated(path):
                 newDirectories.append(path)
             case let .directoryRemoved(path):
                 removedDirectories.append(path)
-            case let .summaryChanged(path):
-                changedSummaryPaths.append(path)
+            case let .summaryRename(path, exists):
+                pendingSummaryRenames.append((path, exists))
             case let .summaryRemoved(path):
                 removedSummaryPaths.append(path)
             }
         }
 
-        let resolvedRenames = Self.resolveDirectoryRenames(pendingRenames)
-        directoryRenames = resolvedRenames.renames
-        self.newDirectories = newDirectories + resolvedRenames.created
-        self.removedDirectories = removedDirectories + resolvedRenames.removed
-        self.changedSummaryPaths = changedSummaryPaths
-        self.removedSummaryPaths = removedSummaryPaths
+        let resolvedDirectoryRenames = Self.resolveRenames(pendingDirectoryRenames)
+        let resolvedSummaryRenames = Self.resolveRenames(pendingSummaryRenames)
+        directoryRenames = resolvedDirectoryRenames.renames
+        self.newDirectories = newDirectories + resolvedDirectoryRenames.created
+        self.removedDirectories = removedDirectories + resolvedDirectoryRenames.removed
+        summaryRenames = resolvedSummaryRenames.renames
+        self.removedSummaryPaths = removedSummaryPaths + resolvedSummaryRenames.removed
     }
 
     private static func classify(
@@ -93,18 +94,17 @@ struct VaultFileSystemEventBatch {
 
         let exists = fileManager.fileExists(atPath: path)
         let isRenamed = flag & UInt32(kFSEventStreamEventFlagItemRenamed) != 0
-        let isCreated = flag & UInt32(kFSEventStreamEventFlagItemCreated) != 0
         let isRemoved = flag & UInt32(kFSEventStreamEventFlagItemRemoved) != 0
-        if exists, isRenamed || isCreated {
-            return .summaryChanged(relativePath)
+        if isRenamed {
+            return .summaryRename(relativePath, exists: exists)
         }
-        if !exists, isRenamed || isRemoved {
+        if !exists, isRemoved {
             return .summaryRemoved(relativePath)
         }
         return nil
     }
 
-    private static func resolveDirectoryRenames(
+    private static func resolveRenames(
         _ pendingRenames: [(path: String, exists: Bool)]
     ) -> (renames: [(oldPath: String, newPath: String)], created: [String], removed: [String]) {
         var renames: [(oldPath: String, newPath: String)] = []
@@ -148,7 +148,7 @@ struct VaultFileSystemEventBatch {
         case directoryRename(String, exists: Bool)
         case directoryCreated(String)
         case directoryRemoved(String)
-        case summaryChanged(String)
+        case summaryRename(String, exists: Bool)
         case summaryRemoved(String)
     }
 }
