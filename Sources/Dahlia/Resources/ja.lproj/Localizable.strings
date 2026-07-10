@@ -38,7 +38,6 @@
 "Project Name" = "プロジェクト名";
 "Location" = "場所";
 "Latest Meeting" = "最新の meeting";
-"Could not create CONTEXT.md." = "CONTEXT.md を作成できませんでした。";
 "Open in Finder" = "Finder で開く";
 "Open in Obsidian" = "Obsidian で開く";
 "Open in Browser" = "ブラウザで開く";
@@ -74,14 +73,11 @@
 "Summary Destinations" = "要約の書き出し先";
 "Manage where this project's summary files are saved." = "このプロジェクトの要約ファイルを書き出す場所を管理します。";
 "Local Summary Folder" = "ローカルの要約フォルダ";
-"Project Context" = "プロジェクト Context";
-"Edit the CONTEXT.md file that is included when summaries are generated for this project." = "このプロジェクトの要約生成時に含める CONTEXT.md を編集します。";
-"CONTEXT.md" = "CONTEXT.md";
-"Create Context File" = "Context ファイルを作成";
-"Open Context File" = "Context ファイルを開く";
+"Project Description" = "プロジェクトの説明";
+"This description is included when summaries are generated for this project." = "このプロジェクトの要約生成時に説明を含めます。";
+"Describe this project..." = "このプロジェクトについて説明してください...";
+"Could not save the project description." = "プロジェクトの説明を保存できませんでした。";
 "Saved" = "保存済み";
-"Could not load CONTEXT.md: %@" = "CONTEXT.md を読み込めませんでした: %@";
-"Could not save CONTEXT.md: %@" = "CONTEXT.md を保存できませんでした: %@";
 "Select a project to manage summary destinations and instructions." = "要約の書き出し先と instruction を管理するプロジェクトを選択してください。";
 "Open a vault before managing project settings." = "プロジェクト設定を管理するには保管庫を開いてください。";
 "Today" = "今日";

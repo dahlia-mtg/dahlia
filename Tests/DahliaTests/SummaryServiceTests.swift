@@ -490,17 +490,7 @@ struct SummaryServiceTests {
 
     @Test
     func resolvedTagsDoesNotInjectAISummary() {
-        let context = """
-        ---
-        tags:
-          - customer_meeting
-        ---
-        """
-
-        let tags = SummaryService.resolvedTags(
-            resultTags: ["follow_up", "customer_meeting"],
-            contextContent: context
-        )
+        let tags = SummaryService.resolvedTags(["follow_up", "customer_meeting"])
 
         #expect(tags == ["follow_up", "customer_meeting"])
         #expect(!tags.contains("ai_summary"))
@@ -508,30 +498,17 @@ struct SummaryServiceTests {
 
     @Test
     func resolvedTagsNormalizesObsidianIncompatibleTags() {
-        let context = """
-        ---
-        tags:
-          - context tag
-          - "Q&A"
-          - customer-meeting
-          - 2026
-        ---
-        """
-
-        let tags = SummaryService.resolvedTags(
-            resultTags: [
-                "customer meeting",
-                "customer_meeting",
-                "sales/enterprise",
-                "risk:high",
-                "team-check_in",
-                "2026",
-                "#123",
-                "2026-q1",
-                "!!!",
-            ],
-            contextContent: context
-        )
+        let tags = SummaryService.resolvedTags([
+            "customer meeting",
+            "customer_meeting",
+            "sales/enterprise",
+            "risk:high",
+            "team-check_in",
+            "2026",
+            "#123",
+            "2026-q1",
+            "!!!",
+        ])
 
         #expect(tags == [
             "customer_meeting",
@@ -539,10 +516,28 @@ struct SummaryServiceTests {
             "risk_high",
             "team-check_in",
             "2026-q1",
-            "context_tag",
-            "Q_A",
-            "customer-meeting",
         ])
+    }
+
+    @Test
+    func projectPromptContentUsesStructuredEscapedProjectData() throws {
+        let content = try #require(SummaryService.projectPromptContent(
+            name: "Customer & Partner",
+            description: "Discuss <launch> and the \"next step\"."
+        ))
+
+        #expect(content == """
+        <project>
+        <name>Customer &amp; Partner</name>
+        <description>Discuss &lt;launch&gt; and the &quot;next step&quot;.</description>
+        </project>
+        """)
+    }
+
+    @Test
+    func projectPromptContentRequiresProjectName() {
+        #expect(SummaryService.projectPromptContent(name: nil, description: "Description") == nil)
+        #expect(SummaryService.projectPromptContent(name: "  ", description: "Description") == nil)
     }
 
     @Test

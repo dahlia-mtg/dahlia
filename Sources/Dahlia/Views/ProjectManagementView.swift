@@ -12,17 +12,13 @@ struct ProjectManagementView: View {
     @State private var isShowingProjectCreationError = false
     @State private var projectCreationErrorMessage = ""
     @State private var pickingProjectId: UUID?
-    @State private var contextText = ""
-    @State private var contextFileURL: URL?
-    @State private var contextStatusMessage: String?
-    @State private var contextStatusSystemImage = "checkmark.circle"
-    @State private var contextStatusTint = Color.secondary
-    @State private var lastSavedContextText = ""
-    @State private var isLoadingContext = false
-    @State private var contextSaveTask: Task<Void, Never>?
+    @State private var projectDescription = ""
+    @State private var descriptionStatusMessage: String?
+    @State private var descriptionSaveFailed = false
+    @State private var lastSavedProjectDescription = ""
+    @State private var descriptionSaveTask: Task<Void, Never>?
 
     private let sidebarWidth: CGFloat = 300
-    private let folderProjectService = FolderProjectService()
 
     var body: some View {
         NavigationSplitView {
@@ -34,20 +30,22 @@ struct ProjectManagementView: View {
         .frame(minWidth: 900, minHeight: 580)
         .onAppear {
             selectInitialProjectIfNeeded()
-            loadContextForSelectedProject()
+            loadProjectDescription(for: selectedProjectId)
         }
         .onChange(of: sidebarViewModel.allProjectItems) { _, projects in
             reconcileSelection(with: projects)
         }
-        .onChange(of: selectedProjectId) { _, _ in
-            loadContextForSelectedProject()
+        .onChange(of: selectedProjectId) { oldProjectId, newProjectId in
+            descriptionSaveTask?.cancel()
+            persistProjectDescriptionIfNeeded(for: oldProjectId)
+            loadProjectDescription(for: newProjectId)
         }
-        .onChange(of: contextText) { _, _ in
-            scheduleContextSave()
+        .onChange(of: projectDescription) { _, _ in
+            scheduleProjectDescriptionSave()
         }
         .onDisappear {
-            contextSaveTask?.cancel()
-            persistContextIfNeeded()
+            descriptionSaveTask?.cancel()
+            persistProjectDescriptionIfNeeded(for: selectedProjectId)
         }
         .task {
             await driveStore.restoreSessionIfNeeded()
@@ -149,48 +147,28 @@ struct ProjectManagementView: View {
                 }
             }
 
-            contextSection(for: project)
+            descriptionSection
             destinationSection(for: project)
         }
         .formStyle(.grouped)
     }
 
-    private func contextSection(for project: ProjectOverviewItem) -> some View {
+    private var descriptionSection: some View {
         Section {
-            LabeledContent {
-                HStack(spacing: 8) {
-                    if let contextStatusMessage {
-                        Label(contextStatusMessage, systemImage: contextStatusSystemImage)
-                            .foregroundStyle(contextStatusTint)
-                    }
+            TextField(L10n.projectDescriptionPlaceholder, text: $projectDescription, axis: .vertical)
+                .lineLimit(6 ... 12)
 
-                    Button {
-                        ensureContextFile(for: project)
-                    } label: {
-                        Label(L10n.createContextFile, systemImage: "doc.badge.plus")
-                    }
-                    .disabled(projectFolderURL(for: project) == nil)
-
-                    Button {
-                        openContextFile()
-                    } label: {
-                        Label(L10n.openContextFile, systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(contextFileURL == nil)
-                }
-            } label: {
-                Text(L10n.contextFile)
+            if let descriptionStatusMessage {
+                SettingsStatusMessage(
+                    text: descriptionStatusMessage,
+                    systemImage: descriptionSaveFailed ? "exclamationmark.triangle" : "checkmark.circle",
+                    tint: descriptionSaveFailed ? .orange : .secondary
+                )
             }
-
-            TextEditor(text: $contextText)
-                .font(.body.monospaced())
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 220)
-                .disabled(contextFileURL == nil)
         } header: {
-            Text(L10n.projectContext)
+            Text(L10n.projectDescription)
         } footer: {
-            Text(L10n.projectContextDescription)
+            Text(L10n.projectDescriptionHelp)
         }
     }
 
@@ -337,92 +315,38 @@ struct ProjectManagementView: View {
         project.googleDriveFolderId?.isEmpty == false
     }
 
-    private func loadContextForSelectedProject() {
-        contextSaveTask?.cancel()
-        guard let selectedProject else {
-            contextText = ""
-            lastSavedContextText = ""
-            contextFileURL = nil
-            contextStatusMessage = nil
-            return
-        }
-        loadContext(for: selectedProject)
+    private func loadProjectDescription(for projectId: UUID?) {
+        let description = projectId.flatMap(sidebarViewModel.projectDescription(id:)) ?? ""
+        projectDescription = description
+        lastSavedProjectDescription = description
+        descriptionStatusMessage = nil
     }
 
-    private func loadContext(for project: ProjectOverviewItem) {
-        guard let projectURL = projectFolderURL(for: project) else {
-            contextText = ""
-            lastSavedContextText = ""
-            contextFileURL = nil
-            contextStatusMessage = nil
-            return
-        }
-
-        isLoadingContext = true
-        defer { isLoadingContext = false }
-
-        do {
-            try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
-            guard let url = folderProjectService.ensureContextFileExists(at: projectURL) else {
-                contextText = ""
-                lastSavedContextText = ""
-                contextFileURL = nil
-                contextStatusMessage = L10n.contextUnavailable
-                contextStatusSystemImage = "exclamationmark.triangle"
-                contextStatusTint = .orange
+    private func scheduleProjectDescriptionSave() {
+        guard let selectedProjectId,
+              projectDescription != lastSavedProjectDescription else { return }
+        descriptionSaveTask?.cancel()
+        descriptionSaveTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(450))
+            } catch {
                 return
             }
-            contextFileURL = url
-            contextText = try folderProjectService.readContext(at: projectURL)
-            lastSavedContextText = contextText
-            contextStatusMessage = nil
-        } catch {
-            contextText = ""
-            lastSavedContextText = ""
-            contextFileURL = nil
-            contextStatusMessage = L10n.contextLoadFailed(error.localizedDescription)
-            contextStatusSystemImage = "exclamationmark.triangle"
-            contextStatusTint = .orange
+            persistProjectDescriptionIfNeeded(for: selectedProjectId)
         }
     }
 
-    private func ensureContextFile(for project: ProjectOverviewItem) {
-        loadContext(for: project)
-    }
+    private func persistProjectDescriptionIfNeeded(for projectId: UUID?) {
+        guard let projectId,
+              projectDescription != lastSavedProjectDescription else { return }
 
-    private func openContextFile() {
-        guard let contextFileURL else { return }
-        NSWorkspace.shared.open(contextFileURL)
-    }
-
-    private func scheduleContextSave() {
-        guard !isLoadingContext,
-              contextFileURL != nil,
-              contextText != lastSavedContextText else { return }
-        contextSaveTask?.cancel()
-        contextSaveTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(450))
-            persistContextIfNeeded()
-        }
-    }
-
-    private func persistContextIfNeeded() {
-        guard !isLoadingContext,
-              let selectedProject,
-              let projectURL = projectFolderURL(for: selectedProject),
-              contextFileURL != nil,
-              contextText != lastSavedContextText else { return }
-
-        do {
-            contextFileURL = try folderProjectService.writeContext(contextText, at: projectURL)
-            lastSavedContextText = contextText
-            contextStatusMessage = L10n.contextSaved
-            contextStatusSystemImage = "checkmark.circle"
-            contextStatusTint = .secondary
-        } catch {
-            contextStatusMessage = L10n.contextSaveFailed(error.localizedDescription)
-            contextStatusSystemImage = "exclamationmark.triangle"
-            contextStatusTint = .orange
+        if sidebarViewModel.updateProjectDescription(id: projectId, description: projectDescription) {
+            lastSavedProjectDescription = projectDescription
+            descriptionStatusMessage = L10n.saved
+            descriptionSaveFailed = false
+        } else {
+            descriptionStatusMessage = L10n.projectDescriptionSaveFailed
+            descriptionSaveFailed = true
         }
     }
 }

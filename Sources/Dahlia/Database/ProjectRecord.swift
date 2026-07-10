@@ -9,6 +9,7 @@ struct ProjectRecord: Codable, FetchableRecord, PersistableRecord {
     var vaultId: UUID
     var name: String
     var createdAt: Date
+    var description = ""
     var googleDriveFolderId: String? = nil
     var missingOnDisk = false
 
@@ -23,6 +24,7 @@ struct ProjectRecord: Codable, FetchableRecord, PersistableRecord {
                 vaultId: vaultId,
                 name: name,
                 createdAt: now,
+                description: "",
                 googleDriveFolderId: nil
             )
             try record.insert(db, onConflict: .ignore)

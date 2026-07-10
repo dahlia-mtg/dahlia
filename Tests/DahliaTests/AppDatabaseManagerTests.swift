@@ -16,6 +16,70 @@ import GRDB
             }
 
             #expect(columns.contains("googleDriveFolderId"))
+            #expect(columns.contains("description"))
+            #expect(columns.contains("legacyContextMigrated"))
+        }
+
+        @Test
+        func existingProjectsGainEmptyDescriptionWithoutDataLoss() throws {
+            let databaseURL = URL.temporaryDirectory
+                .appending(path: UUID().uuidString)
+                .appendingPathExtension("sqlite")
+            let projectId = UUID.v7()
+            let vaultId = UUID.v7()
+            defer { try? FileManager.default.removeItem(at: databaseURL) }
+
+            let legacyQueue = try DatabaseQueue(path: databaseURL.path)
+            try legacyQueue.write { db in
+                try db.execute(
+                    sql: """
+                    CREATE TABLE projects (
+                        id BLOB PRIMARY KEY,
+                        vaultId BLOB NOT NULL,
+                        name TEXT NOT NULL,
+                        createdAt DATETIME NOT NULL,
+                        googleDriveFolderId TEXT,
+                        missingOnDisk BOOLEAN NOT NULL DEFAULT 0,
+                        UNIQUE(vaultId, name)
+                    )
+                    """
+                )
+                try db.create(table: "grdb_migrations") { table in
+                    table.column("identifier", .text).primaryKey()
+                }
+                for migration in [
+                    "v3_googleDriveFolderSchema",
+                    "v4_instructionsSchema",
+                    "v5_summaryGoogleFileId",
+                    "v6_transcriptSegmentTranslation",
+                    "v7_normalizeLegacyMeetingStatus",
+                    "v8_recordingSessions",
+                    "v9_summaryDocument",
+                    "v10_batchTranscription",
+                    "v11_batchAudioStorageLocation",
+                    "v12_batchTranscriptionDiscard",
+                    "v13_summaryVaultRelativePath",
+                ] {
+                    try db.execute(sql: "INSERT INTO grdb_migrations (identifier) VALUES (?)", arguments: [migration])
+                }
+                try db.execute(
+                    sql: """
+                    INSERT INTO projects (id, vaultId, name, createdAt, googleDriveFolderId, missingOnDisk)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [projectId, vaultId, "Existing Project", Date.now, "folder-123", false]
+                )
+            }
+
+            let migrated = try AppDatabaseManager(path: databaseURL.path)
+            let project = try migrated.dbQueue.read { db in
+                try ProjectRecord.fetchOne(db, key: projectId)
+            }
+
+            let existingProject = try #require(project)
+            #expect(existingProject.name == "Existing Project")
+            #expect(existingProject.description.isEmpty)
+            #expect(existingProject.googleDriveFolderId == "folder-123")
         }
 
         @Test
@@ -219,10 +283,12 @@ import GRDB
 
             let project = try repository.fetchOrCreateProject(name: "Project A", vaultId: vault.id)
             try repository.updateProjectGoogleDriveFolder(id: project.id, folderId: "folder-123")
+            try repository.updateProjectDescription(id: project.id, description: "Customer rollout")
 
             let fetchedProject = try repository.fetchProject(id: project.id)
             let updatedProject = try #require(fetchedProject)
             #expect(updatedProject.googleDriveFolderId == "folder-123")
+            #expect(updatedProject.description == "Customer rollout")
         }
 
         @Test

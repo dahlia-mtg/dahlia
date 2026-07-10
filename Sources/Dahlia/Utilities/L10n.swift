@@ -68,7 +68,6 @@ enum L10n {
     static var projectName: String { String(localized: "Project Name", bundle: bundle) }
     static var location: String { String(localized: "Location", bundle: bundle) }
     static var latestMeeting: String { String(localized: "Latest Meeting", bundle: bundle) }
-    static var contextCreationFailed: String { String(localized: "Could not create CONTEXT.md.", bundle: bundle) }
     static var openInFinder: String { String(localized: "Open in Finder", bundle: bundle) }
     static var openInObsidian: String { String(localized: "Open in Obsidian", bundle: bundle) }
     static var openInBrowser: String { String(localized: "Open in Browser", bundle: bundle) }
@@ -141,18 +140,14 @@ enum L10n {
         bundle: bundle
     ) }
     static var localSummaryFolder: String { String(localized: "Local Summary Folder", bundle: bundle) }
-    static var projectContext: String { String(localized: "Project Context", bundle: bundle) }
-    static var projectContextDescription: String { String(
-        localized: "Edit the CONTEXT.md file that is included when summaries are generated for this project.",
+    static var projectDescription: String { String(localized: "Project Description", bundle: bundle) }
+    static var projectDescriptionHelp: String { String(
+        localized: "This description is included when summaries are generated for this project.",
         bundle: bundle
     ) }
-    static var contextFile: String { String(localized: "CONTEXT.md", bundle: bundle) }
-    static var createContextFile: String { String(localized: "Create Context File", bundle: bundle) }
-    static var openContextFile: String { String(localized: "Open Context File", bundle: bundle) }
-    static var contextSaved: String { String(localized: "Saved", bundle: bundle) }
-    static var contextUnavailable: String { String(localized: "Could not create CONTEXT.md.", bundle: bundle) }
-    static func contextLoadFailed(_ error: String) -> String { String(localized: "Could not load CONTEXT.md: \(error)", bundle: bundle) }
-    static func contextSaveFailed(_ error: String) -> String { String(localized: "Could not save CONTEXT.md: \(error)", bundle: bundle) }
+    static var projectDescriptionPlaceholder: String { String(localized: "Describe this project...", bundle: bundle) }
+    static var projectDescriptionSaveFailed: String { String(localized: "Could not save the project description.", bundle: bundle) }
+    static var saved: String { String(localized: "Saved", bundle: bundle) }
     static var selectProjectToManageDescription: String { String(
         localized: "Select a project to manage summary destinations and instructions.",
         bundle: bundle
