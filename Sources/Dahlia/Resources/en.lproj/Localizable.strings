@@ -32,6 +32,8 @@
 "Me" = "Me";
 "Ask" = "Ask";
 "New Project" = "New Project";
+"Could Not Create Project" = "Could Not Create Project";
+"The project folder could not be created." = "The project folder could not be created.";
 "New meeting" = "New meeting";
 "Project Name" = "Project Name";
 "Location" = "Location";

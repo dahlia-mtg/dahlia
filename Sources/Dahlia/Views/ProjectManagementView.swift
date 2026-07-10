@@ -7,6 +7,10 @@ struct ProjectManagementView: View {
     @ObservedObject private var driveStore = GoogleDriveStore.shared
     @State private var selectedProjectId: UUID?
     @State private var projectSearchText = ""
+    @State private var isShowingProjectCreation = false
+    @State private var newProjectName = ""
+    @State private var isShowingProjectCreationError = false
+    @State private var projectCreationErrorMessage = ""
     @State private var pickingProjectId: UUID?
     @State private var contextText = ""
     @State private var contextFileURL: URL?
@@ -71,6 +75,10 @@ struct ProjectManagementView: View {
         return sidebarViewModel.allProjectItems.first(where: { $0.projectId == selectedProjectId })
     }
 
+    private var trimmedNewProjectName: String {
+        newProjectName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var projectSidebar: some View {
         List(selection: $selectedProjectId) {
             if filteredProjectNodes.isEmpty {
@@ -91,6 +99,22 @@ struct ProjectManagementView: View {
         .listStyle(.sidebar)
         .navigationTitle(L10n.projects)
         .searchable(text: $projectSearchText, prompt: L10n.searchProjects)
+        .toolbar {
+            ToolbarItem {
+                Button(L10n.newProject, systemImage: "plus", action: presentProjectCreation)
+                    .disabled(AppSettings.shared.currentVault == nil)
+                    .help(L10n.newProject)
+            }
+        }
+        .alert(L10n.newProject, isPresented: $isShowingProjectCreation) {
+            TextField(L10n.projectName, text: $newProjectName)
+            Button(L10n.cancel, role: .cancel) {}
+            Button(L10n.create, action: createProject)
+                .disabled(trimmedNewProjectName.isEmpty)
+        }
+        .alert(L10n.projectCreationFailed, isPresented: $isShowingProjectCreationError) {} message: {
+            Text(projectCreationErrorMessage)
+        }
     }
 
     @ViewBuilder
@@ -253,6 +277,33 @@ struct ProjectManagementView: View {
     private func selectInitialProjectIfNeeded() {
         guard selectedProjectId == nil else { return }
         selectedProjectId = sidebarViewModel.allProjectItems.first?.projectId
+    }
+
+    private func presentProjectCreation() {
+        newProjectName = ""
+        isShowingProjectCreation = true
+    }
+
+    private func createProject() {
+        let projectName = trimmedNewProjectName
+        guard !projectName.isEmpty else { return }
+
+        let projectId: UUID
+        if let existingProject = sidebarViewModel.allProjectItems.first(where: {
+            $0.projectName.caseInsensitiveCompare(projectName) == .orderedSame
+        }) {
+            projectId = existingProject.projectId
+        } else {
+            guard let project = sidebarViewModel.fetchOrCreateProject(name: projectName) else {
+                projectCreationErrorMessage = sidebarViewModel.lastError ?? L10n.projectCreationFailedDescription
+                isShowingProjectCreationError = true
+                return
+            }
+            projectId = project.record.id
+        }
+
+        projectSearchText = ""
+        selectedProjectId = projectId
     }
 
     private func reconcileSelection(with projects: [ProjectOverviewItem]) {

@@ -62,6 +62,8 @@ enum L10n {
     static var me: String { String(localized: "Me", bundle: bundle) }
     static var ask: String { String(localized: "Ask", bundle: bundle) }
     static var newProject: String { String(localized: "New Project", bundle: bundle) }
+    static var projectCreationFailed: String { String(localized: "Could Not Create Project", bundle: bundle) }
+    static var projectCreationFailedDescription: String { String(localized: "The project folder could not be created.", bundle: bundle) }
     static var newMeeting: String { String(localized: "New meeting", bundle: bundle) }
     static var projectName: String { String(localized: "Project Name", bundle: bundle) }
     static var location: String { String(localized: "Location", bundle: bundle) }

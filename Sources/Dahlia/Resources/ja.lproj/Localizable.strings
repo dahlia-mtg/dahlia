@@ -32,6 +32,8 @@
 "Me" = "自分";
 "Ask" = "Ask";
 "New Project" = "新規プロジェクト";
+"Could Not Create Project" = "プロジェクトを作成できませんでした";
+"The project folder could not be created." = "プロジェクトフォルダを作成できませんでした。";
 "New meeting" = "New meeting";
 "Project Name" = "プロジェクト名";
 "Location" = "場所";
