@@ -159,7 +159,7 @@ private struct SummarySharePopover: View {
                 .padding(.horizontal, 20)
 
             SummarySharePopoverRow(title: L10n.copySummary, systemImage: "doc.on.doc") {
-                viewModel.copyCurrentSummaryForSlack()
+                viewModel.copyCurrentSummary()
                 dismiss()
             }
             .padding(.horizontal, 12)
