@@ -1797,13 +1797,18 @@ final class CaptionViewModel: ObservableObject {
             let repo = dbQueue.map { MeetingRepository(dbQueue: $0) }
             var screenshots: [MeetingScreenshotRecord] = []
             var googleDriveFolderId: String?
+            var promptProjectName = projectName.nilIfBlank
+            var projectDescription: String?
             if let repo {
                 screenshots = (try? repo.fetchScreenshots(forMeetingId: meetingId)) ?? []
                 if let projectId,
-                   let project = try repo.fetchProject(id: projectId),
-                   let folderId = project.googleDriveFolderId?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !folderId.isEmpty {
-                    googleDriveFolderId = folderId
+                   let project = try repo.fetchProject(id: projectId) {
+                    promptProjectName = project.name
+                    projectDescription = project.description
+                    if let folderId = project.googleDriveFolderId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !folderId.isEmpty {
+                        googleDriveFolderId = folderId
+                    }
                 }
             }
 
@@ -1816,7 +1821,8 @@ final class CaptionViewModel: ObservableObject {
             summaryProgress.summaryGeneration = .running
 
             let generatedSummary = try await SummaryService.generateSummary(
-                projectURL: projectURL,
+                projectName: promptProjectName,
+                projectDescription: projectDescription,
                 meetingId: meetingId,
                 createdAt: createdAt,
                 transcriptText: transcriptText,

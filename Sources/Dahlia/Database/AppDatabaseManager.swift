@@ -81,6 +81,10 @@ final class AppDatabaseManager: Sendable {
             try addSummaryVaultRelativePathColumnIfNeeded(in: db)
         }
 
+        migrator.registerMigration("v14_projectDescription") { db in
+            try addProjectDescriptionColumnIfNeeded(in: db)
+        }
+
         return migrator
     }()
 
@@ -372,6 +376,25 @@ final class AppDatabaseManager: Sendable {
 
     private static func addSummaryVaultRelativePathColumnIfNeeded(in db: Database) throws {
         try addColumnIfNeeded(in: db, table: "summaries", column: "vaultRelativePath", type: .text)
+    }
+
+    private static func addProjectDescriptionColumnIfNeeded(in db: Database) throws {
+        guard try db.tableExists("projects") else { return }
+        let columns = try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('projects')")
+        guard !columns.contains("description") || !columns.contains("legacyContextMigrated") else { return }
+
+        try db.alter(table: "projects") { table in
+            if !columns.contains("description") {
+                table.add(column: "description", .text)
+                    .notNull()
+                    .defaults(to: "")
+            }
+            if !columns.contains("legacyContextMigrated") {
+                table.add(column: "legacyContextMigrated", .boolean)
+                    .notNull()
+                    .defaults(to: false)
+            }
+        }
     }
 
     private static func addBatchTranscriptionSchemaIfNeeded(in db: Database) throws {

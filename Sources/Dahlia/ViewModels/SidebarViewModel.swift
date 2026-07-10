@@ -233,6 +233,7 @@ final class SidebarViewModel {
                 SELECT
                     projects.id AS projectId,
                     projects.name AS projectName,
+                    projects.description AS projectDescription,
                     projects.createdAt AS createdAt,
                     projects.googleDriveFolderId AS googleDriveFolderId,
                     projects.missingOnDisk AS missingOnDisk,
@@ -404,6 +405,27 @@ final class SidebarViewModel {
             try meetingRepository?.updateProjectGoogleDriveFolder(id: id, folderId: folderId)
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func updateProjectDescription(id: UUID, description: String) -> Bool {
+        guard let meetingRepository else { return false }
+        do {
+            try meetingRepository.updateProjectDescription(id: id, description: description)
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
+    func projectDescription(id: UUID) -> String? {
+        do {
+            return try meetingRepository?.fetchProject(id: id)?.description
+        } catch {
+            lastError = error.localizedDescription
+            return nil
         }
     }
 

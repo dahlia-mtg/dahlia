@@ -33,6 +33,63 @@ final class VaultSyncService: @unchecked Sendable {
             try ProjectRecord.upsertAll(names: Array(diskNames), vaultId: self.vaultId, in: db)
             try self.reconcileMissingProjects(diskNames: diskNames, in: db)
         }
+        migrateLegacyProjectDescriptions()
+    }
+
+    /// CONTEXT.md の管理廃止に伴い、既存内容を一度だけ projects.description へ移行する。
+    private func migrateLegacyProjectDescriptions() {
+        let projects: [(id: UUID, name: String, description: String)]
+        do {
+            projects = try dbQueue.read { db in
+                try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, name, description
+                    FROM projects
+                    WHERE vaultId = ? AND legacyContextMigrated = 0
+                    """,
+                    arguments: [self.vaultId]
+                ).map { row in
+                    (id: row["id"], name: row["name"], description: row["description"])
+                }
+            }
+        } catch {
+            return
+        }
+
+        let migrations = projects.map { project in
+            let description = project.description.isEmpty
+                ? legacyProjectDescription(projectName: project.name)
+                : project.description
+            return (id: project.id, description: description)
+        }
+
+        try? dbQueue.write { db in
+            for migration in migrations {
+                try db.execute(
+                    sql: """
+                    UPDATE projects
+                    SET description = ?, legacyContextMigrated = 1
+                    WHERE id = ? AND legacyContextMigrated = 0
+                    """,
+                    arguments: [migration.description, migration.id]
+                )
+            }
+        }
+    }
+
+    private func legacyProjectDescription(projectName: String) -> String {
+        let contextURL = vaultURL
+            .appending(path: projectName, directoryHint: .isDirectory)
+            .appending(path: "CONTEXT.md")
+        guard let content = try? String(contentsOf: contextURL, encoding: .utf8) else { return "" }
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let openingTag = trimmedContent.range(of: "<context>"),
+              let closingTag = trimmedContent.range(of: "</context>", range: openingTag.upperBound ..< trimmedContent.endIndex) else {
+            return trimmedContent
+        }
+        return trimmedContent[openingTag.upperBound ..< closingTag.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// DB 内のプロジェクトとディスク上のフォルダを突合し、不整合を解消する。

@@ -5,6 +5,7 @@ import GRDB
 struct ProjectOverviewItem: Decodable, Equatable, FetchableRecord, Identifiable {
     var projectId: UUID
     var projectName: String
+    var projectDescription = ""
     var createdAt: Date
     var googleDriveFolderId: String?
     var missingOnDisk: Bool

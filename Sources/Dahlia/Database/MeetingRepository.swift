@@ -106,7 +106,7 @@ final class MeetingRepository {
                 .fetchOne(db) {
                 return existing
             }
-            let record = ProjectRecord(id: .v7(), vaultId: vaultId, name: name, createdAt: Date(), googleDriveFolderId: nil)
+            let record = ProjectRecord(id: .v7(), vaultId: vaultId, name: name, createdAt: .now, googleDriveFolderId: nil)
             try record.insert(db)
             return record
         }
@@ -156,6 +156,16 @@ final class MeetingRepository {
             } else {
                 nil
             }
+            try record.update(db)
+        }
+    }
+
+    func updateProjectDescription(id: UUID, description: String) throws {
+        try dbQueue.write { db in
+            guard var record = try ProjectRecord.fetchOne(db, key: id) else {
+                throw ProjectRecord.recordNotFound(db, key: id)
+            }
+            record.description = description
             try record.update(db)
         }
     }

@@ -38,7 +38,6 @@
 "Project Name" = "Project Name";
 "Location" = "Location";
 "Latest Meeting" = "Latest Meeting";
-"Could not create CONTEXT.md." = "Could not create CONTEXT.md.";
 "Open in Finder" = "Open in Finder";
 "Open in Obsidian" = "Open in Obsidian";
 "Open in Browser" = "Open in Browser";
@@ -74,14 +73,11 @@
 "Summary Destinations" = "Summary Destinations";
 "Manage where this project's summary files are saved." = "Manage where this project's summary files are saved.";
 "Local Summary Folder" = "Local Summary Folder";
-"Project Context" = "Project Context";
-"Edit the CONTEXT.md file that is included when summaries are generated for this project." = "Edit the CONTEXT.md file that is included when summaries are generated for this project.";
-"CONTEXT.md" = "CONTEXT.md";
-"Create Context File" = "Create Context File";
-"Open Context File" = "Open Context File";
+"Project Description" = "Project Description";
+"This description is included when summaries are generated for this project." = "This description is included when summaries are generated for this project.";
+"Describe this project..." = "Describe this project...";
+"Could not save the project description." = "Could not save the project description.";
 "Saved" = "Saved";
-"Could not load CONTEXT.md: %@" = "Could not load CONTEXT.md: %@";
-"Could not save CONTEXT.md: %@" = "Could not save CONTEXT.md: %@";
 "Select a project to manage summary destinations and instructions." = "Select a project to manage summary destinations and instructions.";
 "Open a vault before managing project settings." = "Open a vault before managing project settings.";
 "Today" = "Today";

@@ -12,7 +12,8 @@ enum SummaryService {
     /// 要約を生成し、Markdown と関連メタデータを返す。
     @MainActor
     static func generateSummary(
-        projectURL: URL?,
+        projectName: String?,
+        projectDescription: String?,
         meetingId: UUID,
         createdAt: Date,
         transcriptText: String,
@@ -27,9 +28,6 @@ enum SummaryService {
         let token = settings.llmAPIToken
         let prompt = resolvedSummaryPrompt(settings: settings, repository: repository)
         let languageName = settings.llmSummaryLanguage.displayName
-
-        // メッセージ組み立て: テンプレート(system) → CONTEXT.md(user) → 文字起こし(user) + スクリーンショット
-        let contextContent = projectURL.flatMap(readContext(in:))
 
         let structuredInstruction = """
 
@@ -68,8 +66,8 @@ enum SummaryService {
         var messages: [LLMService.ChatMessage] = [
             .init(role: "system", content: systemPrompt),
         ]
-        if let contextContent {
-            messages.append(.init(role: "user", content: contextContent))
+        if let projectContent = projectPromptContent(name: projectName, description: projectDescription) {
+            messages.append(.init(role: "user", content: projectContent))
         }
 
         var transcriptContent = "<meeting_id>\(meetingId.uuidString)</meeting_id>\n<transcript>\n\(transcriptText)\n</transcript>"
@@ -107,7 +105,7 @@ enum SummaryService {
 
         let context = SummaryRenderContext(meetingId: meetingId, createdAt: createdAt, screenshots: screenshots)
         var document = decodeSummaryDocument(from: responseText, context: context)
-        document.tags = resolvedTags(resultTags: document.tags, contextContent: contextContent)
+        document.tags = resolvedTags(document.tags)
         let rendered = ObsidianMarkdownSummaryRenderer.render(document: document, context: context)
 
         return GeneratedSummary(
@@ -144,13 +142,23 @@ enum SummaryService {
         )
     }
 
-    static func resolvedTags(resultTags: [String], contextContent: String?) -> [String] {
+    static func resolvedTags(_ resultTags: [String]) -> [String] {
         var tags: [String] = []
         appendUniqueTags(resultTags, to: &tags)
-        if let contextContent {
-            appendUniqueTags(parseFrontmatterTags(from: contextContent), to: &tags)
-        }
         return tags
+    }
+
+    static func projectPromptContent(name: String?, description: String?) -> String? {
+        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
+            return nil
+        }
+        let description = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return """
+        <project>
+        <name>\(xmlEscaped(name))</name>
+        <description>\(xmlEscaped(description))</description>
+        </project>
+        """
     }
 
     private static let tagAllowedCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
@@ -368,51 +376,6 @@ enum SummaryService {
         return AppSettings.defaultSummaryPrompt
     }
 
-    /// プロジェクトフォルダ直下の CONTEXT.md を読み込む。存在しないか空なら nil。
-    private static func readContext(in projectURL: URL) -> String? {
-        let url = projectURL.appendingPathComponent("CONTEXT.md")
-        guard let content = try? String(contentsOf: url, encoding: .utf8),
-              !content.isEmpty else {
-            return nil
-        }
-        return content
-    }
-
-    /// YAML frontmatter から tags リストを抽出する。
-    private static func parseFrontmatterTags(from text: String) -> [String] {
-        let lines = text.components(separatedBy: .newlines)
-
-        guard let firstLine = lines.first,
-              firstLine.trimmingCharacters(in: .whitespaces) == "---" else {
-            return []
-        }
-
-        guard let closingIndex = lines.dropFirst().firstIndex(where: {
-            $0.trimmingCharacters(in: .whitespaces) == "---"
-        }) else {
-            return []
-        }
-
-        let frontmatterLines = lines[1 ..< closingIndex]
-
-        guard let tagsLineIndex = frontmatterLines.firstIndex(where: {
-            $0.trimmingCharacters(in: .whitespaces) == "tags:"
-        }) else {
-            return []
-        }
-
-        var tags: [String] = []
-        for line in frontmatterLines[frontmatterLines.index(after: tagsLineIndex)...] {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("- ") else { break }
-            let tag = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-            if !tag.isEmpty {
-                tags.append(tag)
-            }
-        }
-        return tags
-    }
-
     private static func appendUniqueTags(_ candidates: [String], to tags: inout [String]) {
         for candidate in candidates {
             guard let tag = normalizedTag(candidate), !tags.contains(tag) else { continue }
@@ -437,6 +400,15 @@ enum SummaryService {
         let tag = normalized.trimmingCharacters(in: tagTrimCharacters)
         guard tag.contains(where: { !$0.isNumber }) else { return nil }
         return tag
+    }
+
+    private static func xmlEscaped(_ value: String) -> String {
+        value
+            .replacing("&", with: "&amp;")
+            .replacing("<", with: "&lt;")
+            .replacing(">", with: "&gt;")
+            .replacing("\"", with: "&quot;")
+            .replacing("'", with: "&apos;")
     }
 }
 
