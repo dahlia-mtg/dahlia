@@ -137,6 +137,18 @@ import GRDB
         }
 
         @Test
+        func structuredActionItemsCountAsDisplayableSummaryContent() {
+            let viewModel = CaptionViewModel()
+            viewModel.currentSummaryDocument = SummaryDocument(
+                title: "",
+                sections: [],
+                actionItems: [SummaryActionItem(title: "Send notes", assignee: "Aki")]
+            )
+
+            #expect(viewModel.hasCurrentMeetingSummary)
+        }
+
+        @Test
         func canGenerateSummaryIsDisabledWhileListening() {
             let viewModel = summaryReadyViewModel()
 

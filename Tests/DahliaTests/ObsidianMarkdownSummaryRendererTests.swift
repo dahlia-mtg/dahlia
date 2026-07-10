@@ -34,7 +34,10 @@ import Foundation
                         ]
                     ),
                 ],
-                tags: ["team"]
+                tags: ["team"],
+                actionItems: [
+                    SummaryActionItem(title: "Send **notes**", assignee: "Aki"),
+                ]
             )
             let context = SummaryRenderContext(meetingId: meetingId, createdAt: createdAt, screenshots: [screenshot])
 
@@ -48,6 +51,7 @@ import Foundation
             #expect(rendered.body.contains("![[\(screenshotId.uuidString).jpeg]]"))
             #expect(rendered.body.contains("![[\(screenshotId.uuidString).jpeg]]\n\nScreen"))
             #expect(rendered.body.contains("[[\(meetingId.uuidString)#00:11:00|00:11:00]]"))
+            #expect(rendered.body.contains("## Action Items\n- [ ] Send **notes** (Aki)"))
             #expect(!rendered.body.contains("SQL(elements:"))
         }
 

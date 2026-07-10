@@ -64,7 +64,22 @@ enum ObsidianMarkdownSummaryRenderer {
             }
         }
 
+        if let actionItems = renderActionItems(document.actionItems) {
+            chunks.append(actionItems)
+        }
+
         return chunks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func renderActionItems(_ actionItems: [SummaryActionItem]) -> String? {
+        let lines = actionItems.compactMap { item -> String? in
+            guard let title = item.title.nilIfBlank else { return nil }
+            let assignee = item.assignee.nilIfBlank.map { " (\($0))" } ?? ""
+            return "- [ ] \(title)\(assignee)"
+        }
+        guard !lines.isEmpty else { return nil }
+
+        return (["## \(L10n.actionItems)"] + lines).joined(separator: "\n")
     }
 
     private static func renderBlock(_ block: SummaryBlock, context: SummaryRenderContext) -> String? {

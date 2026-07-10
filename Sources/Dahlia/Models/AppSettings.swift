@@ -403,7 +403,7 @@ final class AppSettings: ObservableObject {
     - Inline text fields may use Markdown for emphasis and links.
     - Keep the summary easy to scan.
       - Prefer headings and bullet points over long paragraphs.
-      - Use checkboxes only for concrete action items.
+      - Keep concrete action items out of summary sections; return them only in the top-level `action_items` array.
       - Do not invent facts.
     - Preserve uncertainty where the transcript is ambiguous.
     - Write in a casual yet professional tone.
@@ -411,7 +411,7 @@ final class AppSettings: ObservableObject {
 
     <citation_policy>
     - Support important claims with transcript references when possible.
-    - Add transcript references to each relevant `content.transcript_ref` or `items[].transcript_ref` for key decisions, action items, risks, dates, and open questions.
+    - Add transcript references to each relevant `content.transcript_ref` or `items[].transcript_ref` for key decisions, risks, dates, and open questions.
     - Do not over-cite to the point that readability suffers.
     </citation_policy>
 
@@ -441,7 +441,7 @@ final class AppSettings: ObservableObject {
 
     <summary_template>
     - Treat each major heading as one section.
-    - List action items if there are any.
+    - Do not add an Action Items section; return action items only in the top-level `action_items` array.
     - Add any other sections you think are necessary.
     </summary_template>
     """
