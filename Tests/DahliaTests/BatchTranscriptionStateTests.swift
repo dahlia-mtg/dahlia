@@ -52,5 +52,32 @@ import Foundation
 
             #expect(BatchTranscriptionState.derive(from: session) == nil)
         }
+
+        @Test
+        func automaticRetryStopsAfterThreeRecordedFailures() {
+            let now = Date(timeIntervalSince1970: 1_776_384_000)
+            var session = RecordingSessionRecord(
+                id: .v7(),
+                meetingId: .v7(),
+                startedAt: now,
+                endedAt: now.addingTimeInterval(10),
+                duration: 10,
+                offsetSeconds: 0,
+                createdAt: now,
+                updatedAt: now,
+                transcriptionMode: .batch,
+                batchLastError: "damaged",
+                batchAttemptCount: 2
+            )
+
+            #expect(BatchTranscriptionCoordinator.shouldAutomaticallyRetry(session))
+
+            session.batchAttemptCount = BatchTranscriptionCoordinator.maximumAutomaticAttemptCount
+            #expect(!BatchTranscriptionCoordinator.shouldAutomaticallyRetry(session))
+
+            // 実行中クラッシュでエラーが記録されなかったセッションは、回数にかかわらず復旧対象にする。
+            session.batchLastError = nil
+            #expect(BatchTranscriptionCoordinator.shouldAutomaticallyRetry(session))
+        }
     }
 #endif

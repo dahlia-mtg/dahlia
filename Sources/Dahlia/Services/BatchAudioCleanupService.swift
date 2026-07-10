@@ -10,12 +10,19 @@ enum BatchAudioCleanupService {
 
     static func deletionTargets(
         meetingIds: Set<UUID>,
-        dbQueue: DatabaseQueue
+        dbQueue: DatabaseQueue,
+        includeVaultAudio: Bool = true
     ) throws -> [DeletionTarget] {
         guard !meetingIds.isEmpty else { return [] }
         return try dbQueue.read { db in
             var arguments = StatementArguments(meetingIds)
-            arguments += [RecordingAudioStorageLocation.managed.rawValue]
+            let storageCondition: String
+            if includeVaultAudio {
+                storageCondition = ""
+            } else {
+                storageCondition = "AND recording_audio_files.storageLocation = ?"
+                arguments += [RecordingAudioStorageLocation.managed.rawValue]
+            }
             let rows = try Row.fetchAll(
                 db,
                 sql: """
@@ -27,10 +34,7 @@ enum BatchAudioCleanupService {
                 JOIN meetings ON meetings.id = recording_sessions.meetingId
                 JOIN vaults ON vaults.id = meetings.vaultId
                 WHERE meetings.id IN (\(meetingIds.map { _ in "?" }.joined(separator: ",")))
-                  AND (
-                    recording_audio_files.storageLocation = ?
-                    OR recording_sessions.retainAudioAfterBatch = 0
-                  )
+                \(storageCondition)
                 """,
                 arguments: arguments
             )
@@ -56,7 +60,12 @@ enum BatchAudioCleanupService {
                 arguments: [vaultId]
             )
         }
-        return try deletionTargets(meetingIds: Set(meetingIds), dbQueue: dbQueue)
+        // Vault登録解除ではユーザーが明示的に保持したVault内ファイルを削除しない。
+        return try deletionTargets(
+            meetingIds: Set(meetingIds),
+            dbQueue: dbQueue,
+            includeVaultAudio: false
+        )
     }
 
     static func deletionTargets(

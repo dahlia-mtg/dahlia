@@ -68,6 +68,7 @@ enum BatchAudioStorage {
             try? FileManager.default.removeItem(
                 at: finalURL.deletingPathExtension().appendingPathExtension("partial.caf")
             )
+            removeEmptyParentDirectories(of: finalURL, stoppingAt: baseURL)
         }
     }
 
@@ -112,5 +113,23 @@ enum BatchAudioStorage {
             : standardizedBaseURL.path + "/"
         guard candidateURL.path.hasPrefix(directoryPrefix) else { return nil }
         return candidateURL
+    }
+
+    private static func removeEmptyParentDirectories(of fileURL: URL, stoppingAt baseURL: URL) {
+        let standardizedBaseURL = baseURL.standardizedFileURL.resolvingSymlinksInPath()
+        let directoryPrefix = standardizedBaseURL.path.hasSuffix("/")
+            ? standardizedBaseURL.path
+            : standardizedBaseURL.path + "/"
+        var directoryURL = fileURL.deletingLastPathComponent()
+
+        while directoryURL.path.hasPrefix(directoryPrefix) {
+            do {
+                guard try FileManager.default.contentsOfDirectory(atPath: directoryURL.path).isEmpty else { return }
+                try FileManager.default.removeItem(at: directoryURL)
+                directoryURL = directoryURL.deletingLastPathComponent()
+            } catch {
+                return
+            }
+        }
     }
 }

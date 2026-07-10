@@ -5,6 +5,8 @@ import GRDB
 actor BatchTranscriptionCoordinator {
     typealias StateHandler = @Sendable (BatchTranscriptionUpdate) async -> Void
 
+    static let maximumAutomaticAttemptCount = 3
+
     private struct Job {
         let session: RecordingSessionRecord
         let meeting: MeetingRecord
@@ -49,21 +51,21 @@ actor BatchTranscriptionCoordinator {
                 .filter(Column("batchDiscardedAt") == nil)
                 .order(Column("startedAt").asc)
                 .fetchAll(db)
+                .filter(Self.shouldAutomaticallyRetry)
                 .map(\.id)
         }) ?? []
 
         for sessionId in sessionIds {
-            do {
-                try BatchTranscriptionRecoveryService.recoverAudioMetadataIfNeeded(
-                    sessionId: sessionId,
-                    dbQueue: dbQueue,
-                    managedRootURL: managedRootURL
-                )
-                enqueue(sessionId: sessionId)
-            } catch {
-                await recordFailure(sessionId: sessionId, error: error)
-            }
+            enqueue(sessionId: sessionId)
         }
+    }
+
+    static func shouldAutomaticallyRetry(_ session: RecordingSessionRecord) -> Bool {
+        guard session.transcriptionMode == .batch,
+              session.batchCompletedAt == nil,
+              session.batchDiscardedAt == nil else { return false }
+        guard session.batchLastError?.nilIfBlank != nil else { return true }
+        return session.batchAttemptCount < maximumAutomaticAttemptCount
     }
 
     func enqueue(sessionId: UUID) {
@@ -101,13 +103,13 @@ actor BatchTranscriptionCoordinator {
     }
 
     private func process(sessionId: UUID) async throws {
+        try await markAttemptStarted(sessionId: sessionId)
         // 手動再試行でもpartial CAFを確定し、実フレーム数へメタデータを揃えてから解析する。
         try BatchTranscriptionRecoveryService.recoverAudioMetadataIfNeeded(
             sessionId: sessionId,
             dbQueue: dbQueue,
             managedRootURL: managedRootURL
         )
-        try await markAttemptStarted(sessionId: sessionId)
         let job = try fetchJob(sessionId: sessionId)
         let segments = try await transcribe(job: job)
         let records = segments.map { TranscriptSegmentRecord(from: $0, meetingId: job.meeting.id, defaultSessionId: job.session.id) }
