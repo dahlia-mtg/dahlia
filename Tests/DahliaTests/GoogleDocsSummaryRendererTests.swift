@@ -91,6 +91,37 @@ import Foundation
             #expect(attributed.string.contains("Image unavailable: Missing"))
         }
 
+        @Test
+        func escapesRTFGroupDelimitersInSummaryText() throws {
+            let code = #"{"path": "C:\Temp"}"#
+            let document = SummaryDocument(
+                title: "Summary",
+                sections: [
+                    SummarySection(
+                        id: .v7(),
+                        heading: "",
+                        blocks: [.code(language: "json", code: code)]
+                    ),
+                ]
+            )
+
+            let rendered = GoogleDocsSummaryRenderer.render(
+                document: document,
+                context: SummaryRenderContext(meetingId: .v7(), createdAt: .now),
+                actionItemsHeading: "Action Items",
+                imageUnavailableText: "Image unavailable"
+            )
+            let rtf = try #require(String(data: rendered.data, encoding: .utf8))
+            #expect(rtf.contains(#"\{"path": "C:\\Temp"\}"#))
+
+            let attributed = try NSAttributedString(
+                data: rendered.data,
+                options: [.documentType: NSAttributedString.DocumentType.rtf],
+                documentAttributes: nil
+            )
+            #expect(attributed.string.contains(code))
+        }
+
         private func makePNGData() throws -> Data {
             let bitmap = try #require(NSBitmapImageRep(
                 bitmapDataPlanes: nil,

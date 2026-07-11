@@ -258,13 +258,13 @@ enum GoogleDocsSummaryRenderer {
                 result += "\\line "
             case 13:
                 continue
-            case 32 ... 91, 93 ... 122, 124 ... 126:
-                if let scalar = UnicodeScalar(codeUnit) {
-                    result.unicodeScalars.append(scalar)
-                }
             case 92, 123, 125:
                 if let scalar = UnicodeScalar(codeUnit) {
                     result += "\\"
+                    result.unicodeScalars.append(scalar)
+                }
+            case 32 ... 126:
+                if let scalar = UnicodeScalar(codeUnit) {
                     result.unicodeScalars.append(scalar)
                 }
             default:
