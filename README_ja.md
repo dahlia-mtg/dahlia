@@ -35,8 +35,11 @@ swift build && swift run
 # テスト
 swift test
 
-# リリースビルド + notarization + staple + 配布用 zip 再作成
+# バージョン付き DMG のビルド + 署名 + notarization + staple
 ./scripts/notarize.sh
+
+# 対応する GitHub Release を作成し、公証済み DMG を添付
+./scripts/create-github-release.sh
 
 # 整形 + Lint
 ./scripts/lint.sh
@@ -62,7 +65,16 @@ xcrun notarytool store-credentials "dahlia-notary" \
   --password "APP_SPECIFIC_PASSWORD"
 ```
 
-`./scripts/notarize.sh` は `NOTARY_PROFILE` 環境変数（既定値: `dahlia-notary`）を使い、staple 済みの `Dahlia.zip` を作成します。
+`./scripts/notarize.sh` は `NOTARY_PROFILE` 環境変数（既定値: `dahlia-notary`）を使い、署名・notarization・staple 済みの `Dahlia-<version>.dmg` を作成します。バージョンは `Resources/Info.plist` の `CFBundleShortVersionString` から取得します。
+
+リリースを公開するには GitHub CLI（`gh`）をインストールして認証し、バージョン変更を含むすべてのソース変更をコミットして push してから、次を実行します。
+
+```bash
+./scripts/notarize.sh
+./scripts/create-github-release.sh
+```
+
+`create-github-release.sh` は DMG の署名、公証チケット、ファイル名、ディスクイメージの整合性を検証します。その後、現在のコミットに `v<version>` タグを作成（既存タグがある場合は同じコミットを指すことを確認）し、自動生成したリリースノートを含む GitHub Release を作成して DMG を添付します。作業ツリーに未コミットの変更がある場合は公開しません。
 
 ## アーキテクチャ
 
