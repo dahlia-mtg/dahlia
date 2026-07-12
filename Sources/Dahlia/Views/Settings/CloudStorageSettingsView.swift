@@ -2,6 +2,10 @@ import SwiftUI
 
 struct CloudStorageSettingsView: View {
     @ObservedObject private var driveStore = GoogleDriveStore.shared
+    @ObservedObject private var settings = AppSettings.shared
+    @State private var exportFolderStatusMessage: String?
+    @State private var exportFolderAlertMessage = ""
+    @State private var isShowingExportFolderAlert = false
 
     var body: some View {
         Form {
@@ -20,10 +24,57 @@ struct CloudStorageSettingsView: View {
             } footer: {
                 Text(L10n.googleDocsSettingsDescription)
             }
+
+            Section {
+                LabeledContent {
+                    Text(AppSettings.defaultGoogleDriveExportFolderName)
+                } label: {
+                    Text(L10n.googleDriveExportFolder)
+                    Text(L10n.myDrive)
+                }
+
+                if let exportFolderURL {
+                    Link(destination: exportFolderURL) {
+                        Label(L10n.openInGoogleDrive, systemImage: "arrow.up.right.square")
+                    }
+                }
+
+                if let exportFolderStatusMessage {
+                    SettingsStatusMessage(
+                        text: exportFolderStatusMessage,
+                        systemImage: "exclamationmark.triangle",
+                        tint: .orange
+                    )
+                }
+            } header: {
+                Text(L10n.googleDriveExportDestination)
+            } footer: {
+                Text(L10n.googleDriveExportDestinationDescription)
+            }
         }
         .formStyle(.grouped)
         .task {
             await driveStore.restoreSessionIfNeeded()
+            await driveStore.refreshExportFolderConfiguration()
+            if let message = driveStore.exportFolderErrorMessage {
+                presentExportFolderError(message)
+            }
+        }
+        .onChange(of: driveStore.isAuthorized) { _, isAuthorized in
+            guard !isAuthorized else { return }
+            resetExportFolderStatus()
+        }
+        .onChange(of: driveStore.account?.id) { _, _ in
+            resetExportFolderStatus()
+        }
+        .onChange(of: driveStore.exportFolderErrorMessage) { _, message in
+            guard let message else { return }
+            presentExportFolderError(message)
+        }
+        .alert(L10n.googleDriveExportFolderConfigurationFailed, isPresented: $isShowingExportFolderAlert) {
+            Button(L10n.close, role: .cancel) {}
+        } message: {
+            Text(exportFolderAlertMessage)
         }
     }
 
@@ -67,5 +118,20 @@ struct CloudStorageSettingsView: View {
         }
 
         return L10n.googleDocsConnectDescription
+    }
+
+    private var exportFolderURL: URL? {
+        guard let accountID = driveStore.account?.id else { return nil }
+        return settings.googleDriveExportFolderURL(forAccountID: accountID)
+    }
+
+    private func presentExportFolderError(_ message: String) {
+        exportFolderStatusMessage = message
+        exportFolderAlertMessage = message
+        isShowingExportFolderAlert = true
+    }
+
+    private func resetExportFolderStatus() {
+        exportFolderStatusMessage = nil
     }
 }

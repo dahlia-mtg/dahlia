@@ -461,6 +461,23 @@ enum L10n {
     ) }
     static var googleDocsConnected: String { String(localized: "Google Docs connected", bundle: bundle) }
     static var googleDocsNotConnected: String { googleCalendarNotConnected }
+    static var googleDriveExportDestination: String { String(localized: "Export Destination", bundle: bundle) }
+    static var googleDriveExportFolder: String { String(localized: "Export Folder", bundle: bundle) }
+    static var openInGoogleDrive: String { String(localized: "Open in Google Drive", bundle: bundle) }
+    static var myDrive: String { String(localized: "My Drive", bundle: bundle) }
+    static var googleDriveExportDestinationDescription: String { String(
+        localized: "On first connection, Dahlia creates Meeting Notes directly under My Drive and exports Google Docs into it. The export destination is fixed to this folder.",
+        bundle: bundle
+    ) }
+    static var googleDriveExportFolderNotConfigured: String { String(
+        localized: "The Google Drive export folder has not been configured.",
+        bundle: bundle
+    ) }
+    static var googleDriveExportFolderConfigurationFailed: String { String(
+        localized: "Could not configure the Google Drive export folder.",
+        bundle: bundle
+    ) }
+    static var openCloudStorageSettings: String { String(localized: "Open Cloud Storage Settings", bundle: bundle) }
     static var googleCalendarPrimaryCalendar: String { String(localized: "Primary calendar", bundle: bundle) }
     static var calendarPrimaryCalendar: String { googleCalendarPrimaryCalendar }
     static var googleCalendarNoCalendars: String { String(localized: "No calendars are available for this Google account.", bundle: bundle) }
