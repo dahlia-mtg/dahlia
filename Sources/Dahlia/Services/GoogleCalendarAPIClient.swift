@@ -120,6 +120,8 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
         guard let start = try item.start.resolvedDate(calendar: calendar),
               let end = try item.end.resolvedDate(calendar: calendar)
         else { return nil }
+        let recurrenceId = try item.originalStartTime?.resolvedRecurrenceId(calendar: calendar)
+            ?? ICalendarRecurrenceID.singleEvent
 
         return CalendarEvent(
             id: "\(calendarItem.id)::\(item.id)",
@@ -131,25 +133,25 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
             title: item.summary?.nilIfBlank ?? L10n.googleCalendarUntitledEvent,
             description: item.description?.nilIfBlank ?? "",
             icalUid: item.iCalUID?.nilIfBlank,
+            recurrenceId: recurrenceId,
             startDate: start,
             endDate: max(end, start),
             isAllDay: item.start.date != nil,
-            meetingURL: conferenceURL(for: item)
+            conferenceURI: conferenceURI(for: item),
+            url: absoluteURL(from: item.htmlLink)
         )
     }
 
-    static func conferenceURL(for item: EventItem) -> URL? {
-        if let hangoutLink = item.hangoutLink,
-           let url = URL(string: hangoutLink) {
-            return url
+    static func conferenceURI(for item: EventItem) -> URL? {
+        let entryPointURIs = item.conferenceData?.entryPoints.compactMap { absoluteURL(from: $0.uri) } ?? []
+        let candidates: [URL] = if !entryPointURIs.isEmpty {
+            entryPointURIs
+        } else if let hangoutURI = absoluteURL(from: item.hangoutLink) {
+            [hangoutURI]
+        } else {
+            []
         }
-
-        let entryPoint = item.conferenceData?.entryPoints.first { entry in
-            guard let uri = entry.uri else { return false }
-            return URL(string: uri) != nil
-        }
-        guard let uri = entryPoint?.uri else { return nil }
-        return URL(string: uri)
+        return candidates.first { $0.scheme?.lowercased() == "https" } ?? candidates.first
     }
 
     static func sortAndFilter(
@@ -232,6 +234,15 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
         }
         return url
     }
+
+    private static func absoluteURL(from value: String?) -> URL? {
+        guard let value = value?.nilIfBlank,
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased().nilIfBlank,
+              !(["http", "https"].contains(scheme) && url.host?.nilIfBlank == nil)
+        else { return nil }
+        return url
+    }
 }
 
 extension GoogleCalendarAPIClient {
@@ -306,6 +317,19 @@ extension GoogleCalendarAPIClient {
                 return nil
             }
 
+            func resolvedRecurrenceId(calendar: Calendar) throws -> String? {
+                if let date {
+                    _ = try calendar.googleCalendarDate(from: date)
+                    guard let recurrenceId = ICalendarRecurrenceID.date(date) else {
+                        throw GoogleCalendarAPIError.invalidCalendarDate(date)
+                    }
+                    return recurrenceId
+                }
+
+                guard let resolvedDate = try resolvedDate(calendar: calendar) else { return nil }
+                return ICalendarRecurrenceID.dateTime(resolvedDate)
+            }
+
             private nonisolated(unsafe) static let googleCalendarWithFractionalSeconds: ISO8601DateFormatter = {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -331,9 +355,11 @@ extension GoogleCalendarAPIClient {
         let summary: String?
         let description: String?
         let iCalUID: String?
+        let htmlLink: String?
         let hangoutLink: String?
         let start: EventDateTime
         let end: EventDateTime
+        let originalStartTime: EventDateTime?
         let conferenceData: ConferenceData?
         let eventType: String?
 

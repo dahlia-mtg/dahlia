@@ -152,8 +152,8 @@ struct DahliaApp: App {
 
     private func joinAndStartRecording(_ meeting: DetectedMeeting, in db: AppDatabaseManager) {
         handleDetectedMeeting(meeting, in: db, startTranscription: true)
-        if let meetingURL = meeting.calendarEvent?.meetingURL {
-            NSWorkspace.shared.open(meetingURL)
+        if let conferenceURI = meeting.calendarEvent?.conferenceURI {
+            NSWorkspace.shared.open(conferenceURI)
         }
     }
 
@@ -167,10 +167,7 @@ struct DahliaApp: App {
 
         if let event = meeting.calendarEvent {
             let repository = MeetingRepository(dbQueue: db.dbQueue)
-            if let existingMeetingId = try? repository.fetchMeetingIdForCalendarEvent(
-                platform: event.platform,
-                platformId: event.platformId
-            ) {
+            if let existingMeetingId = try? repository.fetchMeetingIdForCalendarEvent(event) {
                 sidebarViewModel.selectMeeting(existingMeetingId)
                 if startTranscription {
                     startTranscriptionForMeeting(existingMeetingId, in: db, vault: vault)

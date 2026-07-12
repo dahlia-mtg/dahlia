@@ -329,6 +329,13 @@ final class EventKitMacCalendarEventStore: MacCalendarEventStoreProviding {
 
         let occurrenceDate = event.occurrenceDate ?? startDate
         let platformId = "\(event.eventIdentifier ?? event.calendarItemIdentifier)::\(Int(occurrenceDate.timeIntervalSince1970))"
+        let recurrenceId: String = if event.occurrenceDate == nil {
+            ICalendarRecurrenceID.singleEvent
+        } else if event.isAllDay {
+            ICalendarRecurrenceID.date(occurrenceDate, timeZone: event.timeZone ?? .current)
+        } else {
+            ICalendarRecurrenceID.dateTime(occurrenceDate)
+        }
         return CalendarEvent(
             id: "\(calendar.calendarIdentifier)::\(platformId)",
             calendarID: calendar.calendarIdentifier,
@@ -339,10 +346,11 @@ final class EventKitMacCalendarEventStore: MacCalendarEventStoreProviding {
             title: event.title.nilIfBlank ?? L10n.macOSCalendarUntitledEvent,
             description: event.notes?.nilIfBlank ?? "",
             icalUid: event.calendarItemExternalIdentifier.nilIfBlank,
+            recurrenceId: recurrenceId,
             startDate: startDate,
             endDate: max(endDate, startDate),
             isAllDay: event.isAllDay,
-            meetingURL: CalendarMeetingURLExtractor.meetingURL(
+            conferenceURI: CalendarConferenceURIExtractor.conferenceURI(
                 url: event.url,
                 textFields: [event.notes, event.location]
             )

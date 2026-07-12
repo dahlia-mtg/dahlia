@@ -883,27 +883,38 @@ final class CaptionViewModel: ObservableObject {
               let vault = AppSettings.shared.currentVault,
               let vaultURL = currentVaultURL else { return nil }
 
-        let resolvedProjectURL = projectURL ?? draftMeeting.projectURL ?? currentProjectURL
-        let resolvedProjectId = projectId ?? draftMeeting.projectId ?? currentProjectId
-        let resolvedProjectName = projectName ?? draftMeeting.projectName ?? currentProjectName
+        let requestedProjectURL = projectURL ?? draftMeeting.projectURL ?? currentProjectURL
+        let requestedProjectId = projectId ?? draftMeeting.projectId ?? currentProjectId
+        let requestedProjectName = projectName ?? draftMeeting.projectName ?? currentProjectName
         let meetingId = UUID.v7()
-        let now = Date()
-        let record = MeetingRecord(
-            id: meetingId,
-            vaultId: vault.id,
-            projectId: resolvedProjectId,
-            name: draftMeeting.title.trimmingCharacters(in: .whitespacesAndNewlines),
-            status: .transcriptNotFound,
-            duration: nil,
-            createdAt: now,
-            updatedAt: now
-        )
+        let now = Date.now
+        let calendarEventKey = draftMeeting.linkedCalendarEvent?.key
+        let assignedProjectId: UUID?
         do {
-            try dbQueue.write { db in
-                try record.insert(db)
+            assignedProjectId = try dbQueue.write { db in
                 if let event = draftMeeting.linkedCalendarEvent {
-                    try CalendarEventRecord(meetingId: meetingId, now: now, event: event).insert(db)
+                    try CalendarEventRecord.upsert(event: event, now: now, in: db)
                 }
+                let assignedProjectId = try MeetingRecord.resolvedProjectIdForNewMeeting(
+                    requestedProjectId: requestedProjectId,
+                    calendarEvent: draftMeeting.linkedCalendarEvent,
+                    vaultId: vault.id,
+                    in: db
+                )
+                let record = MeetingRecord(
+                    id: meetingId,
+                    vaultId: vault.id,
+                    projectId: assignedProjectId,
+                    name: draftMeeting.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                    status: .transcriptNotFound,
+                    duration: nil,
+                    createdAt: now,
+                    updatedAt: now,
+                    calendarEventIcalUid: calendarEventKey?.icalUid,
+                    calendarEventRecurrenceId: calendarEventKey?.recurrenceId
+                )
+                try record.insert(db)
+                return assignedProjectId
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -911,12 +922,17 @@ final class CaptionViewModel: ObservableObject {
             return nil
         }
 
+        let resolvedProject = Self.projectContext(
+            projectId: assignedProjectId,
+            dbQueue: dbQueue,
+            vaultURL: vaultURL
+        )
         setMeetingContext(
             id: meetingId,
             dbQueue: dbQueue,
-            projectURL: resolvedProjectURL,
-            projectId: resolvedProjectId,
-            projectName: resolvedProjectName,
+            projectURL: resolvedProject?.url ?? requestedProjectURL,
+            projectId: assignedProjectId,
+            projectName: resolvedProject?.name ?? requestedProjectName,
             vaultURL: vaultURL
         )
         if !noteText.isEmpty {
@@ -1078,6 +1094,22 @@ final class CaptionViewModel: ObservableObject {
         draftMeeting = nil
         resetSummaryState()
         setupNoteAutoSave()
+    }
+
+    private static func projectContext(
+        projectId: UUID?,
+        dbQueue: DatabaseQueue,
+        vaultURL: URL
+    ) -> (url: URL, name: String)? {
+        guard let projectId,
+              let project = try? dbQueue.read({ db in
+                  try ProjectRecord.fetchOne(db, key: projectId)
+              }) else { return nil }
+
+        return (
+            vaultURL.appending(path: project.name, directoryHint: .isDirectory),
+            project.name
+        )
     }
 
     func updateCurrentProjectContext(projectURL: URL?, projectId: UUID?, projectName: String?) {
@@ -1364,7 +1396,7 @@ final class CaptionViewModel: ObservableObject {
         }
 
         let initialName = request.draftMeeting?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        persistenceService = try MeetingPersistenceService(
+        let service = try MeetingPersistenceService(
             store: store,
             dbQueue: request.dbQueue,
             vaultId: request.vaultId,
@@ -1376,7 +1408,25 @@ final class CaptionViewModel: ObservableObject {
             persistencePolicy: request.persistencePolicy,
             retainAudioAfterBatch: request.retainAudioAfterBatch
         )
-        currentMeetingId = persistenceService?.meetingId
+        persistenceService = service
+        currentMeetingId = service.meetingId
+
+        let resolvedProject = currentVaultURL.flatMap { vaultURL in
+            Self.projectContext(
+                projectId: service.projectId,
+                dbQueue: request.dbQueue,
+                vaultURL: vaultURL
+            )
+        }
+        let projectWasInherited = service.projectId != request.projectId
+        currentProjectId = service.projectId
+        if let resolvedProject {
+            currentProjectURL = resolvedProject.url
+            currentProjectName = resolvedProject.name
+        } else if projectWasInherited {
+            currentProjectURL = nil
+            currentProjectName = nil
+        }
     }
 
     private func completePersistenceStart(existingMeetingId: UUID?) {

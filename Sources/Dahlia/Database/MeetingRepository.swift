@@ -254,12 +254,14 @@ final class MeetingRepository {
         }
     }
 
-    func fetchMeetingIdForCalendarEvent(platform: String, platformId: String) throws -> UUID? {
-        try dbQueue.read { db in
-            try CalendarEventRecord
-                .select(Column("meetingId"))
-                .filter(Column("platform") == platform)
-                .filter(Column("platformId") == platformId)
+    func fetchMeetingIdForCalendarEvent(_ event: CalendarEvent) throws -> UUID? {
+        guard let key = event.key else { return nil }
+        return try dbQueue.read { db in
+            try MeetingRecord
+                .select(Column("id"))
+                .filter(Column("calendar_event_ical_uid") == key.icalUid)
+                .filter(Column("calendar_event_recurrence_id") == key.recurrenceId)
+                .order(Column("createdAt").desc)
                 .asRequest(of: UUID.self)
                 .fetchOne(db)
         }
@@ -534,9 +536,8 @@ final class MeetingRepository {
 
     func fetchCalendarEvent(forMeetingId meetingId: UUID) throws -> CalendarEventRecord? {
         try dbQueue.read { db in
-            try CalendarEventRecord
-                .filter(Column("meetingId") == meetingId)
-                .fetchOne(db)
+            let meeting = try MeetingRecord.fetchOne(db, key: meetingId)
+            return try Self.fetchCalendarEvent(for: meeting, in: db)
         }
     }
 
@@ -563,9 +564,7 @@ final class MeetingRepository {
     nonisolated func fetchMeetingDetail(id meetingId: UUID) throws -> MeetingDetail {
         try dbQueue.read { db in
             let meeting = try MeetingRecord.fetchOne(db, key: meetingId)
-            let calendarEvent = try CalendarEventRecord
-                .filter(Column("meetingId") == meetingId)
-                .fetchOne(db)
+            let calendarEvent = try Self.fetchCalendarEvent(for: meeting, in: db)
             let segments = try TranscriptSegmentRecord
                 .filter(Column("meetingId") == meetingId)
                 .order(Column("startTime").asc)
@@ -590,6 +589,19 @@ final class MeetingRepository {
                 summary: summary
             )
         }
+    }
+
+    private nonisolated static func fetchCalendarEvent(
+        for meeting: MeetingRecord?,
+        in db: Database
+    ) throws -> CalendarEventRecord? {
+        guard let icalUid = meeting?.calendarEventIcalUid,
+              let recurrenceId = meeting?.calendarEventRecurrenceId
+        else { return nil }
+        return try CalendarEventRecord.fetch(
+            key: CalendarEventKey(icalUid: icalUid, recurrenceId: recurrenceId),
+            in: db
+        )
     }
 
 }

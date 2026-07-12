@@ -74,9 +74,11 @@ struct GoogleCalendarAPIClientTests {
             summary: "Planning",
             description: "Quarterly planning",
             iCalUID: "planning@google.com",
+            htmlLink: "https://calendar.google.com/calendar/event?eid=planning",
             hangoutLink: "https://meet.google.com/test-room",
             start: .init(date: nil, dateTime: "2026-04-17T01:00:00Z"),
             end: .init(date: nil, dateTime: "2026-04-17T02:00:00Z"),
+            originalStartTime: .init(date: nil, dateTime: "2026-04-17T00:30:00Z"),
             conferenceData: nil,
             eventType: nil
         )
@@ -96,9 +98,40 @@ struct GoogleCalendarAPIClientTests {
         #expect(event.platformId == "google-event-id")
         #expect(event.description == "Quarterly planning")
         #expect(event.icalUid == "planning@google.com")
-        #expect(event.meetingURL?.absoluteString == "https://meet.google.com/test-room")
+        #expect(event.recurrenceId == "20260417T003000Z")
+        #expect(event.conferenceURI?.absoluteString == "https://meet.google.com/test-room")
+        #expect(event.url?.absoluteString == "https://calendar.google.com/calendar/event?eid=planning")
         #expect(event.startDate == Date(timeIntervalSince1970: 1_776_387_600))
         #expect(event.endDate == Date(timeIntervalSince1970: 1_776_391_200))
+    }
+
+    @Test
+    func eventPayloadDecodesOriginalStartTimeAndEventURL() throws {
+        let data = Data("""
+        {
+          "items": [
+            {
+              "id": "recurring-instance",
+              "iCalUID": "series@google.com",
+              "htmlLink": "https://calendar.google.com/calendar/event?eid=instance",
+              "start": { "dateTime": "2026-04-17T01:00:00Z" },
+              "end": { "dateTime": "2026-04-17T02:00:00Z" },
+              "originalStartTime": { "dateTime": "2026-04-17T00:30:00Z" }
+            }
+          ]
+        }
+        """.utf8)
+
+        let response = try JSONDecoder().decode(GoogleCalendarAPIClient.EventListResponse.self, from: data)
+        let item = try #require(response.items.first)
+        let transformed = try GoogleCalendarAPIClient.makeEvent(
+            from: item,
+            calendarItem: GoogleCalendarListItem(id: "primary", title: "Primary", colorHex: nil, isPrimary: true)
+        )
+        let event = try #require(transformed)
+
+        #expect(event.recurrenceId == "20260417T003000Z")
+        #expect(event.url?.absoluteString == "https://calendar.google.com/calendar/event?eid=instance")
     }
 }
 
@@ -171,9 +204,11 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
             summary: "Planning",
             description: "Quarterly planning",
             iCalUID: "planning@google.com",
+            htmlLink: "https://calendar.google.com/calendar/event?eid=planning",
             hangoutLink: "https://meet.google.com/test-room",
             start: .init(date: nil, dateTime: "2026-04-17T01:00:00Z"),
             end: .init(date: nil, dateTime: "2026-04-17T02:00:00Z"),
+            originalStartTime: .init(date: nil, dateTime: "2026-04-17T00:30:00Z"),
             conferenceData: nil,
             eventType: nil
         )
@@ -194,7 +229,9 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
         XCTAssertEqual(event.platformId, "google-event-id")
         XCTAssertEqual(event.description, "Quarterly planning")
         XCTAssertEqual(event.icalUid, "planning@google.com")
-        XCTAssertEqual(event.meetingURL?.absoluteString, "https://meet.google.com/test-room")
+        XCTAssertEqual(event.recurrenceId, "20260417T003000Z")
+        XCTAssertEqual(event.conferenceURI?.absoluteString, "https://meet.google.com/test-room")
+        XCTAssertEqual(event.url?.absoluteString, "https://calendar.google.com/calendar/event?eid=planning")
         XCTAssertEqual(event.startDate, Date(timeIntervalSince1970: 1_776_387_600))
         XCTAssertEqual(event.endDate, Date(timeIntervalSince1970: 1_776_391_200))
     }
