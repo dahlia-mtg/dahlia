@@ -329,13 +329,10 @@ final class EventKitMacCalendarEventStore: MacCalendarEventStoreProviding {
 
         let occurrenceDate = event.occurrenceDate ?? startDate
         let platformId = "\(event.eventIdentifier ?? event.calendarItemIdentifier)::\(Int(occurrenceDate.timeIntervalSince1970))"
-        let recurrenceId: String = if event.occurrenceDate == nil {
-            ICalendarRecurrenceID.singleEvent
-        } else if event.isAllDay {
-            ICalendarRecurrenceID.date(occurrenceDate, timeZone: event.timeZone ?? .current)
-        } else {
-            ICalendarRecurrenceID.dateTime(occurrenceDate)
-        }
+        let recurrenceId = recurrenceId(
+            occurrenceDate: event.occurrenceDate,
+            isAllDay: event.isAllDay
+        )
         return CalendarEvent(
             id: "\(calendar.calendarIdentifier)::\(platformId)",
             calendarID: calendar.calendarIdentifier,
@@ -373,6 +370,17 @@ final class EventKitMacCalendarEventStore: MacCalendarEventStoreProviding {
                 }
                 return lhs.id < rhs.id
             }
+    }
+
+    static func recurrenceId(
+        occurrenceDate: Date?,
+        isAllDay: Bool,
+        defaultTimeZone: TimeZone = .current
+    ) -> String {
+        guard let occurrenceDate else { return ICalendarRecurrenceID.singleEvent }
+        return isAllDay
+            ? ICalendarRecurrenceID.date(occurrenceDate, timeZone: defaultTimeZone)
+            : ICalendarRecurrenceID.dateTime(occurrenceDate)
     }
 
     private static func authorizationStatus(from status: EKAuthorizationStatus) -> MacCalendarAuthorizationStatus {

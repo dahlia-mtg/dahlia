@@ -69,11 +69,13 @@ extension MeetingRecord {
         requestedProjectId: UUID?,
         calendarEvent: CalendarEvent?,
         vaultId: UUID,
+        allowsCalendarSeriesProjectInheritance: Bool = true,
         in db: Database
     ) throws -> UUID? {
         if let requestedProjectId {
             return requestedProjectId
         }
+        guard allowsCalendarSeriesProjectInheritance else { return nil }
         guard let calendarEvent,
               let icalUid = calendarEvent.key?.icalUid else { return nil }
 
@@ -88,6 +90,7 @@ extension MeetingRecord {
             JOIN projects ON projects.id = meetings.projectId
             WHERE meetings.vaultId = ?
               AND projects.vaultId = ?
+              AND projects.missingOnDisk = 0
               AND meetings.calendar_event_ical_uid = ?
               AND calendar_events.start <= ?
             ORDER BY calendar_events.start DESC, meetings.createdAt DESC, meetings.id DESC

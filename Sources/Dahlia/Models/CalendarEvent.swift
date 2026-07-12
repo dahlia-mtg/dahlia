@@ -92,12 +92,35 @@ extension [CalendarEvent] {
             let existing = result[existingIndex]
             if existing.platform == event.platform {
                 result.append(event)
-            } else if existing.platform != CalendarEventPlatform.googleCalendar,
-                      event.platform == CalendarEventPlatform.googleCalendar {
-                result[existingIndex] = event
+            } else {
+                let preferred = event.platform == CalendarEventPlatform.googleCalendar ? event : existing
+                let fallback = event.platform == CalendarEventPlatform.googleCalendar ? existing : event
+                result[existingIndex] = preferred.mergingMissingMetadata(from: fallback)
             }
         }
         return result
+    }
+}
+
+private extension CalendarEvent {
+    func mergingMissingMetadata(from fallback: CalendarEvent) -> CalendarEvent {
+        CalendarEvent(
+            id: id,
+            calendarID: calendarID,
+            calendarName: calendarName,
+            calendarColorHex: calendarColorHex,
+            platform: platform,
+            platformId: platformId,
+            title: title,
+            description: description.nilIfBlank ?? fallback.description,
+            icalUid: icalUid,
+            recurrenceId: recurrenceId,
+            startDate: startDate,
+            endDate: endDate,
+            isAllDay: isAllDay,
+            conferenceURI: conferenceURI ?? fallback.conferenceURI,
+            url: url ?? fallback.url
+        )
     }
 }
 

@@ -22,7 +22,7 @@ enum ICalendarRecurrenceID {
               components.allSatisfy({ $0.allSatisfy(\.isNumber) })
         else { return nil }
 
-        return "VALUE=DATE:\(components.joined())"
+        return components.joined()
     }
 
     static func date(_ date: Date, timeZone: TimeZone) -> String {
@@ -31,6 +31,6 @@ enum ICalendarRecurrenceID {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = timeZone
         formatter.dateFormat = "yyyyMMdd"
-        return "VALUE=DATE:\(formatter.string(from: date))"
+        return formatter.string(from: date)
     }
 }

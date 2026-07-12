@@ -254,20 +254,6 @@ final class MeetingRepository {
         }
     }
 
-    func fetchMeetingIdForCalendarEvent(_ event: CalendarEvent, vaultId: UUID) throws -> UUID? {
-        guard let key = event.key else { return nil }
-        return try dbQueue.read { db in
-            try MeetingRecord
-                .select(Column("id"))
-                .filter(Column("vaultId") == vaultId)
-                .filter(Column("calendar_event_ical_uid") == key.icalUid)
-                .filter(Column("calendar_event_recurrence_id") == key.recurrenceId)
-                .order(Column("createdAt").desc)
-                .asRequest(of: UUID.self)
-                .fetchOne(db)
-        }
-    }
-
     func renameMeeting(id: UUID, newName: String) throws {
         try dbQueue.write { db in
             if var record = try MeetingRecord.fetchOne(db, key: id) {
@@ -604,5 +590,29 @@ final class MeetingRepository {
             in: db
         )
     }
+}
 
+extension MeetingRepository {
+    /// 現在の Vault にある同一予定の最新 Meeting を返し、観測した予定情報も更新する。
+    func resolveMeetingIdForCalendarEvent(
+        _ event: CalendarEvent,
+        vaultId: UUID,
+        observedAt: Date = .now
+    ) throws -> UUID? {
+        guard let key = event.key else { return nil }
+        return try dbQueue.write { db in
+            let meetingId = try MeetingRecord
+                .select(Column("id"))
+                .filter(Column("vaultId") == vaultId)
+                .filter(Column("calendar_event_ical_uid") == key.icalUid)
+                .filter(Column("calendar_event_recurrence_id") == key.recurrenceId)
+                .order(Column("createdAt").desc, Column("id").desc)
+                .asRequest(of: UUID.self)
+                .fetchOne(db)
+            if meetingId != nil {
+                try CalendarEventRecord.upsert(event: event, now: observedAt, in: db)
+            }
+            return meetingId
+        }
+    }
 }

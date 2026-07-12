@@ -61,6 +61,50 @@ import GRDB
         }
 
         @Test
+        func newMeetingSkipsMostRecentProjectWhenItsFolderIsMissing() throws {
+            let (database, vault) = try makeDatabase()
+            let availableProject = project(named: "Available project", vaultId: vault.id)
+            var missingProject = project(named: "Missing project", vaultId: vault.id)
+            missingProject.missingOnDisk = true
+            let olderStart = Date(timeIntervalSince1970: 1_776_200_000)
+            let recentStart = Date(timeIntervalSince1970: 1_776_300_000)
+            let currentStart = Date(timeIntervalSince1970: 1_776_400_000)
+
+            try database.dbQueue.write { db in
+                try availableProject.insert(db)
+                try missingProject.insert(db)
+                try insertSeriesMeeting(
+                    event: seriesEvent(startDate: olderStart, recurrenceId: "20260414T090000Z"),
+                    projectId: availableProject.id,
+                    vaultId: vault.id,
+                    createdAt: olderStart,
+                    in: db
+                )
+                try insertSeriesMeeting(
+                    event: seriesEvent(startDate: recentStart, recurrenceId: "20260415T090000Z"),
+                    projectId: missingProject.id,
+                    vaultId: vault.id,
+                    createdAt: recentStart,
+                    in: db
+                )
+            }
+
+            let service = try MeetingPersistenceService(
+                store: TranscriptStore(),
+                dbQueue: database.dbQueue,
+                vaultId: vault.id,
+                projectId: nil,
+                initialName: "Current occurrence",
+                calendarEvent: seriesEvent(startDate: currentStart, recurrenceId: "20260416T090000Z")
+            )
+            service.stop()
+
+            let meeting = try fetchMeeting(id: service.meetingId, from: database.dbQueue)
+            #expect(meeting.projectId == availableProject.id)
+            #expect(service.projectId == availableProject.id)
+        }
+
+        @Test
         func explicitlySelectedProjectOverridesSeriesProject() throws {
             let (database, vault) = try makeDatabase()
             let seriesProject = project(named: "Series project", vaultId: vault.id)
@@ -93,6 +137,40 @@ import GRDB
             let meeting = try fetchMeeting(id: service.meetingId, from: database.dbQueue)
             #expect(meeting.projectId == selectedProject.id)
             #expect(service.projectId == selectedProject.id)
+        }
+
+        @Test
+        func explicitNoProjectPreventsSeriesInheritanceWhenRecordingStarts() throws {
+            let (database, vault) = try makeDatabase()
+            let inheritedProject = project(named: "Planning", vaultId: vault.id)
+            let previousStart = Date(timeIntervalSince1970: 1_776_300_000)
+            let currentStart = Date(timeIntervalSince1970: 1_776_400_000)
+
+            try database.dbQueue.write { db in
+                try inheritedProject.insert(db)
+                try insertSeriesMeeting(
+                    event: seriesEvent(startDate: previousStart, recurrenceId: "20260415T090000Z"),
+                    projectId: inheritedProject.id,
+                    vaultId: vault.id,
+                    createdAt: previousStart,
+                    in: db
+                )
+            }
+
+            let service = try MeetingPersistenceService(
+                store: TranscriptStore(),
+                dbQueue: database.dbQueue,
+                vaultId: vault.id,
+                projectId: nil,
+                initialName: "Current occurrence",
+                allowsCalendarSeriesProjectInheritance: false,
+                calendarEvent: seriesEvent(startDate: currentStart, recurrenceId: "20260416T090000Z")
+            )
+            service.stop()
+
+            let meeting = try fetchMeeting(id: service.meetingId, from: database.dbQueue)
+            #expect(meeting.projectId == nil)
+            #expect(service.projectId == nil)
         }
 
         @Test
@@ -134,6 +212,45 @@ import GRDB
                 viewModel.currentProjectURL
                     == vault.url.appending(path: inheritedProject.name, directoryHint: .isDirectory)
             )
+        }
+
+        @Test
+        func materializedDraftPreservesExplicitNoProjectSelection() throws {
+            let (database, vault) = try makeDatabase()
+            let inheritedProject = project(named: "Planning", vaultId: vault.id)
+            let previousStart = Date(timeIntervalSince1970: 1_776_300_000)
+            let currentStart = Date(timeIntervalSince1970: 1_776_400_000)
+
+            try database.dbQueue.write { db in
+                try inheritedProject.insert(db)
+                try insertSeriesMeeting(
+                    event: seriesEvent(startDate: previousStart, recurrenceId: "20260415T090000Z"),
+                    projectId: inheritedProject.id,
+                    vaultId: vault.id,
+                    createdAt: previousStart,
+                    in: db
+                )
+            }
+
+            let previousVault = AppSettings.shared.currentVault
+            AppSettings.shared.currentVault = vault
+            defer { AppSettings.shared.currentVault = previousVault }
+
+            let viewModel = CaptionViewModel()
+            viewModel.beginDraftMeeting(
+                from: seriesEvent(startDate: currentStart, recurrenceId: "20260416T090000Z"),
+                dbQueue: database.dbQueue,
+                vaultURL: vault.url
+            )
+            viewModel.setExplicitProjectContext(projectURL: nil, projectId: nil, projectName: nil)
+
+            let meetingId = try #require(viewModel.materializeDraftMeeting())
+            let meeting = try fetchMeeting(id: meetingId, from: database.dbQueue)
+
+            #expect(meeting.projectId == nil)
+            #expect(viewModel.currentProjectId == nil)
+            #expect(viewModel.currentProjectName == nil)
+            #expect(viewModel.currentProjectURL == nil)
         }
     }
 

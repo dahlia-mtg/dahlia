@@ -120,8 +120,18 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
         guard let start = try item.start.resolvedDate(calendar: calendar),
               let end = try item.end.resolvedDate(calendar: calendar)
         else { return nil }
-        let recurrenceId = try item.originalStartTime?.resolvedRecurrenceId(calendar: calendar)
-            ?? ICalendarRecurrenceID.singleEvent
+        let recurrenceId: String
+        if let originalStartTime = item.originalStartTime {
+            guard let resolvedRecurrenceId = try originalStartTime.resolvedRecurrenceId(calendar: calendar) else {
+                throw GoogleCalendarAPIError.invalidResponse
+            }
+            recurrenceId = resolvedRecurrenceId
+        } else {
+            guard item.recurringEventId?.nilIfBlank == nil else {
+                throw GoogleCalendarAPIError.invalidResponse
+            }
+            recurrenceId = ICalendarRecurrenceID.singleEvent
+        }
 
         return CalendarEvent(
             id: "\(calendarItem.id)::\(item.id)",
@@ -143,15 +153,21 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
     }
 
     static func conferenceURI(for item: EventItem) -> URL? {
-        let entryPointURIs = item.conferenceData?.entryPoints.compactMap { absoluteURL(from: $0.uri) } ?? []
-        let candidates: [URL] = if !entryPointURIs.isEmpty {
-            entryPointURIs
-        } else if let hangoutURI = absoluteURL(from: item.hangoutLink) {
-            [hangoutURI]
-        } else {
-            []
-        }
-        return candidates.first { $0.scheme?.lowercased() == "https" } ?? candidates.first
+        let entryPoints = item.conferenceData?.entryPoints.compactMap { entryPoint -> (type: String?, uri: URL)? in
+            guard let uri = absoluteURL(from: entryPoint.uri) else { return nil }
+            return (entryPoint.entryPointType?.lowercased(), uri)
+        } ?? []
+        let entryPointURIs = entryPoints.map(\.uri)
+        let videoURIs = entryPoints.filter { $0.type == "video" }.map(\.uri)
+        let hangoutURI = absoluteURL(from: item.hangoutLink)
+        let httpsHangoutURI = hangoutURI.flatMap { $0.isHTTPS ? $0 : nil }
+
+        return videoURIs.first(where: \.isHTTPS)
+            ?? httpsHangoutURI
+            ?? entryPointURIs.first(where: \.isHTTPS)
+            ?? videoURIs.first
+            ?? hangoutURI
+            ?? entryPointURIs.first
     }
 
     static func sortAndFilter(
@@ -301,13 +317,23 @@ extension GoogleCalendarAPIClient {
         struct EventDateTime: Decodable {
             let date: String?
             let dateTime: String?
+            let timeZone: String?
+
+            init(date: String?, dateTime: String?, timeZone: String? = nil) {
+                self.date = date
+                self.dateTime = dateTime
+                self.timeZone = timeZone
+            }
 
             func resolvedDate(calendar: Calendar) throws -> Date? {
                 if let dateTime {
                     if let parsed = Self.googleCalendarWithFractionalSeconds.date(from: dateTime) {
                         return parsed
                     }
-                    return Self.googleCalendar.date(from: dateTime)
+                    if let parsed = Self.googleCalendar.date(from: dateTime) {
+                        return parsed
+                    }
+                    return localDate(from: dateTime)
                 }
 
                 if let date {
@@ -326,8 +352,25 @@ extension GoogleCalendarAPIClient {
                     return recurrenceId
                 }
 
-                guard let resolvedDate = try resolvedDate(calendar: calendar) else { return nil }
+                guard let resolvedDate = try resolvedDate(calendar: calendar) else {
+                    throw GoogleCalendarAPIError.invalidCalendarDate(dateTime ?? "")
+                }
                 return ICalendarRecurrenceID.dateTime(resolvedDate)
+            }
+
+            private func localDate(from value: String) -> Date? {
+                guard let timeZone = timeZone.flatMap(TimeZone.init(identifier:)) else { return nil }
+                for includesFractionalSeconds in [true, false] {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.timeZone = timeZone
+                    formatter.formatOptions = includesFractionalSeconds
+                        ? [.withFullDate, .withTime, .withColonSeparatorInTime, .withFractionalSeconds]
+                        : [.withFullDate, .withTime, .withColonSeparatorInTime]
+                    if let date = formatter.date(from: value) {
+                        return date
+                    }
+                }
+                return nil
             }
 
             private nonisolated(unsafe) static let googleCalendarWithFractionalSeconds: ISO8601DateFormatter = {
@@ -346,6 +389,12 @@ extension GoogleCalendarAPIClient {
         struct ConferenceData: Decodable {
             struct EntryPoint: Decodable {
                 let uri: String?
+                let entryPointType: String?
+
+                init(uri: String?, entryPointType: String? = nil) {
+                    self.uri = uri
+                    self.entryPointType = entryPointType
+                }
             }
 
             let entryPoints: [EntryPoint]
@@ -360,12 +409,47 @@ extension GoogleCalendarAPIClient {
         let start: EventDateTime
         let end: EventDateTime
         let originalStartTime: EventDateTime?
+        let recurringEventId: String?
         let conferenceData: ConferenceData?
         let eventType: String?
+
+        init(
+            id: String,
+            summary: String?,
+            description: String?,
+            iCalUID: String?,
+            htmlLink: String?,
+            hangoutLink: String?,
+            start: EventDateTime,
+            end: EventDateTime,
+            originalStartTime: EventDateTime?,
+            recurringEventId: String? = nil,
+            conferenceData: ConferenceData?,
+            eventType: String?
+        ) {
+            self.id = id
+            self.summary = summary
+            self.description = description
+            self.iCalUID = iCalUID
+            self.htmlLink = htmlLink
+            self.hangoutLink = hangoutLink
+            self.start = start
+            self.end = end
+            self.originalStartTime = originalStartTime
+            self.recurringEventId = recurringEventId
+            self.conferenceData = conferenceData
+            self.eventType = eventType
+        }
 
         var isIgnoredForUpcomingEvents: Bool {
             start.date != nil || eventType == "outOfOffice"
         }
+    }
+}
+
+private extension URL {
+    var isHTTPS: Bool {
+        scheme?.lowercased() == "https"
     }
 }
 

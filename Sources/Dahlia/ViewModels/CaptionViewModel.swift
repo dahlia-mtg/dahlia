@@ -899,6 +899,7 @@ final class CaptionViewModel: ObservableObject {
                     requestedProjectId: requestedProjectId,
                     calendarEvent: draftMeeting.linkedCalendarEvent,
                     vaultId: vault.id,
+                    allowsCalendarSeriesProjectInheritance: draftMeeting.allowsCalendarSeriesProjectInheritance,
                     in: db
                 )
                 let record = MeetingRecord(
@@ -1112,10 +1113,14 @@ final class CaptionViewModel: ObservableObject {
         )
     }
 
-    func updateCurrentProjectContext(projectURL: URL?, projectId: UUID?, projectName: String?) {
+    func setExplicitProjectContext(projectURL: URL?, projectId: UUID?, projectName: String?) {
         currentProjectURL = projectURL
         currentProjectId = projectId
         currentProjectName = projectName
+        draftMeeting?.projectURL = projectURL
+        draftMeeting?.projectId = projectId
+        draftMeeting?.projectName = projectName
+        draftMeeting?.allowsCalendarSeriesProjectInheritance = false
     }
 
     // MARK: - Analyzer Preparation
@@ -1402,6 +1407,7 @@ final class CaptionViewModel: ObservableObject {
             vaultId: request.vaultId,
             projectId: request.projectId,
             initialName: initialName,
+            allowsCalendarSeriesProjectInheritance: request.draftMeeting?.allowsCalendarSeriesProjectInheritance ?? true,
             calendarEvent: request.draftMeeting?.linkedCalendarEvent,
             recordingSessionId: request.recordingSessionId,
             transcriptionMode: request.transcriptionMode,

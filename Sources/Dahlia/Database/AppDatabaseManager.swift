@@ -93,6 +93,10 @@ final class AppDatabaseManager: Sendable {
             try moveCalendarEventURLToCanonicalTable(in: db)
         }
 
+        migrator.registerMigration("v17_calendarEventIntegrity") { db in
+            try strengthenCalendarEventIntegrity(in: db)
+        }
+
         return migrator
     }()
 
@@ -452,6 +456,148 @@ final class AppDatabaseManager: Sendable {
             arguments: [CalendarEventPlatform.googleCalendar]
         )
         try db.execute(sql: "ALTER TABLE calendar_event_sources DROP COLUMN source_event_url")
+    }
+
+    private static func strengthenCalendarEventIntegrity(in db: Database) throws {
+        guard try db.tableExists("calendar_events") else { return }
+        try normalizeLegacyDateRecurrenceIDs(in: db)
+
+        guard try db.tableExists("meetings") else { return }
+        try replaceCalendarEventMeetingIndex(in: db)
+        try deleteUnreferencedCalendarEvents(in: db)
+        try createCalendarEventCleanupTriggers(in: db)
+    }
+
+    private static func normalizeLegacyDateRecurrenceIDs(in db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT OR IGNORE INTO calendar_events (
+                ical_uid,
+                recurrence_id,
+                created_at,
+                updated_at,
+                title,
+                description,
+                start,
+                "end",
+                is_all_day,
+                conference_uri,
+                url
+            )
+            SELECT
+                ical_uid,
+                substr(recurrence_id, 12),
+                created_at,
+                updated_at,
+                title,
+                description,
+                start,
+                "end",
+                is_all_day,
+                conference_uri,
+                url
+            FROM calendar_events
+            WHERE recurrence_id GLOB 'VALUE=DATE:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+            """
+        )
+        if try db.tableExists("calendar_event_sources") {
+            try db.execute(
+                sql: """
+                UPDATE calendar_event_sources
+                SET recurrence_id = substr(recurrence_id, 12)
+                WHERE recurrence_id GLOB 'VALUE=DATE:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+                """
+            )
+        }
+        if try db.tableExists("meetings") {
+            try db.execute(
+                sql: """
+                UPDATE meetings
+                SET calendar_event_recurrence_id = substr(calendar_event_recurrence_id, 12)
+                WHERE calendar_event_recurrence_id
+                    GLOB 'VALUE=DATE:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+                """
+            )
+        }
+        try db.execute(
+            sql: """
+            DELETE FROM calendar_events
+            WHERE recurrence_id GLOB 'VALUE=DATE:[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+            """
+        )
+    }
+
+    private static func replaceCalendarEventMeetingIndex(in db: Database) throws {
+        try db.execute(sql: "DROP INDEX IF EXISTS meetings_on_calendar_event")
+        try db.execute(
+            sql: """
+            CREATE INDEX meetings_on_calendar_event
+            ON meetings (
+                vaultId,
+                calendar_event_ical_uid,
+                calendar_event_recurrence_id,
+                createdAt,
+                id
+            )
+            """
+        )
+    }
+
+    private static func deleteUnreferencedCalendarEvents(in db: Database) throws {
+        try db.execute(
+            sql: """
+            DELETE FROM calendar_events
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM meetings
+                WHERE meetings.calendar_event_ical_uid = calendar_events.ical_uid
+                  AND meetings.calendar_event_recurrence_id = calendar_events.recurrence_id
+            )
+            """
+        )
+    }
+
+    private static func createCalendarEventCleanupTriggers(in db: Database) throws {
+        try db.execute(
+            sql: """
+            CREATE TRIGGER meetings_calendar_event_cleanup_delete
+            AFTER DELETE ON meetings
+            WHEN OLD.calendar_event_ical_uid IS NOT NULL
+            BEGIN
+                DELETE FROM calendar_events
+                WHERE ical_uid = OLD.calendar_event_ical_uid
+                  AND recurrence_id = OLD.calendar_event_recurrence_id
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM meetings
+                      WHERE calendar_event_ical_uid = OLD.calendar_event_ical_uid
+                        AND calendar_event_recurrence_id = OLD.calendar_event_recurrence_id
+                  );
+            END
+            """
+        )
+        try db.execute(
+            sql: """
+            CREATE TRIGGER meetings_calendar_event_cleanup_update
+            AFTER UPDATE OF calendar_event_ical_uid, calendar_event_recurrence_id ON meetings
+            WHEN OLD.calendar_event_ical_uid IS NOT NULL
+              AND (
+                  OLD.calendar_event_ical_uid IS NOT NEW.calendar_event_ical_uid
+                  OR OLD.calendar_event_recurrence_id IS NOT NEW.calendar_event_recurrence_id
+              )
+            BEGIN
+                DELETE FROM calendar_events
+                WHERE ical_uid = OLD.calendar_event_ical_uid
+                  AND recurrence_id = OLD.calendar_event_recurrence_id
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM meetings
+                      WHERE calendar_event_ical_uid = OLD.calendar_event_ical_uid
+                        AND calendar_event_recurrence_id = OLD.calendar_event_recurrence_id
+                  );
+            END
+            """
+        )
     }
 
     private static func createCanonicalCalendarEventTables(in db: Database) throws {

@@ -53,6 +53,7 @@ final class MeetingPersistenceService {
         vaultId: UUID,
         projectId: UUID?,
         initialName: String,
+        allowsCalendarSeriesProjectInheritance: Bool = true,
         calendarEvent: CalendarEvent? = nil,
         recordingSessionId: UUID = .v7(),
         transcriptionMode: TranscriptionMode = .realtime,
@@ -87,6 +88,7 @@ final class MeetingPersistenceService {
                 requestedProjectId: projectId,
                 calendarEvent: calendarEvent,
                 vaultId: vaultId,
+                allowsCalendarSeriesProjectInheritance: allowsCalendarSeriesProjectInheritance,
                 in: db
             )
             let meeting = MeetingRecord(

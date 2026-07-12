@@ -166,6 +166,20 @@ struct MacCalendarStoreTests {
 
         #expect(url?.absoluteString == "https://teams.microsoft.com/l/meetup-join/abc")
     }
+
+    @Test
+    func allDayRecurrenceIdUsesEventKitDefaultTimeZone() throws {
+        let defaultTimeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let occurrenceDate = Date(timeIntervalSince1970: 1_776_387_600)
+
+        let recurrenceId = EventKitMacCalendarEventStore.recurrenceId(
+            occurrenceDate: occurrenceDate,
+            isAllDay: true,
+            defaultTimeZone: defaultTimeZone
+        )
+
+        #expect(recurrenceId == "20260417")
+    }
 }
 
 private let fixtureNow = Date(timeIntervalSince1970: 1_776_384_000)

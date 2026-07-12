@@ -17,7 +17,8 @@ import GRDB
                     String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('calendar_events') WHERE pk > 0 ORDER BY pk"),
                     String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('meetings')"),
                     db.tableExists("calendar_event_sources"),
-                    String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('calendar_event_sources')")
+                    String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('calendar_event_sources')"),
+                    String.fetchAll(db, sql: "SELECT name FROM pragma_index_info('meetings_on_calendar_event') ORDER BY seqno")
                 )
             }
 
@@ -32,6 +33,13 @@ import GRDB
             #expect(schema.2.contains("calendar_event_recurrence_id"))
             #expect(schema.3)
             #expect(!schema.4.contains("source_event_url"))
+            #expect(schema.5 == [
+                "vaultId",
+                "calendar_event_ical_uid",
+                "calendar_event_recurrence_id",
+                "createdAt",
+                "id",
+            ])
         }
 
         @Test
@@ -128,7 +136,8 @@ import GRDB
             )
             let event = calendarEvent(recurrenceId: "")
             let key = try #require(event.key)
-            let activeMeetingId = UUID.v7()
+            let activeMeetingId = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+            let tiedActiveMeetingId = try #require(UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"))
             let otherMeetingId = UUID.v7()
             let createdAt = Date(timeIntervalSince1970: 1_776_384_000)
 
@@ -152,15 +161,23 @@ import GRDB
                     key: key,
                     in: db
                 )
+                try insertCalendarMeeting(
+                    id: tiedActiveMeetingId,
+                    named: "Deterministic tie winner",
+                    vaultId: activeVault.id,
+                    createdAt: createdAt,
+                    key: key,
+                    in: db
+                )
             }
 
             let repository = MeetingRepository(dbQueue: database.dbQueue)
             #expect(
-                try repository.fetchMeetingIdForCalendarEvent(event, vaultId: activeVault.id)
-                    == activeMeetingId
+                try repository.resolveMeetingIdForCalendarEvent(event, vaultId: activeVault.id)
+                    == tiedActiveMeetingId
             )
             #expect(
-                try repository.fetchMeetingIdForCalendarEvent(event, vaultId: otherVault.id)
+                try repository.resolveMeetingIdForCalendarEvent(event, vaultId: otherVault.id)
                     == otherMeetingId
             )
         }
@@ -196,7 +213,7 @@ import GRDB
         }
 
         @Test
-        func migrationMovesURLFromSourceToCalendarEvent() throws {
+        func migrationMovesURLAndNormalizesDateRecurrenceId() throws {
             let databaseURL = URL.temporaryDirectory
                 .appending(path: UUID().uuidString)
                 .appendingPathExtension("sqlite")
@@ -209,7 +226,7 @@ import GRDB
             let result = try migrated.dbQueue.read { db in
                 try (
                     CalendarEventRecord.fetch(
-                        key: CalendarEventKey(icalUid: "planning@google.com", recurrenceId: ""),
+                        key: CalendarEventKey(icalUid: "planning@google.com", recurrenceId: "20260417"),
                         in: db
                     ),
                     String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('calendar_event_sources')")
@@ -262,13 +279,17 @@ import GRDB
         ).insert(db)
     }
 
-    private func calendarEvent(recurrenceId: String, url: URL? = nil) -> CalendarEvent {
+    private func calendarEvent(
+        recurrenceId: String,
+        url: URL? = nil
+    ) -> CalendarEvent {
         let start = Date(timeIntervalSince1970: 1_776_384_000)
         return CalendarEvent(
-            id: recurrenceId,
+            id: "google::\(recurrenceId)",
             calendarID: "primary",
             calendarName: "Primary",
             calendarColorHex: nil,
+            platform: CalendarEventPlatform.googleCalendar,
             platformId: recurrenceId,
             title: "Planning",
             description: "",
@@ -348,7 +369,7 @@ import GRDB
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
-                "planning@google.com", "", now, now, "Planning", "", now,
+                "planning@google.com", "VALUE=DATE:20260417", now, now, "Planning", "", now,
                 now.addingTimeInterval(3600), false, nil,
             ]
         )
@@ -362,7 +383,7 @@ import GRDB
             """,
             arguments: [
                 CalendarEventPlatform.googleCalendar, "primary", "planning",
-                "planning@google.com", "", eventURL, now, now,
+                "planning@google.com", "VALUE=DATE:20260417", eventURL, now, now,
             ]
         )
     }

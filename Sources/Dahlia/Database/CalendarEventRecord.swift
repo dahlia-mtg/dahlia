@@ -50,6 +50,9 @@ struct CalendarEventRecord: Codable, FetchableRecord, PersistableRecord, Equatab
         var record = Self(now: now, event: event, key: key)
         if let existing = try fetch(key: key, in: db) {
             record.createdAt = existing.createdAt
+            record.title = record.title.nilIfBlank ?? existing.title
+            record.description = record.description.nilIfBlank ?? existing.description
+            record.conferenceURI = record.conferenceURI ?? existing.conferenceURI
             record.url = record.url ?? existing.url
         }
         try record.save(db)
