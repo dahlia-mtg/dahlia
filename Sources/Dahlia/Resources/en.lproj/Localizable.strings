@@ -321,7 +321,7 @@
 "Used to build the Databricks AI Gateway chat completions URL." = "Used to build the Databricks AI Gateway chat completions URL.";
 "Databricks CLI Profile" = "Databricks CLI Profile";
 "OAuth credentials are read from this Databricks CLI profile." = "OAuth credentials are read from this Databricks CLI profile.";
-"No Databricks CLI profiles found." = "No Databricks CLI profiles found.";
+"No Databricks CLI profiles found. Sign in to create the DAHLIA profile." = "No Databricks CLI profiles found. Sign in to create the DAHLIA profile.";
 "Refresh Profiles" = "Refresh Profiles";
 "OAuth Authentication" = "OAuth Authentication";
 "Uses the Databricks CLI to sign in and refresh short-lived tokens." = "Uses the Databricks CLI to sign in and refresh short-lived tokens.";

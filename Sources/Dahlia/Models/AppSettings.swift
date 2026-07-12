@@ -94,6 +94,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     nonisolated static let automaticScreenshotIntervalSecondsUserDefaultsKey = "automaticScreenshotIntervalSeconds"
     nonisolated static let automaticScreenshotChangeThresholdPercentUserDefaultsKey = "automaticScreenshotChangeThresholdPercent"
     nonisolated static let defaultGoogleDriveExportFolderName = "Meeting Notes"
+    nonisolated static let defaultDatabricksProfile = "DAHLIA"
     fileprivate nonisolated static let defaultAutomaticScreenshotIntervalSeconds = 30
     fileprivate nonisolated static let defaultAutomaticScreenshotChangeThresholdPercent = 20
     nonisolated static let defaultLLMMaxTokens = 16000
@@ -376,7 +377,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     @AppStorage("llmProvider") var llmProviderRawValue = ""
     @AppStorage("llmDatabricksWorkspaceID") var llmDatabricksWorkspaceID = ""
-    @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = ""
+    @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = AppSettings.defaultDatabricksProfile
     @AppStorage("llmModelName") var llmModelRawValue = LLMModel.defaultModel.rawValue
     @AppStorage("llmMaxTokens") private var storedLLMMaxTokens = AppSettings.defaultLLMMaxTokens
     @AppStorage("llmSummaryLanguage") var llmSummaryLanguageRawValue = SummaryLanguage.ja.rawValue
@@ -529,6 +530,17 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     nonisolated static func databricksEndpointURL(workspaceID: String) -> String {
         let trimmedWorkspaceID = workspaceID.trimmingCharacters(in: .whitespacesAndNewlines)
         return "https://\(trimmedWorkspaceID).ai-gateway.cloud.databricks.com/mlflow/v1/chat/completions"
+    }
+
+    nonisolated static func resolvedDatabricksProfileSelection(
+        current: String,
+        availableProfiles: [String]
+    ) -> String {
+        let current = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let firstAvailableProfile = availableProfiles.first else {
+            return current.nilIfBlank ?? defaultDatabricksProfile
+        }
+        return availableProfiles.contains(current) ? current : firstAvailableProfile
     }
 
     /// API トークン（Keychain に保存）。

@@ -6,6 +6,24 @@
     @MainActor
     struct DatabricksConfigurationTests {
         @Test
+        func profileSelectionSupportsFirstTimeSignInAndExistingProfiles() {
+            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "", availableProfiles: []) == "DAHLIA")
+            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "CUSTOM", availableProfiles: []) == "CUSTOM")
+            #expect(
+                AppSettings.resolvedDatabricksProfileSelection(
+                    current: "MISSING",
+                    availableProfiles: ["DEV", "WORK"]
+                ) == "DEV"
+            )
+            #expect(
+                AppSettings.resolvedDatabricksProfileSelection(
+                    current: "WORK",
+                    availableProfiles: ["DEV", "WORK"]
+                ) == "WORK"
+            )
+        }
+
+        @Test
         func configurationRequiresWorkspaceAndCLIProfileInsteadOfPAT() {
             let settings = AppSettings.shared
             let previousProviderRawValue = settings.llmProviderRawValue

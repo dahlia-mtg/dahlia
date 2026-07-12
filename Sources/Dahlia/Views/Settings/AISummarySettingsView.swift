@@ -306,8 +306,12 @@ struct AISummarySettingsView: View {
         do {
             let profiles = try await DatabricksCLIClient().profiles()
             databricksProfiles = profiles
-            if !profiles.contains(where: { $0.name == settings.llmDatabricksProfile }) {
-                settings.llmDatabricksProfile = profiles.first?.name ?? ""
+            let selectedProfile = AppSettings.resolvedDatabricksProfileSelection(
+                current: settings.llmDatabricksProfile,
+                availableProfiles: profiles.map(\.name)
+            )
+            if selectedProfile != settings.llmDatabricksProfile {
+                settings.llmDatabricksProfile = selectedProfile
             }
         } catch {
             databricksProfiles = []

@@ -670,7 +670,10 @@ enum L10n {
         localized: "OAuth credentials are read from this Databricks CLI profile.",
         bundle: bundle
     ) }
-    static var noDatabricksProfiles: String { String(localized: "No Databricks CLI profiles found.", bundle: bundle) }
+    static var noDatabricksProfiles: String { String(
+        localized: "No Databricks CLI profiles found. Sign in to create the DAHLIA profile.",
+        bundle: bundle
+    ) }
     static var refreshDatabricksProfiles: String { String(localized: "Refresh Profiles", bundle: bundle) }
     static var databricksOAuth: String { String(localized: "OAuth Authentication", bundle: bundle) }
     static var databricksOAuthDescription: String { String(
