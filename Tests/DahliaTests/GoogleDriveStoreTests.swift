@@ -189,10 +189,6 @@ import Foundation
             self.result = result
         }
 
-        func configure(folderName _: String, session _: GoogleSession) async throws {
-            try result.get()
-        }
-
         func configureIfNeeded(session _: GoogleSession) async throws {
             configureIfNeededCallCount += 1
             try result.get()

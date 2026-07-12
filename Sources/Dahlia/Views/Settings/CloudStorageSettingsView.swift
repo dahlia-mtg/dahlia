@@ -3,9 +3,7 @@ import SwiftUI
 struct CloudStorageSettingsView: View {
     @ObservedObject private var driveStore = GoogleDriveStore.shared
     @ObservedObject private var settings = AppSettings.shared
-    @State private var exportFolderName = AppSettings.defaultGoogleDriveExportFolderName
     @State private var exportFolderStatusMessage: String?
-    @State private var exportFolderSaveFailed = false
     @State private var exportFolderAlertMessage = ""
     @State private var isShowingExportFolderAlert = false
 
@@ -29,13 +27,7 @@ struct CloudStorageSettingsView: View {
 
             Section {
                 LabeledContent {
-                    HStack {
-                        TextField(L10n.googleDriveExportFolderName, text: $exportFolderName)
-                            .multilineTextAlignment(.trailing)
-                            .disabled(!canConfigureExportFolder)
-                        Button(L10n.googleDriveChangeExportFolder, action: configureExportFolder)
-                            .disabled(!canConfigureExportFolder)
-                    }
+                    Text(AppSettings.defaultGoogleDriveExportFolderName)
                 } label: {
                     Text(L10n.googleDriveExportFolder)
                     Text(L10n.myDrive)
@@ -50,8 +42,8 @@ struct CloudStorageSettingsView: View {
                 if let exportFolderStatusMessage {
                     SettingsStatusMessage(
                         text: exportFolderStatusMessage,
-                        systemImage: exportFolderSaveFailed ? "exclamationmark.triangle" : "checkmark.circle",
-                        tint: exportFolderSaveFailed ? .orange : .secondary
+                        systemImage: "exclamationmark.triangle",
+                        tint: .orange
                     )
                 }
             } header: {
@@ -64,7 +56,6 @@ struct CloudStorageSettingsView: View {
         .task {
             await driveStore.restoreSessionIfNeeded()
             await driveStore.refreshExportFolderConfiguration()
-            exportFolderName = settings.resolvedGoogleDriveExportFolderName
             if let message = driveStore.exportFolderErrorMessage {
                 presentExportFolderError(message)
             }
@@ -74,12 +65,6 @@ struct CloudStorageSettingsView: View {
             resetExportFolderStatus()
         }
         .onChange(of: driveStore.account?.id) { _, _ in
-            exportFolderName = settings.resolvedGoogleDriveExportFolderName
-            resetExportFolderStatus()
-        }
-        .onChange(of: exportFolderName) { _, _ in
-            guard AppSettings.resolvedGoogleDriveExportFolderName(exportFolderName)
-                != settings.resolvedGoogleDriveExportFolderName else { return }
             resetExportFolderStatus()
         }
         .onChange(of: driveStore.exportFolderErrorMessage) { _, message in
@@ -135,41 +120,18 @@ struct CloudStorageSettingsView: View {
         return L10n.googleDocsConnectDescription
     }
 
-    private var canConfigureExportFolder: Bool {
-        driveStore.isAuthorized && !driveStore.isBusy
-    }
-
     private var exportFolderURL: URL? {
         guard let accountID = driveStore.account?.id else { return nil }
         return settings.googleDriveExportFolderURL(forAccountID: accountID)
     }
 
-    private func configureExportFolder() {
-        Task { @MainActor in
-            do {
-                try await driveStore.configureExportFolder(named: exportFolderName)
-                exportFolderName = settings.resolvedGoogleDriveExportFolderName
-                exportFolderStatusMessage = L10n.saved
-                exportFolderSaveFailed = false
-            } catch {
-                let message = GoogleAuthErrorFormatter.message(
-                    for: error,
-                    defaultMessage: L10n.googleDriveUnexpectedResponse
-                )
-                presentExportFolderError(message)
-            }
-        }
-    }
-
     private func presentExportFolderError(_ message: String) {
         exportFolderStatusMessage = message
-        exportFolderSaveFailed = true
         exportFolderAlertMessage = message
         isShowingExportFolderAlert = true
     }
 
     private func resetExportFolderStatus() {
         exportFolderStatusMessage = nil
-        exportFolderSaveFailed = false
     }
 }

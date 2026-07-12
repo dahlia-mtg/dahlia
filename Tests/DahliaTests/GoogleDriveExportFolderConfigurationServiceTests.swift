@@ -8,15 +8,14 @@ import Foundation
     @MainActor
     struct GoogleDriveExportFolderConfigurationServiceTests {
         @Test
-        func configuringBlankNameStoresDefaultFolderIDForConnectedAccount() async throws {
+        func initialConfigurationStoresMeetingNotesFolderForConnectedAccount() async throws {
             let apiClient = FolderConfigurationAPIClient(folderID: "folder-1")
             let settings = FolderConfigurationSettings()
             let service = GoogleDriveExportFolderConfigurationService(apiClient: apiClient, settings: settings)
 
-            try await service.configure(folderName: "  ", session: defaultDriveSession)
+            try await service.configureIfNeeded(session: defaultDriveSession)
 
             #expect(await apiClient.resolvedFolderNames == ["Meeting Notes"])
-            #expect(settings.resolvedGoogleDriveExportFolderName == "Meeting Notes")
             #expect(settings.googleDriveExportFolderID(forAccountID: "user-1") == "folder-1")
         }
 
@@ -32,7 +31,7 @@ import Foundation
         func existingAvailableFolderIDSkipsFolderLookup() async throws {
             let apiClient = FolderConfigurationAPIClient(folderID: "unused-folder")
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "folder-1", accountID: "user-1")
+            settings.setGoogleDriveExportFolder(id: "folder-1", accountID: "user-1")
             let service = GoogleDriveExportFolderConfigurationService(apiClient: apiClient, settings: settings)
 
             try await service.configureIfNeeded(session: defaultDriveSession)
@@ -60,13 +59,13 @@ import Foundation
         func unavailableStoredFolderIsResolvedAndReplaced() async throws {
             let apiClient = FolderConfigurationAPIClient(folderID: "replacement-folder", isFolderAvailable: false)
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "stale-folder", accountID: "user-1")
+            settings.setGoogleDriveExportFolder(id: "stale-folder", accountID: "user-1")
             let service = GoogleDriveExportFolderConfigurationService(apiClient: apiClient, settings: settings)
 
             try await service.configureIfNeeded(session: defaultDriveSession)
 
             #expect(await apiClient.validatedFolderIDs == ["stale-folder"])
-            #expect(await apiClient.resolvedFolderNames == ["Team Notes"])
+            #expect(await apiClient.resolvedFolderNames == ["Meeting Notes"])
             #expect(settings.googleDriveExportFolderID(forAccountID: "user-1") == "replacement-folder")
         }
 
@@ -74,13 +73,13 @@ import Foundation
         func folderIDFromAnotherAccountIsNotReused() async throws {
             let apiClient = FolderConfigurationAPIClient(folderID: "account-2-folder")
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "account-1-folder", accountID: "user-1")
+            settings.setGoogleDriveExportFolder(id: "account-1-folder", accountID: "user-1")
             let service = GoogleDriveExportFolderConfigurationService(apiClient: apiClient, settings: settings)
 
             try await service.configureIfNeeded(session: makeDriveSession(accountID: "user-2"))
 
             #expect(await apiClient.validatedFolderIDs.isEmpty)
-            #expect(await apiClient.resolvedFolderNames == ["Team Notes"])
+            #expect(await apiClient.resolvedFolderNames == ["Meeting Notes"])
             #expect(settings.googleDriveExportFolderID(forAccountID: "user-2") == "account-2-folder")
         }
 
@@ -89,7 +88,7 @@ import Foundation
             let driveStore = makeAuthorizedDriveStore()
             let apiClient = FolderConfigurationAPIClient(folderID: "unused-folder")
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "folder-1", accountID: "user-1")
+            settings.setGoogleDriveExportFolder(id: "folder-1", accountID: "user-1")
             await driveStore.restoreSessionIfNeeded()
 
             let fileID = try await exportSummary(
@@ -109,7 +108,7 @@ import Foundation
             let driveStore = makeAuthorizedDriveStore()
             let apiClient = FolderConfigurationAPIClient(folderID: "unused-folder")
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "folder-2", accountID: "user-2")
+            settings.setGoogleDriveExportFolder(id: "folder-2", accountID: "user-2")
             await driveStore.restoreSessionIfNeeded()
 
             do {
@@ -130,7 +129,7 @@ import Foundation
             let driveStore = makeAuthorizedDriveStore()
             let apiClient = FolderConfigurationAPIClient(folderID: "unused-folder", uploadStatusCode: 404)
             let settings = FolderConfigurationSettings()
-            settings.setGoogleDriveExportFolder(name: "Team Notes", id: "stale-folder", accountID: "user-1")
+            settings.setGoogleDriveExportFolder(id: "stale-folder", accountID: "user-1")
             await driveStore.restoreSessionIfNeeded()
 
             do {
@@ -171,20 +170,14 @@ import Foundation
 
     @MainActor
     private final class FolderConfigurationSettings: GoogleDriveExportFolderSettingsProviding {
-        private var folderName = AppSettings.defaultGoogleDriveExportFolderName
         private var folderID: String?
         private var accountID: String?
-
-        var resolvedGoogleDriveExportFolderName: String {
-            AppSettings.resolvedGoogleDriveExportFolderName(folderName)
-        }
 
         func googleDriveExportFolderID(forAccountID accountID: String) -> String? {
             self.accountID == accountID ? folderID : nil
         }
 
-        func setGoogleDriveExportFolder(name: String, id: String, accountID: String) {
-            folderName = name
+        func setGoogleDriveExportFolder(id: String, accountID: String) {
             folderID = id
             self.accountID = accountID
         }
@@ -247,7 +240,6 @@ import Foundation
 
     @MainActor
     private final class NoOpFolderConfiguration: GoogleDriveExportFolderConfiguring {
-        func configure(folderName _: String, session _: GoogleSession) async throws {}
         func configureIfNeeded(session _: GoogleSession) async throws {}
     }
 

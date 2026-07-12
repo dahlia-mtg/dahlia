@@ -16,34 +16,12 @@ final class GoogleDriveExportFolderConfigurationService: GoogleDriveExportFolder
         self.settings = settings
     }
 
-    func configure(
-        folderName: String,
-        session: GoogleSession
-    ) async throws {
-        let resolvedFolderName = AppSettings.resolvedGoogleDriveExportFolderName(folderName)
-        let apiClient = apiClient
-        let settings = settings
-        try await performSingleFlight(
-            key: configurationKey(accountID: session.account.id, folderName: resolvedFolderName)
-        ) {
-            let folderID = try await apiClient.resolveExportFolderID(
-                accessToken: session.accessToken,
-                folderName: resolvedFolderName
-            )
-            settings.setGoogleDriveExportFolder(
-                name: resolvedFolderName,
-                id: folderID,
-                accountID: session.account.id
-            )
-        }
-    }
-
     func configureIfNeeded(session: GoogleSession) async throws {
-        let folderName = settings.resolvedGoogleDriveExportFolderName
+        let folderName = AppSettings.defaultGoogleDriveExportFolderName
         let apiClient = apiClient
         let settings = settings
         try await performSingleFlight(
-            key: configurationKey(accountID: session.account.id, folderName: folderName)
+            key: configurationKey(accountID: session.account.id)
         ) {
             if let folderID = settings.googleDriveExportFolderID(forAccountID: session.account.id) {
                 let isAvailable = try await apiClient.isExportFolderAvailable(
@@ -61,7 +39,6 @@ final class GoogleDriveExportFolderConfigurationService: GoogleDriveExportFolder
                 folderName: folderName
             )
             settings.setGoogleDriveExportFolder(
-                name: folderName,
                 id: folderID,
                 accountID: session.account.id
             )
@@ -94,7 +71,7 @@ final class GoogleDriveExportFolderConfigurationService: GoogleDriveExportFolder
         inFlightConfiguration = nil
     }
 
-    private func configurationKey(accountID: String, folderName: String) -> String {
-        "\(accountID)\u{0}\(folderName)"
+    private func configurationKey(accountID: String) -> String {
+        "default\u{0}\(accountID)"
     }
 }

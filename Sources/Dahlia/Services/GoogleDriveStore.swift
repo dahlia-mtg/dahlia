@@ -127,22 +127,6 @@ final class GoogleDriveStore: ObservableObject {
         recomputeState()
     }
 
-    func configureExportFolder(named folderName: String) async throws {
-        let session = try await refreshedAuthorizedSession()
-        state = .loading
-        defer { recomputeState() }
-        do {
-            try await exportFolderConfiguration.configure(
-                folderName: folderName,
-                session: session
-            )
-            exportFolderErrorMessage = nil
-        } catch {
-            recordExportFolderError(error)
-            throw error
-        }
-    }
-
     func refreshExportFolderConfiguration() async {
         guard isAuthorized else { return }
         do {

@@ -109,21 +109,14 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     // MARK: - Google Drive
 
-    @AppStorage("googleDriveExportFolderName") var googleDriveExportFolderName = AppSettings.defaultGoogleDriveExportFolderName
+    /// 変更可能だった試用版の保存先 ID を Meeting Notes として再利用しないため、旧フォルダ名も照合する。
+    @AppStorage("googleDriveExportFolderName") private var storedGoogleDriveExportFolderName = AppSettings.defaultGoogleDriveExportFolderName
     @AppStorage("googleDriveExportFolderID") private var googleDriveExportFolderID = ""
     @AppStorage("googleDriveExportFolderAccountID") private var googleDriveExportFolderAccountID = ""
 
-    var resolvedGoogleDriveExportFolderName: String {
-        Self.resolvedGoogleDriveExportFolderName(googleDriveExportFolderName)
-    }
-
-    nonisolated static func resolvedGoogleDriveExportFolderName(_ folderName: String) -> String {
-        folderName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfBlank
-            ?? defaultGoogleDriveExportFolderName
-    }
-
     func googleDriveExportFolderID(forAccountID accountID: String) -> String? {
-        guard googleDriveExportFolderAccountID == accountID else { return nil }
+        guard googleDriveExportFolderAccountID == accountID,
+              storedGoogleDriveExportFolderName == Self.defaultGoogleDriveExportFolderName else { return nil }
         return googleDriveExportFolderID.nilIfBlank
     }
 
@@ -139,11 +132,10 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     }
 
     func setGoogleDriveExportFolder(
-        name: String,
         id: String,
         accountID: String
     ) {
-        googleDriveExportFolderName = Self.resolvedGoogleDriveExportFolderName(name)
+        storedGoogleDriveExportFolderName = Self.defaultGoogleDriveExportFolderName
         googleDriveExportFolderID = id
         googleDriveExportFolderAccountID = accountID
     }
