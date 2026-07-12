@@ -10,25 +10,40 @@ struct LLMCredentialResolver {
 
     func accessToken(
         provider: LLMProvider,
-        openAIAPIToken: String,
+        apiToken: String,
+        databricksAuthenticationType: DatabricksAuthenticationType,
         databricksProfile: String
     ) async throws -> String {
         switch provider {
         case .openAI:
-            guard let token = openAIAPIToken.nilIfBlank else {
+            guard let token = apiToken.nilIfBlank else {
                 throw LLMCredentialError.openAITokenRequired
             }
             return token
         case .databricks:
-            return try await databricksClient.accessToken(profile: databricksProfile)
+            switch databricksAuthenticationType {
+            case .personalAccessToken:
+                guard let token = apiToken.nilIfBlank else {
+                    throw LLMCredentialError.databricksPersonalAccessTokenRequired
+                }
+                return token
+            case .oauthCLI:
+                return try await databricksClient.accessToken(profile: databricksProfile)
+            }
         }
     }
 }
 
 enum LLMCredentialError: LocalizedError {
     case openAITokenRequired
+    case databricksPersonalAccessTokenRequired
 
     var errorDescription: String? {
-        L10n.openAIAPITokenRequired
+        switch self {
+        case .openAITokenRequired:
+            L10n.openAIAPITokenRequired
+        case .databricksPersonalAccessTokenRequired:
+            L10n.databricksPersonalAccessTokenRequired
+        }
     }
 }

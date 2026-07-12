@@ -10,8 +10,18 @@ struct DatabricksCLIClient {
 
     struct Profile: Decodable, Hashable, Identifiable {
         let name: String
+        private let authenticationType: String
 
         var id: String { name }
+
+        fileprivate var usesOAuthU2M: Bool {
+            authenticationType == "databricks-cli"
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case name
+            case authenticationType = "auth_type"
+        }
     }
 
     typealias CommandRunner = @Sendable ([String]) async throws -> CommandOutput
@@ -71,21 +81,9 @@ struct DatabricksCLIClient {
         guard let response = try? JSONDecoder().decode(ProfilesResponse.self, from: output.standardOutput) else {
             throw DatabricksCLIError.invalidProfilesResponse
         }
-        return response.profiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
-    /// ブラウザベースの U2M ログインを開始し、指定プロファイルへ保存する。
-    func signIn(profile: String) async throws {
-        let profile = try normalizedProfile(profile)
-        let output = try await runCommand([
-            "auth",
-            "login",
-            "--profile",
-            profile,
-            "--timeout",
-            "5m",
-        ])
-        try validate(output)
+        return response.profiles
+            .filter(\.usesOAuthU2M)
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     /// CLI のキャッシュから短期アクセストークンを取得する。期限切れ時は CLI が自動更新する。

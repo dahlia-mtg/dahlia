@@ -319,14 +319,14 @@
 "Uses OpenAI's Chat Completions API." = "OpenAI の Chat Completions API を使用します。";
 "Databricks Workspace ID" = "Databricks Workspace ID";
 "Used to build the Databricks AI Gateway chat completions URL." = "Databricks AI Gateway の chat completions URL の生成に使用します。";
+"Authentication Type" = "認証方式";
+"Choose a Personal Access Token or OAuth through Databricks CLI." = "Personal Access Token または Databricks CLI 経由の OAuth を選択します。";
+"Personal Access Token" = "Personal Access Token";
+"OAuth (Databricks CLI)" = "OAuth (Databricks CLI)";
 "Databricks CLI Profile" = "Databricks CLI プロファイル";
 "OAuth credentials are read from this Databricks CLI profile." = "この Databricks CLI プロファイルから OAuth 認証情報を取得します。";
-"No Databricks CLI profiles found. Sign in to create the DAHLIA profile." = "Databricks CLI プロファイルが見つかりません。サインインすると DAHLIA プロファイルを作成します。";
+"No Databricks CLI profiles found. Run databricks auth login in Terminal, then refresh." = "Databricks CLI プロファイルが見つかりません。ターミナルで databricks auth login を実行してから再読み込みしてください。";
 "Refresh Profiles" = "プロファイルを再読み込み";
-"OAuth Authentication" = "OAuth 認証";
-"Uses the Databricks CLI to sign in and refresh short-lived tokens." = "Databricks CLI を使用してサインインし、短期トークンを更新します。";
-"Sign In with Databricks" = "Databricks でサインイン";
-"Signed in to Databricks" = "Databricks にサインインしました";
 "Databricks CLI was not found. Install it and relaunch Dahlia." = "Databricks CLI が見つかりません。インストールして Dahlia を再起動してください。";
 "Enter a Databricks CLI profile." = "Databricks CLI プロファイルを入力してください。";
 "Databricks CLI authentication failed: %@" = "Databricks CLI 認証に失敗しました: %@";
@@ -334,6 +334,7 @@
 "Databricks CLI returned an invalid OAuth token response." = "Databricks CLI から無効な OAuth トークンレスポンスが返されました。";
 "Databricks CLI returned an invalid profiles response." = "Databricks CLI から無効なプロファイルレスポンスが返されました。";
 "Enter an OpenAI API token." = "OpenAI API トークンを入力してください。";
+"Enter a Databricks personal access token." = "Databricks の Personal Access Token を入力してください。";
 "Endpoint will be generated after entering a Workspace ID." = "Workspace ID を入力するとエンドポイントが生成されます。";
 "The selected model is mapped to the provider's model ID." = "選択したモデルをプロバイダー固有のモデル ID に変換します。";
 "GPT-5.6 Sol" = "GPT-5.6 Sol";

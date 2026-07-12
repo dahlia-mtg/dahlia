@@ -5,11 +5,9 @@ struct AISummarySettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @State private var apiToken = ""
     @State private var isTestingConnection = false
-    @State private var isSigningInToDatabricks = false
     @State private var isLoadingDatabricksProfiles = false
     @State private var databricksProfiles: [DatabricksCLIClient.Profile] = []
     @State private var connectionTestResult: ConnectionTestResult?
-    @State private var databricksSignInResult: ConnectionTestResult?
     @State private var databricksProfileLoadError: String?
     private enum ConnectionTestResult {
         case success
@@ -49,13 +47,13 @@ struct AISummarySettingsView: View {
                     Text(L10n.maxTokensDescription)
                 }
 
-                if settings.llmProvider == .openAI {
+                if shouldShowAPITokenField {
                     LabeledContent {
                         SecureField("", text: $apiToken)
                             .textFieldStyle(.roundedBorder)
                             .onSubmit { settings.llmAPIToken = apiToken }
                     } label: {
-                        Text(L10n.apiToken)
+                        Text(apiTokenLabel)
                         Text(L10n.apiTokenStoredInKeychain)
                     }
                 }
@@ -77,21 +75,32 @@ struct AISummarySettingsView: View {
         .formStyle(.grouped)
         .task {
             apiToken = settings.llmAPIToken
-            await loadDatabricksProfiles()
+            if shouldLoadDatabricksProfiles {
+                await loadDatabricksProfiles()
+            }
         }
         .onDisappear {
             settings.llmAPIToken = apiToken
         }
         .onChange(of: settings.llmProviderRawValue) { _, _ in
             connectionTestResult = nil
-            databricksSignInResult = nil
+            if shouldLoadDatabricksProfiles {
+                Task { await loadDatabricksProfiles() }
+            }
         }
         .onChange(of: settings.llmModelRawValue) { _, _ in
             connectionTestResult = nil
         }
         .onChange(of: settings.llmDatabricksProfile) { _, _ in
             connectionTestResult = nil
-            databricksSignInResult = nil
+        }
+        .onChange(of: settings.llmDatabricksAuthenticationTypeRawValue) { _, _ in
+            connectionTestResult = nil
+            if shouldLoadDatabricksProfiles {
+                Task { await loadDatabricksProfiles() }
+            } else {
+                databricksProfileLoadError = nil
+            }
         }
     }
 
@@ -104,8 +113,31 @@ struct AISummarySettingsView: View {
         case .openAI:
             return apiToken.nilIfBlank != nil
         case .databricks:
-            return settings.llmDatabricksProfile.nilIfBlank != nil
+            switch settings.llmDatabricksAuthenticationType {
+            case .personalAccessToken:
+                return apiToken.nilIfBlank != nil
+            case .oauthCLI:
+                return databricksProfiles.contains { $0.name == settings.llmDatabricksProfile }
+            }
         }
+    }
+
+    private var shouldShowAPITokenField: Bool {
+        switch settings.llmProvider {
+        case .openAI:
+            true
+        case .databricks:
+            settings.llmDatabricksAuthenticationType == .personalAccessToken
+        }
+    }
+
+    private var shouldLoadDatabricksProfiles: Bool {
+        settings.llmProvider == .databricks
+            && settings.llmDatabricksAuthenticationType == .oauthCLI
+    }
+
+    private var apiTokenLabel: String {
+        settings.llmProvider == .databricks ? L10n.personalAccessToken : L10n.apiToken
     }
 
     @ViewBuilder
@@ -121,7 +153,7 @@ struct AISummarySettingsView: View {
             Button(L10n.testConnection) {
                 testConnection()
             }
-            .disabled(!isLLMConfigComplete || isSigningInToDatabricks)
+            .disabled(!isLLMConfigComplete)
         }
     }
 
@@ -175,70 +207,53 @@ struct AISummarySettingsView: View {
                 endpointPreview(settings.resolvedLLMEndpointURL)
             }
 
-            LabeledContent {
-                if isLoadingDatabricksProfiles {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if databricksProfiles.isEmpty {
-                    Text(L10n.noDatabricksProfiles)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("", selection: $settings.llmDatabricksProfile) {
-                        ForEach(databricksProfiles) { profile in
-                            Text(profile.name).tag(profile.name)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+            Picker(selection: $settings.llmDatabricksAuthenticationType) {
+                ForEach(DatabricksAuthenticationType.allCases) { authenticationType in
+                    Text(authenticationType.displayName).tag(authenticationType)
                 }
             } label: {
-                Text(L10n.databricksProfile)
-                Text(L10n.databricksProfileDescription)
+                Text(L10n.authenticationType)
+                Text(L10n.databricksAuthenticationTypeDescription)
             }
+            .pickerStyle(.menu)
 
-            LabeledContent {
-                if isSigningInToDatabricks {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
+            if settings.llmDatabricksAuthenticationType == .oauthCLI {
+                LabeledContent {
                     HStack {
-                        Button(L10n.signInToDatabricks) {
-                            signInToDatabricks()
+                        if isLoadingDatabricksProfiles {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if databricksProfiles.isEmpty {
+                            Text(L10n.noDatabricksProfiles)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("", selection: $settings.llmDatabricksProfile) {
+                                ForEach(databricksProfiles) { profile in
+                                    Text(profile.name).tag(profile.name)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
-                        .disabled(settings.llmDatabricksProfile.nilIfBlank == nil || isLoadingDatabricksProfiles)
 
                         Button(L10n.refreshDatabricksProfiles, systemImage: "arrow.clockwise") {
                             Task { await loadDatabricksProfiles() }
                         }
+                        .labelStyle(.iconOnly)
                         .disabled(isLoadingDatabricksProfiles)
                     }
+                } label: {
+                    Text(L10n.databricksProfile)
+                    Text(L10n.databricksProfileDescription)
                 }
-            } label: {
-                Text(L10n.databricksOAuth)
-                Text(L10n.databricksOAuthDescription)
-            }
 
-            if let result = databricksSignInResult {
-                switch result {
-                case .success:
+                if let databricksProfileLoadError {
                     SettingsStatusMessage(
-                        text: L10n.databricksSignInSuccess,
-                        systemImage: "checkmark.circle.fill",
-                        tint: .green
-                    )
-                case let .failure(message):
-                    SettingsStatusMessage(
-                        text: message,
+                        text: databricksProfileLoadError,
                         systemImage: "xmark.circle.fill",
                         tint: .red
                     )
                 }
-            } else if let databricksProfileLoadError {
-                SettingsStatusMessage(
-                    text: databricksProfileLoadError,
-                    systemImage: "xmark.circle.fill",
-                    tint: .red
-                )
             }
         }
     }
@@ -254,7 +269,7 @@ struct AISummarySettingsView: View {
     }
 
     private func testConnection() {
-        if settings.llmProvider == .openAI {
+        if shouldShowAPITokenField {
             settings.llmAPIToken = apiToken
         }
         connectionTestResult = nil
@@ -263,7 +278,8 @@ struct AISummarySettingsView: View {
             do {
                 let token = try await LLMCredentialResolver().accessToken(
                     provider: settings.llmProvider,
-                    openAIAPIToken: apiToken,
+                    apiToken: apiToken,
+                    databricksAuthenticationType: settings.llmDatabricksAuthenticationType,
                     databricksProfile: settings.llmDatabricksProfile
                 )
                 try await LLMService.testConnection(
@@ -279,27 +295,8 @@ struct AISummarySettingsView: View {
         }
     }
 
-    private func signInToDatabricks() {
-        settings.llmDatabricksProfile = settings.llmDatabricksProfile.trimmingCharacters(in: .whitespacesAndNewlines)
-        databricksSignInResult = nil
-        isSigningInToDatabricks = true
-        Task {
-            do {
-                let client = DatabricksCLIClient()
-                try await client.signIn(profile: settings.llmDatabricksProfile)
-                _ = try await client.accessToken(profile: settings.llmDatabricksProfile)
-                await loadDatabricksProfiles()
-                databricksSignInResult = .success
-            } catch {
-                databricksSignInResult = .failure(error.localizedDescription)
-            }
-            isSigningInToDatabricks = false
-        }
-    }
-
     private func loadDatabricksProfiles() async {
         isLoadingDatabricksProfiles = true
-        databricksSignInResult = nil
         databricksProfileLoadError = nil
         defer { isLoadingDatabricksProfiles = false }
 

@@ -28,7 +28,8 @@ enum SummaryService {
         let maxTokens = settings.llmMaxTokens
         let token = try await LLMCredentialResolver().accessToken(
             provider: settings.llmProvider,
-            openAIAPIToken: settings.llmAPIToken,
+            apiToken: settings.llmAPIToken,
+            databricksAuthenticationType: settings.llmDatabricksAuthenticationType,
             databricksProfile: settings.llmDatabricksProfile
         )
         let prompt = resolvedSummaryPrompt(settings: settings, repository: repository)

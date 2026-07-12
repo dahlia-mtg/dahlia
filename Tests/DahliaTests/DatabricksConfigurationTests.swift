@@ -6,9 +6,9 @@
     @MainActor
     struct DatabricksConfigurationTests {
         @Test
-        func profileSelectionSupportsFirstTimeSignInAndExistingProfiles() {
-            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "", availableProfiles: []) == "DAHLIA")
-            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "CUSTOM", availableProfiles: []) == "CUSTOM")
+        func profileSelectionUsesOnlyRegisteredCLIProfiles() {
+            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "", availableProfiles: []).isEmpty)
+            #expect(AppSettings.resolvedDatabricksProfileSelection(current: "CUSTOM", availableProfiles: []).isEmpty)
             #expect(
                 AppSettings.resolvedDatabricksProfileSelection(
                     current: "MISSING",
@@ -17,27 +17,30 @@
             )
             #expect(
                 AppSettings.resolvedDatabricksProfileSelection(
-                    current: "WORK",
+                    current: " WORK ",
                     availableProfiles: ["DEV", "WORK"]
                 ) == "WORK"
             )
         }
 
         @Test
-        func configurationRequiresWorkspaceAndCLIProfileInsteadOfPAT() {
+        func oauthConfigurationRequiresWorkspaceAndCLIProfile() {
             let settings = AppSettings.shared
             let previousProviderRawValue = settings.llmProviderRawValue
             let previousWorkspaceID = settings.llmDatabricksWorkspaceID
+            let previousAuthenticationTypeRawValue = settings.llmDatabricksAuthenticationTypeRawValue
             let previousProfile = settings.llmDatabricksProfile
             defer {
                 settings.llmProviderRawValue = previousProviderRawValue
                 settings.llmDatabricksWorkspaceID = previousWorkspaceID
+                settings.llmDatabricksAuthenticationTypeRawValue = previousAuthenticationTypeRawValue
                 settings.llmDatabricksProfile = previousProfile
             }
 
             settings.llmProvider = .databricks
             settings.llmDatabricksWorkspaceID = "1234567890123456"
-            settings.llmDatabricksProfile = "DAHLIA"
+            settings.llmDatabricksAuthenticationType = .oauthCLI
+            settings.llmDatabricksProfile = "WORK"
             #expect(settings.isLLMConfigComplete)
 
             settings.llmDatabricksProfile = "  "

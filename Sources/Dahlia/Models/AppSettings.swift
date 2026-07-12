@@ -94,7 +94,6 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     nonisolated static let automaticScreenshotIntervalSecondsUserDefaultsKey = "automaticScreenshotIntervalSeconds"
     nonisolated static let automaticScreenshotChangeThresholdPercentUserDefaultsKey = "automaticScreenshotChangeThresholdPercent"
     nonisolated static let defaultGoogleDriveExportFolderName = "Meeting Notes"
-    nonisolated static let defaultDatabricksProfile = "DAHLIA"
     fileprivate nonisolated static let defaultAutomaticScreenshotIntervalSeconds = 30
     fileprivate nonisolated static let defaultAutomaticScreenshotChangeThresholdPercent = 20
     nonisolated static let defaultLLMMaxTokens = 16000
@@ -377,7 +376,9 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     @AppStorage("llmProvider") var llmProviderRawValue = ""
     @AppStorage("llmDatabricksWorkspaceID") var llmDatabricksWorkspaceID = ""
-    @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = AppSettings.defaultDatabricksProfile
+    @AppStorage("llmDatabricksAuthenticationType") var llmDatabricksAuthenticationTypeRawValue =
+        DatabricksAuthenticationType.personalAccessToken.rawValue
+    @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = ""
     @AppStorage("llmModelName") var llmModelRawValue = LLMModel.defaultModel.rawValue
     @AppStorage("llmMaxTokens") private var storedLLMMaxTokens = AppSettings.defaultLLMMaxTokens
     @AppStorage("llmSummaryLanguage") var llmSummaryLanguageRawValue = SummaryLanguage.ja.rawValue
@@ -390,6 +391,14 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     var llmProvider: LLMProvider {
         get { LLMProvider(rawValue: llmProviderRawValue) ?? .openAI }
         set { llmProviderRawValue = newValue.rawValue }
+    }
+
+    var llmDatabricksAuthenticationType: DatabricksAuthenticationType {
+        get {
+            DatabricksAuthenticationType(rawValue: llmDatabricksAuthenticationTypeRawValue)
+                ?? .personalAccessToken
+        }
+        set { llmDatabricksAuthenticationTypeRawValue = newValue.rawValue }
     }
 
     var llmModel: LLMModel {
@@ -521,7 +530,12 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
         case .openAI:
             return llmAPIToken.nilIfBlank != nil
         case .databricks:
-            return llmDatabricksProfile.nilIfBlank != nil
+            switch llmDatabricksAuthenticationType {
+            case .personalAccessToken:
+                return llmAPIToken.nilIfBlank != nil
+            case .oauthCLI:
+                return llmDatabricksProfile.nilIfBlank != nil
+            }
         }
     }
 
@@ -537,9 +551,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
         availableProfiles: [String]
     ) -> String {
         let current = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let firstAvailableProfile = availableProfiles.first else {
-            return current.nilIfBlank ?? defaultDatabricksProfile
-        }
+        guard let firstAvailableProfile = availableProfiles.first else { return "" }
         return availableProfiles.contains(current) ? current : firstAvailableProfile
     }
 
