@@ -25,6 +25,10 @@ enum L10n {
         return resolved
     }
 
+    nonisolated static func localized(_ value: String.LocalizationValue) -> String {
+        String(localized: value, bundle: bundle)
+    }
+
     // MARK: - Common
 
     static var delete: String { String(localized: "Delete", bundle: bundle) }
