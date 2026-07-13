@@ -479,3 +479,32 @@
 "No compatible audio format is available." = "互換性のある音声形式を利用できません。";
 "The recorded audio range is invalid or damaged." = "録音音声の範囲が不正または破損しています。";
 "Speech analysis could not read the recorded audio." = "音声解析で録音データを読み取れませんでした。";
+
+/* Audio Diagnostics */
+"Audio Diagnostics" = "音声診断";
+"Microphone & Speech Recognition Test" = "マイク・音声認識テスト";
+"Test microphone input and speech recognition without creating a recording." = "録音データを作成せずに、マイク入力と音声認識を確認します。";
+"System Microphone Mode" = "システムのマイクモード";
+"Selected Mode" = "選択中のモード";
+"Active Mode" = "動作中のモード";
+"Open Microphone Modes…" = "マイクモードを開く…";
+"Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise." = "Dahlia は macOS のメニューバーで選択したマイクモードを使用します。「声を分離」では、スピーカー音や周囲の雑音を抑制します。";
+"Standard" = "標準";
+"Wide Spectrum" = "ワイドスペクトル";
+"Voice Isolation" = "声を分離";
+"Unknown Mode" = "不明なモード";
+"Start Test" = "テスト開始";
+"Stop Test" = "テスト停止";
+"Stop the current recording before starting an audio test." = "音声テストを開始する前に、現在の録音を停止してください。";
+"Test Status" = "テスト状態";
+"Input Level" = "入力レベル";
+"Audio Buffers" = "音声バッファ数";
+"Input Channel %lld" = "入力チャンネル %lld";
+"Hardware Format" = "ハードウェア形式";
+"Input Format" = "入力形式";
+"Recognition Format" = "認識形式";
+"Recognized Text" = "認識テキスト";
+"Speak into the selected microphone." = "選択したマイクに向かって話してください。";
+"Preparing speech recognition…" = "音声認識を準備中…";
+"Listening" = "認識中";
+"Stopped" = "停止中";

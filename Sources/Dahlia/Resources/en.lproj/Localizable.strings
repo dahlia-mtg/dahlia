@@ -479,3 +479,32 @@
 "No compatible audio format is available." = "No compatible audio format is available.";
 "The recorded audio range is invalid or damaged." = "The recorded audio range is invalid or damaged.";
 "Speech analysis could not read the recorded audio." = "Speech analysis could not read the recorded audio.";
+
+/* Audio Diagnostics */
+"Audio Diagnostics" = "Audio Diagnostics";
+"Microphone & Speech Recognition Test" = "Microphone & Speech Recognition Test";
+"Test microphone input and speech recognition without creating a recording." = "Test microphone input and speech recognition without creating a recording.";
+"System Microphone Mode" = "System Microphone Mode";
+"Selected Mode" = "Selected Mode";
+"Active Mode" = "Active Mode";
+"Open Microphone Modes…" = "Open Microphone Modes…";
+"Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise." = "Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise.";
+"Standard" = "Standard";
+"Wide Spectrum" = "Wide Spectrum";
+"Voice Isolation" = "Voice Isolation";
+"Unknown Mode" = "Unknown Mode";
+"Start Test" = "Start Test";
+"Stop Test" = "Stop Test";
+"Stop the current recording before starting an audio test." = "Stop the current recording before starting an audio test.";
+"Test Status" = "Test Status";
+"Input Level" = "Input Level";
+"Audio Buffers" = "Audio Buffers";
+"Input Channel %lld" = "Input Channel %lld";
+"Hardware Format" = "Hardware Format";
+"Input Format" = "Input Format";
+"Recognition Format" = "Recognition Format";
+"Recognized Text" = "Recognized Text";
+"Speak into the selected microphone." = "Speak into the selected microphone.";
+"Preparing speech recognition…" = "Preparing speech recognition…";
+"Listening" = "Listening";
+"Stopped" = "Stopped";
