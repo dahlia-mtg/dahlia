@@ -59,7 +59,7 @@ import Foundation
             let endpoint = try await resolver.endpoint(
                 provider: .databricks,
                 databricksAuthenticationType: .oauthCLI,
-                databricksWorkspaceID: "different-manual-value",
+                databricksWorkspaceURL: "https://different.example.com",
                 databricksProfile: "WORK"
             )
 
@@ -82,8 +82,39 @@ import Foundation
                 _ = try await resolver.endpoint(
                     provider: .databricks,
                     databricksAuthenticationType: .oauthCLI,
-                    databricksWorkspaceID: "manual-value",
+                    databricksWorkspaceURL: "https://manual.example.com",
                     databricksProfile: "WORK"
+                )
+            }
+        }
+
+        @Test
+        func endpointResolverUsesWorkspaceURLForPersonalAccessToken() async throws {
+            let resolver = LLMEndpointResolver()
+
+            let endpoint = try await resolver.endpoint(
+                provider: .databricks,
+                databricksAuthenticationType: .personalAccessToken,
+                databricksWorkspaceURL: " https://e2-demo-tokyo.cloud.databricks.com/ ",
+                databricksProfile: ""
+            )
+
+            #expect(
+                endpoint
+                    == "https://e2-demo-tokyo.cloud.databricks.com/ai-gateway/mlflow/v1/chat/completions"
+            )
+        }
+
+        @Test
+        func endpointResolverRejectsInvalidWorkspaceURLForPersonalAccessToken() async {
+            let resolver = LLMEndpointResolver()
+
+            await #expect(throws: LLMEndpointError.self) {
+                _ = try await resolver.endpoint(
+                    provider: .databricks,
+                    databricksAuthenticationType: .personalAccessToken,
+                    databricksWorkspaceURL: "984752964297111",
+                    databricksProfile: ""
                 )
             }
         }

@@ -66,7 +66,7 @@ struct AccountSettingsView: View {
         .onChange(of: settings.llmModelRawValue) { _, _ in
             connectionTestResult = nil
         }
-        .onChange(of: settings.llmDatabricksWorkspaceID) { _, _ in
+        .onChange(of: settings.llmDatabricksWorkspaceURL) { _, _ in
             connectionTestResult = nil
         }
         .onChange(of: settings.llmDatabricksProfile) { _, _ in
@@ -98,7 +98,7 @@ struct AccountSettingsView: View {
         if shouldLoadDatabricksProfiles {
             L10n.workspaceHostUnavailableFromProfile
         } else {
-            L10n.endpointGeneratedFromWorkspaceID
+            L10n.endpointGeneratedFromWorkspaceURL
         }
     }
 
@@ -191,13 +191,13 @@ struct AccountSettingsView: View {
             LabeledContent {
                 TextField(
                     "",
-                    text: $settings.llmDatabricksWorkspaceID,
-                    prompt: Text("1234567890123456")
+                    text: $settings.llmDatabricksWorkspaceURL,
+                    prompt: Text("https://e2-demo-tokyo.cloud.databricks.com")
                 )
                 .textFieldStyle(.roundedBorder)
             } label: {
-                Text(L10n.databricksWorkspaceID)
-                Text(L10n.databricksWorkspaceIDDescription)
+                Text(L10n.databricksWorkspaceURL)
+                Text(L10n.databricksWorkspaceURLDescription)
             }
         case .oauthCLI:
             DatabricksOAuthSettingsRows(
@@ -261,7 +261,7 @@ struct AccountSettingsView: View {
                 let endpoint = try await LLMEndpointResolver().endpoint(
                     provider: settings.llmProvider,
                     databricksAuthenticationType: settings.llmDatabricksAuthenticationType,
-                    databricksWorkspaceID: settings.llmDatabricksWorkspaceID,
+                    databricksWorkspaceURL: settings.llmDatabricksWorkspaceURL,
                     databricksProfile: settings.llmDatabricksProfile
                 )
                 let token = try await LLMCredentialResolver().accessToken(

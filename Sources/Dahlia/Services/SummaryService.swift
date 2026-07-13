@@ -26,7 +26,7 @@ enum SummaryService {
         let endpoint = try await LLMEndpointResolver().endpoint(
             provider: settings.llmProvider,
             databricksAuthenticationType: settings.llmDatabricksAuthenticationType,
-            databricksWorkspaceID: settings.llmDatabricksWorkspaceID,
+            databricksWorkspaceURL: settings.llmDatabricksWorkspaceURL,
             databricksProfile: settings.llmDatabricksProfile
         )
         let model = settings.resolvedLLMModelName

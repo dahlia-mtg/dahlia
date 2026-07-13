@@ -379,7 +379,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     // MARK: - LLM 設定
 
     @AppStorage("llmProvider") var llmProviderRawValue = ""
-    @AppStorage("llmDatabricksWorkspaceID") var llmDatabricksWorkspaceID = ""
+    @AppStorage("llmDatabricksWorkspaceURL") var llmDatabricksWorkspaceURL = ""
     @AppStorage("llmDatabricksAuthenticationType") var llmDatabricksAuthenticationTypeRawValue =
         DatabricksAuthenticationType.personalAccessToken.rawValue
     @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = ""
@@ -420,8 +420,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
             return Self.openAIEndpointURL
         case .databricks:
             guard llmDatabricksAuthenticationType == .personalAccessToken else { return "" }
-            guard let workspaceID = llmDatabricksWorkspaceID.nilIfBlank else { return "" }
-            return Self.databricksEndpointURL(workspaceID: workspaceID)
+            return Self.databricksEndpointURL(workspaceURL: llmDatabricksWorkspaceURL) ?? ""
         }
     }
 
@@ -539,14 +538,9 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     nonisolated static let openAIEndpointURL = "https://api.openai.com/v1/chat/completions"
 
-    nonisolated static func databricksEndpointURL(workspaceID: String) -> String {
-        let trimmedWorkspaceID = workspaceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "https://\(trimmedWorkspaceID).ai-gateway.cloud.databricks.com/mlflow/v1/chat/completions"
-    }
-
-    nonisolated static func databricksEndpointURL(workspaceHost: String) -> String? {
-        let trimmedHost = workspaceHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var components = URLComponents(string: trimmedHost),
+    nonisolated static func databricksEndpointURL(workspaceURL: String) -> String? {
+        let trimmedURL = workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmedURL),
               components.scheme == "https",
               components.host?.isEmpty == false
         else {

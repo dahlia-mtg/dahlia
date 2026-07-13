@@ -11,17 +11,17 @@ struct LLMEndpointResolver {
     func endpoint(
         provider: LLMProvider,
         databricksAuthenticationType: DatabricksAuthenticationType,
-        databricksWorkspaceID: String,
+        databricksWorkspaceURL: String,
         databricksProfile: String
     ) async throws -> String {
         switch (provider, databricksAuthenticationType) {
         case (.openAI, _):
             return AppSettings.openAIEndpointURL
         case (.databricks, .personalAccessToken):
-            guard let workspaceID = databricksWorkspaceID.nilIfBlank else {
-                throw LLMEndpointError.workspaceIDRequired
+            guard let endpoint = AppSettings.databricksEndpointURL(workspaceURL: databricksWorkspaceURL) else {
+                throw LLMEndpointError.workspaceURLInvalid
             }
-            return AppSettings.databricksEndpointURL(workspaceID: workspaceID)
+            return endpoint
         case (.databricks, .oauthCLI):
             let profiles = try await databricksClient.profiles()
             guard let profile = profiles.first(where: { $0.name == databricksProfile }) else {

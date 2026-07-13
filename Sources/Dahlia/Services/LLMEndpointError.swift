@@ -1,14 +1,14 @@
 import Foundation
 
 enum LLMEndpointError: LocalizedError {
-    case workspaceIDRequired
+    case workspaceURLInvalid
     case profileNotFound
     case profileWorkspaceHostUnavailable
 
     var errorDescription: String? {
         switch self {
-        case .workspaceIDRequired:
-            L10n.databricksWorkspaceIDRequired
+        case .workspaceURLInvalid:
+            L10n.databricksWorkspaceURLInvalid
         case .profileNotFound:
             L10n.databricksProfileNotFound
         case .profileWorkspaceHostUnavailable:

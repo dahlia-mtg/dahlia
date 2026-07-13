@@ -36,7 +36,7 @@ struct DatabricksCLIClient {
 
         var endpointURL: String? {
             guard let host else { return nil }
-            return AppSettings.databricksEndpointURL(workspaceHost: host)
+            return AppSettings.databricksEndpointURL(workspaceURL: host)
         }
 
         private enum CodingKeys: String, CodingKey {

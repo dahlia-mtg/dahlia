@@ -673,8 +673,9 @@ enum L10n {
     static var endpointURL: String { String(localized: "Endpoint URL", bundle: bundle) }
     static var openAIEndpointDescription: String { String(localized: "Uses OpenAI's Chat Completions API.", bundle: bundle) }
     static var databricksWorkspaceID: String { String(localized: "Databricks Workspace ID", bundle: bundle) }
-    static var databricksWorkspaceIDDescription: String { String(
-        localized: "Used to build the Databricks AI Gateway chat completions URL.",
+    static var databricksWorkspaceURL: String { String(localized: "Databricks Workspace URL", bundle: bundle) }
+    static var databricksWorkspaceURLDescription: String { String(
+        localized: "Enter the Workspace URL associated with this personal access token.",
         bundle: bundle
     ) }
     static var authenticationType: String { String(localized: "Authentication Type", bundle: bundle) }
@@ -700,7 +701,7 @@ enum L10n {
     ) }
     static var databricksProfileRequired: String { String(localized: "Enter a Databricks CLI profile.", bundle: bundle) }
     static var databricksProfileNotFound: String { String(localized: "The selected Databricks CLI profile was not found.", bundle: bundle) }
-    static var databricksWorkspaceIDRequired: String { String(localized: "Enter a Databricks Workspace ID.", bundle: bundle) }
+    static var databricksWorkspaceURLInvalid: String { String(localized: "Enter a valid HTTPS Databricks Workspace URL.", bundle: bundle) }
     static var workspaceIDUnavailableFromProfile: String { String(
         localized: "The selected Databricks CLI profile does not provide a Workspace ID.",
         bundle: bundle
@@ -730,8 +731,8 @@ enum L10n {
         localized: "Enter a Databricks personal access token.",
         bundle: bundle
     ) }
-    static var endpointGeneratedFromWorkspaceID: String { String(
-        localized: "Endpoint will be generated after entering a Workspace ID.",
+    static var endpointGeneratedFromWorkspaceURL: String { String(
+        localized: "Endpoint will be generated after entering a Workspace URL.",
         bundle: bundle
     ) }
     static var modelDescription: String { String(

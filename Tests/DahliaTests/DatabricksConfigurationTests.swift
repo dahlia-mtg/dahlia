@@ -27,18 +27,18 @@
         func oauthConfigurationRequiresOnlyCLIProfile() {
             let settings = AppSettings.shared
             let previousProviderRawValue = settings.llmProviderRawValue
-            let previousWorkspaceID = settings.llmDatabricksWorkspaceID
+            let previousWorkspaceURL = settings.llmDatabricksWorkspaceURL
             let previousAuthenticationTypeRawValue = settings.llmDatabricksAuthenticationTypeRawValue
             let previousProfile = settings.llmDatabricksProfile
             defer {
                 settings.llmProviderRawValue = previousProviderRawValue
-                settings.llmDatabricksWorkspaceID = previousWorkspaceID
+                settings.llmDatabricksWorkspaceURL = previousWorkspaceURL
                 settings.llmDatabricksAuthenticationTypeRawValue = previousAuthenticationTypeRawValue
                 settings.llmDatabricksProfile = previousProfile
             }
 
             settings.llmProvider = .databricks
-            settings.llmDatabricksWorkspaceID = ""
+            settings.llmDatabricksWorkspaceURL = ""
             settings.llmDatabricksAuthenticationType = .oauthCLI
             settings.llmDatabricksProfile = "WORK"
             #expect(settings.isLLMConfigComplete)
