@@ -5,20 +5,41 @@
 
     struct SettingsCategoryTests {
         @Test
-        func modelProviderAndAISummarySettingsAreSeparateCategories() throws {
-            #expect(SettingsCategory.modelProvider.label == L10n.modelProvider)
-            #expect(SettingsCategory.modelProvider.rawValue == "accounts")
-            #expect(SettingsCategory.aiSummary.label == L10n.aiSummary)
-            let modelProviderIndex = try #require(SettingsCategory.allCases.firstIndex(of: .modelProvider))
-            let aiSummaryIndex = try #require(SettingsCategory.allCases.firstIndex(of: .aiSummary))
-            #expect(modelProviderIndex < aiSummaryIndex)
+        func categoriesAreOrderedByUserWorkflow() {
+            #expect(SettingsCategory.allCases == [
+                .general,
+                .transcription,
+                .screenshots,
+                .calendar,
+                .cloudStorage,
+                .modelProvider,
+                .aiSummary,
+                .instructions,
+                .developer,
+                .audioDiagnostics,
+            ])
         }
 
         @Test
-        func debugCategoryIsLastAndUsesDebugPresentation() {
-            #expect(SettingsCategory.allCases.last == .audioDiagnostics)
-            #expect(SettingsCategory.audioDiagnostics.label == L10n.debug)
-            #expect(SettingsCategory.audioDiagnostics.systemImage == "ladybug")
+        func groupsContainEveryCategoryOnce() {
+            let groupedCategories = SettingsGroup.allCases.flatMap(\.categories)
+            #expect(groupedCategories == SettingsCategory.allCases)
+        }
+
+        @Test
+        func technicalCategoriesUseUserFacingLabelsWithoutChangingStoredValues() {
+            #expect(SettingsCategory.modelProvider.rawValue == "accounts")
+            #expect(SettingsCategory.modelProvider.label == L10n.aiConnection)
+            #expect(SettingsCategory.cloudStorage.rawValue == "cloudStorage")
+            #expect(SettingsCategory.cloudStorage.label == L10n.export)
+            #expect(SettingsCategory.audioDiagnostics.rawValue == "audioDiagnostics")
+            #expect(SettingsCategory.audioDiagnostics.label == L10n.diagnostics)
+        }
+
+        @Test
+        func advancedSettingsRemainAtTheEnd() {
+            #expect(SettingsGroup.allCases.last == .advanced)
+            #expect(SettingsGroup.advanced.categories == [.developer, .audioDiagnostics])
         }
     }
 #endif
