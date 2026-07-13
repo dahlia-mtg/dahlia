@@ -20,7 +20,7 @@ import Foundation
             let profiles = try await client.profiles()
 
             #expect(profiles.map(\.name) == ["DEV"])
-            #expect(await recorder.arguments == [
+            #expect(await recorder.commands.last == [
                 "auth",
                 "profiles",
                 "--skip-validate",
@@ -41,7 +41,7 @@ import Foundation
             let token = try await client.accessToken(profile: "Dahlia Dev")
 
             #expect(token == "oauth-token")
-            #expect(await recorder.arguments == [
+            #expect(await recorder.commands.last == [
                 "auth",
                 "token",
                 "--profile",
@@ -55,21 +55,56 @@ import Foundation
 
         @Test
         func accessTokenRejectsInvalidCLIResponse() async {
-            let client = DatabricksCLIClient { _ in
-                .init(standardOutput: Data("{}".utf8), standardError: Data(), terminationStatus: 0)
+            let recorder = CommandRecorder()
+            let client = DatabricksCLIClient { arguments in
+                await recorder.record(arguments)
+                return .init(standardOutput: Data("{}".utf8), standardError: Data(), terminationStatus: 0)
             }
 
             await #expect(throws: DatabricksCLIError.self) {
                 _ = try await client.accessToken(profile: "WORK")
             }
+            #expect(await recorder.commands.count == 1)
         }
 
         @Test
-        func commandFailureIncludesCLIErrorDetail() async {
-            let client = DatabricksCLIClient { _ in
-                .init(
+        func accessTokenReauthenticatesExpiredOAuthSessionAndRetries() async throws {
+            let recorder = CommandRecorder()
+            let response = Data(#"{"access_token":"renewed-token"}"#.utf8)
+            let client = DatabricksCLIClient { arguments in
+                let commandCount = await recorder.record(arguments)
+                switch commandCount {
+                case 1:
+                    return .init(
+                        standardOutput: Data(),
+                        standardError: Data("OAuth session expired. Run databricks auth login.".utf8),
+                        terminationStatus: 1
+                    )
+                case 2:
+                    return .init(standardOutput: Data(), standardError: Data(), terminationStatus: 0)
+                default:
+                    return .init(standardOutput: response, standardError: Data(), terminationStatus: 0)
+                }
+            }
+
+            let token = try await client.accessToken(profile: "WORK")
+
+            #expect(token == "renewed-token")
+            #expect(await recorder.commands == [
+                ["auth", "token", "--profile", "WORK", "--output", "json", "--timeout", "30s"],
+                ["auth", "login", "--profile", "WORK", "--timeout", "5m"],
+                ["auth", "token", "--profile", "WORK", "--output", "json", "--timeout", "30s"],
+            ])
+        }
+
+        @Test
+        func accessTokenDoesNotOpenLoginForUnrelatedCommandFailure() async {
+            let recorder = CommandRecorder()
+            let client = DatabricksCLIClient { arguments in
+                await recorder.record(arguments)
+                return .init(
                     standardOutput: Data(),
-                    standardError: Data("OAuth session expired".utf8),
+                    standardError: Data("dial tcp: network is unreachable".utf8),
                     terminationStatus: 1
                 )
             }
@@ -78,8 +113,39 @@ import Foundation
                 _ = try await client.accessToken(profile: "WORK")
                 Issue.record("Expected the CLI command to fail")
             } catch {
-                #expect(error.localizedDescription.contains("OAuth session expired"))
+                #expect(error.localizedDescription.contains("network is unreachable"))
             }
+            #expect(await recorder.commands.count == 1)
+            #expect(await recorder.commands.first?.prefix(2) == ["auth", "token"])
+        }
+
+        @Test
+        func accessTokenReturnsLoginFailureWithoutRetryingToken() async {
+            let recorder = CommandRecorder()
+            let client = DatabricksCLIClient { arguments in
+                let commandCount = await recorder.record(arguments)
+                if commandCount == 1 {
+                    return .init(
+                        standardOutput: Data(),
+                        standardError: Data("invalid_grant: refresh token has expired".utf8),
+                        terminationStatus: 1
+                    )
+                }
+                return .init(
+                    standardOutput: Data(),
+                    standardError: Data("browser sign-in was cancelled".utf8),
+                    terminationStatus: 1
+                )
+            }
+
+            do {
+                _ = try await client.accessToken(profile: "WORK")
+                Issue.record("Expected browser login to fail")
+            } catch {
+                #expect(error.localizedDescription.contains("browser sign-in was cancelled"))
+            }
+            #expect(await recorder.commands.count == 2)
+            #expect(await recorder.commands.last?.prefix(2) == ["auth", "login"])
         }
 
         @Test
@@ -99,7 +165,7 @@ import Foundation
                 databricksProfile: ""
             )
             #expect(openAIToken == "openai-token")
-            #expect(await recorder.arguments == nil)
+            #expect(await recorder.commands.isEmpty)
 
             let personalAccessToken = try await resolver.accessToken(
                 provider: .databricks,
@@ -108,7 +174,7 @@ import Foundation
                 databricksProfile: ""
             )
             #expect(personalAccessToken == "databricks-pat")
-            #expect(await recorder.arguments == nil)
+            #expect(await recorder.commands.isEmpty)
 
             let oauthToken = try await resolver.accessToken(
                 provider: .databricks,
@@ -117,7 +183,7 @@ import Foundation
                 databricksProfile: "WORK"
             )
             #expect(oauthToken == "short-lived-token")
-            #expect(await recorder.arguments?.prefix(2) == ["auth", "token"])
+            #expect(await recorder.commands.last?.prefix(2) == ["auth", "token"])
         }
 
         @Test
@@ -137,15 +203,17 @@ import Foundation
                     databricksProfile: "WORK"
                 )
             }
-            #expect(await recorder.arguments == nil)
+            #expect(await recorder.commands.isEmpty)
         }
     }
 
     private actor CommandRecorder {
-        private(set) var arguments: [String]?
+        private(set) var commands: [[String]] = []
 
-        func record(_ arguments: [String]) {
-            self.arguments = arguments
+        @discardableResult
+        func record(_ arguments: [String]) -> Int {
+            commands.append(arguments)
+            return commands.count
         }
     }
 #endif

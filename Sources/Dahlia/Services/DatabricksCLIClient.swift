@@ -86,10 +86,32 @@ struct DatabricksCLIClient {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// CLI のキャッシュから短期アクセストークンを取得する。期限切れ時は CLI が自動更新する。
+    /// CLI のキャッシュから短期アクセストークンを取得する。
+    /// アクセストークンを更新できない場合はブラウザで再認証し、一度だけ取得を再試行する。
     func accessToken(profile: String) async throws -> String {
         let profile = try normalizedProfile(profile)
-        let output = try await runCommand([
+        var tokenOutput = try await requestAccessToken(profile: profile)
+
+        if tokenOutput.requiresReauthentication {
+            try await authenticate(profile: profile)
+            tokenOutput = try await requestAccessToken(profile: profile)
+        }
+
+        return try accessToken(from: tokenOutput)
+    }
+
+    private func accessToken(from output: CommandOutput) throws -> String {
+        try validate(output)
+        guard let response = try? JSONDecoder().decode(TokenResponse.self, from: output.standardOutput),
+              let token = response.accessToken.nilIfBlank
+        else {
+            throw DatabricksCLIError.invalidTokenResponse
+        }
+        return token
+    }
+
+    private func requestAccessToken(profile: String) async throws -> CommandOutput {
+        try await runCommand([
             "auth",
             "token",
             "--profile",
@@ -99,14 +121,18 @@ struct DatabricksCLIClient {
             "--timeout",
             "30s",
         ])
-        try validate(output)
+    }
 
-        guard let response = try? JSONDecoder().decode(TokenResponse.self, from: output.standardOutput),
-              let token = response.accessToken.nilIfBlank
-        else {
-            throw DatabricksCLIError.invalidTokenResponse
-        }
-        return token
+    private func authenticate(profile: String) async throws {
+        let output = try await runCommand([
+            "auth",
+            "login",
+            "--profile",
+            profile,
+            "--timeout",
+            "5m",
+        ])
+        try validate(output)
     }
 
     static func locateExecutable(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
@@ -148,6 +174,28 @@ struct DatabricksCLIClient {
 
     private struct ProfilesResponse: Decodable {
         let profiles: [Profile]
+    }
+}
+
+private extension DatabricksCLIClient.CommandOutput {
+    var requiresReauthentication: Bool {
+        guard terminationStatus != 0 else { return false }
+
+        let messageData = standardOutput + standardError
+        guard let message = String(data: messageData, encoding: .utf8)?.lowercased() else { return false }
+
+        return [
+            "databricks auth login",
+            "invalid_grant",
+            "not logged in",
+            "oauth session expired",
+            "refresh token is invalid",
+            "refresh token has expired",
+            "refresh token has been revoked",
+            "token not found in cache",
+            "no token found",
+            "reauthenticate",
+        ].contains { message.contains($0) }
     }
 }
 
