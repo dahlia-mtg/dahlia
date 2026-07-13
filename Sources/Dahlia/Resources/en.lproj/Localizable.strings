@@ -488,7 +488,7 @@
 "Selected Mode" = "Selected Mode";
 "Active Mode" = "Active Mode";
 "Open Microphone Modes…" = "Open Microphone Modes…";
-"Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise." = "Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise.";
+"Dahlia uses the microphone mode selected in the macOS menu bar when the active audio route supports it. Voice Isolation reduces speaker audio and surrounding noise." = "Dahlia uses the microphone mode selected in the macOS menu bar when the active audio route supports it. Voice Isolation reduces speaker audio and surrounding noise.";
 "Standard" = "Standard";
 "Wide Spectrum" = "Wide Spectrum";
 "Voice Isolation" = "Voice Isolation";

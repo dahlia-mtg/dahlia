@@ -790,7 +790,10 @@ enum L10n {
     static var activeMicrophoneMode: String { String(localized: "Active Mode", bundle: bundle) }
     static var openMicrophoneModes: String { String(localized: "Open Microphone Modes…", bundle: bundle) }
     static var systemMicrophoneModeDescription: String { String(
-        localized: "Dahlia follows the microphone mode selected in the macOS menu bar. Voice Isolation reduces speaker audio and surrounding noise.",
+        localized: """
+        Dahlia uses the microphone mode selected in the macOS menu bar when the active audio route \
+        supports it. Voice Isolation reduces speaker audio and surrounding noise.
+        """,
         bundle: bundle
     ) }
     static var microphoneModeStandard: String { String(localized: "Standard", bundle: bundle) }

@@ -8,8 +8,8 @@ import Observation
 final class MicrophoneRecognitionTestModel {
     private(set) var devices: [MicrophoneDevice] = []
     var selectedDeviceID: AudioDeviceID?
-    private(set) var preferredMicrophoneMode = AVCaptureDevice.preferredMicrophoneMode
-    private(set) var activeMicrophoneMode = AVCaptureDevice.activeMicrophoneMode
+    private(set) var preferredMicrophoneMode: AVCaptureDevice.MicrophoneMode
+    private(set) var activeMicrophoneMode: AVCaptureDevice.MicrophoneMode
     private(set) var isRunning = false
     private(set) var isPreparing = false
     private(set) var inputLevel = 0.0
@@ -21,6 +21,29 @@ final class MicrophoneRecognitionTestModel {
     private(set) var startInfo: AudioCaptureStartInfo?
 
     private var session: MicrophoneRecognitionTestSession?
+    private let microphoneModeProvider: () -> (
+        preferred: AVCaptureDevice.MicrophoneMode,
+        active: AVCaptureDevice.MicrophoneMode
+    )
+    private let microphoneModeRefreshDelay: () async throws -> Void
+
+    init(
+        microphoneModeProvider: @escaping () -> (
+            preferred: AVCaptureDevice.MicrophoneMode,
+            active: AVCaptureDevice.MicrophoneMode
+        ) = {
+            (AVCaptureDevice.preferredMicrophoneMode, AVCaptureDevice.activeMicrophoneMode)
+        },
+        microphoneModeRefreshDelay: @escaping () async throws -> Void = {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+    ) {
+        self.microphoneModeProvider = microphoneModeProvider
+        self.microphoneModeRefreshDelay = microphoneModeRefreshDelay
+        let microphoneModes = microphoneModeProvider()
+        preferredMicrophoneMode = microphoneModes.preferred
+        activeMicrophoneMode = microphoneModes.active
+    }
 
     var isActive: Bool {
         isRunning || isPreparing
@@ -56,8 +79,20 @@ final class MicrophoneRecognitionTestModel {
     }
 
     func refreshMicrophoneModes() {
-        preferredMicrophoneMode = AVCaptureDevice.preferredMicrophoneMode
-        activeMicrophoneMode = AVCaptureDevice.activeMicrophoneMode
+        let microphoneModes = microphoneModeProvider()
+        preferredMicrophoneMode = microphoneModes.preferred
+        activeMicrophoneMode = microphoneModes.active
+    }
+
+    func monitorMicrophoneModes() async {
+        while !Task.isCancelled {
+            refreshMicrophoneModes()
+            do {
+                try await microphoneModeRefreshDelay()
+            } catch {
+                return
+            }
+        }
     }
 
     func showMicrophoneModes() {

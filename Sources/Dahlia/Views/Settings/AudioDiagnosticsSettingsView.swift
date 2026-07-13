@@ -96,6 +96,7 @@ struct AudioDiagnosticsSettingsView: View {
         .formStyle(.grouped)
         .task {
             model.refreshDevices()
+            await model.monitorMicrophoneModes()
         }
         .onDisappear {
             stopTest()
@@ -104,9 +105,6 @@ struct AudioDiagnosticsSettingsView: View {
             if isListening {
                 stopTest()
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            model.refreshMicrophoneModes()
         }
     }
 
