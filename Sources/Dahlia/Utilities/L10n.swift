@@ -777,9 +777,9 @@ enum L10n {
     static var microphoneUnavailable: String { String(localized: "The selected microphone is unavailable", bundle: bundle) }
     static var noAudioSourceSelected: String { String(localized: "Select at least one audio source", bundle: bundle) }
 
-    // MARK: - Audio Diagnostics
+    // MARK: - Debug
 
-    static var audioDiagnostics: String { String(localized: "Audio Diagnostics", bundle: bundle) }
+    static var debug: String { String(localized: "Debug", bundle: bundle) }
     static var audioRecognitionTest: String { String(localized: "Microphone & Speech Recognition Test", bundle: bundle) }
     static var audioRecognitionTestDescription: String { String(
         localized: "Test microphone input and speech recognition without creating a recording.",

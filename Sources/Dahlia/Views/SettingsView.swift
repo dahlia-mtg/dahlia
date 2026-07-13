@@ -6,11 +6,11 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case calendar
     case cloudStorage
     case transcription
-    case audioDiagnostics
     case screenshots
     case aiSummary
     case instructions
     case developer
+    case audioDiagnostics
 
     var id: String { rawValue }
 
@@ -20,7 +20,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .calendar: L10n.calendar
         case .cloudStorage: L10n.cloudStorage
         case .transcription: L10n.transcription
-        case .audioDiagnostics: L10n.audioDiagnostics
+        case .audioDiagnostics: L10n.debug
         case .screenshots: L10n.screenshots
         case .aiSummary: L10n.foundationModels
         case .instructions: L10n.instructions
@@ -34,7 +34,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .calendar: "calendar"
         case .cloudStorage: "externaldrive.badge.icloud"
         case .transcription: "waveform"
-        case .audioDiagnostics: "waveform.badge.magnifyingglass"
+        case .audioDiagnostics: "ladybug"
         case .screenshots: "photo.on.rectangle.angled"
         case .aiSummary: "sparkles"
         case .instructions: "list.bullet.clipboard"
@@ -91,14 +91,6 @@ struct SettingsView: View {
             }
 
             Tab(
-                SettingsCategory.audioDiagnostics.label,
-                systemImage: SettingsCategory.audioDiagnostics.systemImage,
-                value: SettingsCategory.audioDiagnostics
-            ) {
-                AudioDiagnosticsSettingsView(captionViewModel: captionViewModel)
-            }
-
-            Tab(
                 SettingsCategory.screenshots.label,
                 systemImage: SettingsCategory.screenshots.systemImage,
                 value: SettingsCategory.screenshots
@@ -128,6 +120,14 @@ struct SettingsView: View {
                 value: SettingsCategory.developer
             ) {
                 DeveloperSettingsView()
+            }
+
+            Tab(
+                SettingsCategory.audioDiagnostics.label,
+                systemImage: SettingsCategory.audioDiagnostics.systemImage,
+                value: SettingsCategory.audioDiagnostics
+            ) {
+                AudioDiagnosticsSettingsView(captionViewModel: captionViewModel)
             }
         }
         .frame(minWidth: 680, minHeight: 500)

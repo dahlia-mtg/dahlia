@@ -480,8 +480,8 @@
 "The recorded audio range is invalid or damaged." = "録音音声の範囲が不正または破損しています。";
 "Speech analysis could not read the recorded audio." = "音声解析で録音データを読み取れませんでした。";
 
-/* Audio Diagnostics */
-"Audio Diagnostics" = "音声診断";
+/* Debug */
+"Debug" = "デバッグ";
 "Microphone & Speech Recognition Test" = "マイク・音声認識テスト";
 "Test microphone input and speech recognition without creating a recording." = "録音データを作成せずに、マイク入力と音声認識を確認します。";
 "System Microphone Mode" = "システムのマイクモード";

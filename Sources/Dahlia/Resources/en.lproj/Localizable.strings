@@ -480,8 +480,8 @@
 "The recorded audio range is invalid or damaged." = "The recorded audio range is invalid or damaged.";
 "Speech analysis could not read the recorded audio." = "Speech analysis could not read the recorded audio.";
 
-/* Audio Diagnostics */
-"Audio Diagnostics" = "Audio Diagnostics";
+/* Debug */
+"Debug" = "Debug";
 "Microphone & Speech Recognition Test" = "Microphone & Speech Recognition Test";
 "Test microphone input and speech recognition without creating a recording." = "Test microphone input and speech recognition without creating a recording.";
 "System Microphone Mode" = "System Microphone Mode";
