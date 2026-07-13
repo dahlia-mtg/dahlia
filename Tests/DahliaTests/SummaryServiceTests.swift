@@ -470,21 +470,24 @@ struct SummaryServiceTests {
     }
 
     @Test
-    func llmProviderBuildsDatabricksAIGatewayEndpointFromWorkspaceID() {
+    func llmProviderBuildsDatabricksAIGatewayEndpointFromWorkspaceURL() {
         let settings = AppSettings.shared
         let previousProviderRawValue = settings.llmProviderRawValue
-        let previousWorkspaceID = settings.llmDatabricksWorkspaceID
+        let previousWorkspaceURL = settings.llmDatabricksWorkspaceURL
+        let previousAuthenticationTypeRawValue = settings.llmDatabricksAuthenticationTypeRawValue
         defer {
             settings.llmProviderRawValue = previousProviderRawValue
-            settings.llmDatabricksWorkspaceID = previousWorkspaceID
+            settings.llmDatabricksWorkspaceURL = previousWorkspaceURL
+            settings.llmDatabricksAuthenticationTypeRawValue = previousAuthenticationTypeRawValue
         }
 
         settings.llmProvider = .databricks
-        settings.llmDatabricksWorkspaceID = " 1234567890123456 "
+        settings.llmDatabricksAuthenticationType = .personalAccessToken
+        settings.llmDatabricksWorkspaceURL = " https://adb-984752964297111.11.azuredatabricks.net/ "
 
         #expect(
             settings.resolvedLLMEndpointURL
-                == "https://1234567890123456.ai-gateway.cloud.databricks.com/mlflow/v1/chat/completions"
+                == "https://adb-984752964297111.11.azuredatabricks.net/ai-gateway/mlflow/v1/chat/completions"
         )
     }
 

@@ -377,7 +377,7 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     // MARK: - LLM 設定
 
     @AppStorage("llmProvider") var llmProviderRawValue = ""
-    @AppStorage("llmDatabricksWorkspaceID") var llmDatabricksWorkspaceID = ""
+    @AppStorage("llmDatabricksWorkspaceURL") var llmDatabricksWorkspaceURL = ""
     @AppStorage("llmDatabricksAuthenticationType") var llmDatabricksAuthenticationTypeRawValue =
         DatabricksAuthenticationType.personalAccessToken.rawValue
     @AppStorage("llmDatabricksProfile") var llmDatabricksProfile = ""
@@ -417,8 +417,8 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
         case .openAI:
             return Self.openAIEndpointURL
         case .databricks:
-            guard let workspaceID = llmDatabricksWorkspaceID.nilIfBlank else { return "" }
-            return Self.databricksEndpointURL(workspaceID: workspaceID)
+            guard llmDatabricksAuthenticationType == .personalAccessToken else { return "" }
+            return Self.databricksEndpointURL(workspaceURL: llmDatabricksWorkspaceURL) ?? ""
         }
     }
 
@@ -526,26 +526,29 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     /// LLM の接続設定が揃っているかどうか。
     var isLLMConfigComplete: Bool {
-        guard resolvedLLMEndpointURL.nilIfBlank != nil else { return false }
-
-        switch llmProvider {
-        case .openAI:
-            return llmAPIToken.nilIfBlank != nil
-        case .databricks:
-            switch llmDatabricksAuthenticationType {
-            case .personalAccessToken:
-                return llmAPIToken.nilIfBlank != nil
-            case .oauthCLI:
-                return llmDatabricksProfile.nilIfBlank != nil
-            }
+        switch (llmProvider, llmDatabricksAuthenticationType) {
+        case (.openAI, _), (.databricks, .personalAccessToken):
+            resolvedLLMEndpointURL.nilIfBlank != nil && llmAPIToken.nilIfBlank != nil
+        case (.databricks, .oauthCLI):
+            llmDatabricksProfile.nilIfBlank != nil
         }
     }
 
     nonisolated static let openAIEndpointURL = "https://api.openai.com/v1/chat/completions"
 
-    nonisolated static func databricksEndpointURL(workspaceID: String) -> String {
-        let trimmedWorkspaceID = workspaceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "https://\(trimmedWorkspaceID).ai-gateway.cloud.databricks.com/mlflow/v1/chat/completions"
+    nonisolated static func databricksEndpointURL(workspaceURL: String) -> String? {
+        let trimmedURL = workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmedURL),
+              components.scheme == "https",
+              components.host?.isEmpty == false
+        else {
+            return nil
+        }
+
+        components.path = "/ai-gateway/mlflow/v1/chat/completions"
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString
     }
 
     nonisolated static func resolvedDatabricksProfileSelection(

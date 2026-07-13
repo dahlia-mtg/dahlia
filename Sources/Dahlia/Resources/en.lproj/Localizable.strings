@@ -217,7 +217,7 @@
 "General" = "General";
 "Notifications" = "Notifications";
 "Calendar" = "Calendar";
-"Foundation Models" = "Foundation Models";
+"AI Summary" = "AI Summary";
 "Developer Settings" = "Developer Settings";
 "Vault" = "Vault";
 "Current Vault" = "Current Vault";
@@ -235,7 +235,8 @@
 "Target Language" = "Target Language";
 "Choose which language translated transcript lines should use." = "Choose which language translated transcript lines should use.";
 "Translation is automatically disabled when the target language matches the transcription language." = "Translation is automatically disabled when the target language matches the transcription language.";
-"Configure the LLM connection used for manual summary generation." = "Configure the LLM connection used for manual summary generation.";
+"Configure credentials and connection settings for the model provider used by AI summaries." = "Configure credentials and connection settings for the model provider used by AI summaries.";
+"Choose the model and output limit used to generate AI summaries." = "Choose the model and output limit used to generate AI summaries.";
 "Run a quick request to validate your endpoint, model, and token." = "Run a quick request to validate your provider settings, model, and token.";
 "Override developer-managed credentials used by external service integrations." = "Override developer-managed credentials used by external service integrations.";
 "Google OAuth Client ID" = "Google OAuth Client ID";
@@ -340,7 +341,6 @@
 "Only selected languages will appear in the language picker. All languages are shown if none are selected." = "Only selected languages will appear in the language picker. All languages are shown if none are selected.";
 
 /* Settings - LLM */
-"LLM Settings" = "Model Settings";
 "OpenAI" = "OpenAI";
 "Databricks" = "Databricks";
 "Model Provider" = "Model Provider";
@@ -348,7 +348,8 @@
 "Endpoint URL" = "Endpoint URL";
 "Uses OpenAI's Chat Completions API." = "Uses OpenAI's Chat Completions API.";
 "Databricks Workspace ID" = "Databricks Workspace ID";
-"Used to build the Databricks AI Gateway chat completions URL." = "Used to build the Databricks AI Gateway chat completions URL.";
+"Databricks Workspace URL" = "Databricks Workspace URL";
+"Enter the Workspace URL associated with this personal access token." = "Enter the Workspace URL associated with this personal access token.";
 "Authentication Type" = "Authentication Type";
 "Choose a Personal Access Token or OAuth through Databricks CLI." = "Choose a Personal Access Token or OAuth through Databricks CLI.";
 "Personal Access Token" = "Personal Access Token";
@@ -359,13 +360,17 @@
 "Refresh Profiles" = "Refresh Profiles";
 "Databricks CLI was not found. Install it and relaunch Dahlia." = "Databricks CLI was not found. Install it and relaunch Dahlia.";
 "Enter a Databricks CLI profile." = "Enter a Databricks CLI profile.";
+"The selected Databricks CLI profile was not found." = "The selected Databricks CLI profile was not found.";
+"Enter a valid HTTPS Databricks Workspace URL." = "Enter a valid HTTPS Databricks Workspace URL.";
+"The selected Databricks CLI profile does not provide a Workspace ID." = "The selected Databricks CLI profile does not provide a Workspace ID.";
+"The selected Databricks CLI profile does not provide a valid workspace URL." = "The selected Databricks CLI profile does not provide a valid workspace URL.";
 "Databricks CLI authentication failed: %@" = "Databricks CLI authentication failed: %@";
 "Databricks CLI authentication failed." = "Databricks CLI authentication failed.";
 "Databricks CLI returned an invalid OAuth token response." = "Databricks CLI returned an invalid OAuth token response.";
 "Databricks CLI returned an invalid profiles response." = "Databricks CLI returned an invalid profiles response.";
 "Enter an OpenAI API token." = "Enter an OpenAI API token.";
 "Enter a Databricks personal access token." = "Enter a Databricks personal access token.";
-"Endpoint will be generated after entering a Workspace ID." = "Endpoint will be generated after entering a Workspace ID.";
+"Endpoint will be generated after entering a Workspace URL." = "Endpoint will be generated after entering a Workspace URL.";
 "The selected model is mapped to the provider's model ID." = "The selected model is mapped to the provider's model ID.";
 "GPT-5.6 Sol" = "GPT-5.6 Sol";
 "GPT-5.6 Terra" = "GPT-5.6 Terra";
@@ -375,7 +380,6 @@
 "Limits the number of tokens generated for each summary." = "Limits the number of tokens generated for each summary.";
 "API Token" = "API Token";
 "Token is stored securely in Keychain." = "Token is stored securely in Keychain.";
-"Configure an LLM endpoint for manual summary generation." = "Configure the model provider and connection settings used for manual summary generation.";
 "Test Connection" = "Test Connection";
 "Testing..." = "Testing...";
 "Connection successful" = "Connection successful";

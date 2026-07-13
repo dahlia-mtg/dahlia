@@ -423,7 +423,7 @@ enum L10n {
     static var notifications: String { String(localized: "Notifications", bundle: bundle) }
     static var calendar: String { String(localized: "Calendar", bundle: bundle) }
     static var cloudStorage: String { String(localized: "Cloud Storage", bundle: bundle) }
-    static var foundationModels: String { String(localized: "Foundation Models", bundle: bundle) }
+    static var aiSummary: String { String(localized: "AI Summary", bundle: bundle) }
     static var developerSettings: String { String(localized: "Developer Settings", bundle: bundle) }
     static var vault: String { String(localized: "Vault", bundle: bundle) }
     static var currentVault: String { String(localized: "Current Vault", bundle: bundle) }
@@ -471,8 +471,12 @@ enum L10n {
         localized: "Translation is automatically disabled when the target language matches the transcription language.",
         bundle: bundle
     ) }
-    static var aiSummarySettingsDescription: String { String(
-        localized: "Configure the LLM connection used for manual summary generation.",
+    static var modelProviderSettingsDescription: String { String(
+        localized: "Configure credentials and connection settings for the model provider used by AI summaries.",
+        bundle: bundle
+    ) }
+    static var aiSummaryModelSettingsDescription: String { String(
+        localized: "Choose the model and output limit used to generate AI summaries.",
         bundle: bundle
     ) }
     static var connectionDiagnosticsDescription: String { String(
@@ -747,7 +751,6 @@ enum L10n {
 
     static var model: String { String(localized: "Model", bundle: bundle) }
     static var templates: String { String(localized: "Templates", bundle: bundle) }
-    static var llmSettings: String { String(localized: "LLM Settings", bundle: bundle) }
     static var openAI: String { String(localized: "OpenAI", bundle: bundle) }
     static var databricks: String { String(localized: "Databricks", bundle: bundle) }
     static var modelProvider: String { String(localized: "Model Provider", bundle: bundle) }
@@ -758,8 +761,9 @@ enum L10n {
     static var endpointURL: String { String(localized: "Endpoint URL", bundle: bundle) }
     static var openAIEndpointDescription: String { String(localized: "Uses OpenAI's Chat Completions API.", bundle: bundle) }
     static var databricksWorkspaceID: String { String(localized: "Databricks Workspace ID", bundle: bundle) }
-    static var databricksWorkspaceIDDescription: String { String(
-        localized: "Used to build the Databricks AI Gateway chat completions URL.",
+    static var databricksWorkspaceURL: String { String(localized: "Databricks Workspace URL", bundle: bundle) }
+    static var databricksWorkspaceURLDescription: String { String(
+        localized: "Enter the Workspace URL associated with this personal access token.",
         bundle: bundle
     ) }
     static var authenticationType: String { String(localized: "Authentication Type", bundle: bundle) }
@@ -784,6 +788,16 @@ enum L10n {
         bundle: bundle
     ) }
     static var databricksProfileRequired: String { String(localized: "Enter a Databricks CLI profile.", bundle: bundle) }
+    static var databricksProfileNotFound: String { String(localized: "The selected Databricks CLI profile was not found.", bundle: bundle) }
+    static var databricksWorkspaceURLInvalid: String { String(localized: "Enter a valid HTTPS Databricks Workspace URL.", bundle: bundle) }
+    static var workspaceIDUnavailableFromProfile: String { String(
+        localized: "The selected Databricks CLI profile does not provide a Workspace ID.",
+        bundle: bundle
+    ) }
+    static var workspaceHostUnavailableFromProfile: String { String(
+        localized: "The selected Databricks CLI profile does not provide a valid workspace URL.",
+        bundle: bundle
+    ) }
     static func databricksCLICommandFailed(_ detail: String) -> String { String(
         localized: "Databricks CLI authentication failed: \(detail)",
         bundle: bundle
@@ -805,8 +819,8 @@ enum L10n {
         localized: "Enter a Databricks personal access token.",
         bundle: bundle
     ) }
-    static var endpointGeneratedFromWorkspaceID: String { String(
-        localized: "Endpoint will be generated after entering a Workspace ID.",
+    static var endpointGeneratedFromWorkspaceURL: String { String(
+        localized: "Endpoint will be generated after entering a Workspace URL.",
         bundle: bundle
     ) }
     static var modelDescription: String { String(
@@ -824,7 +838,6 @@ enum L10n {
     ) }
     static var apiToken: String { String(localized: "API Token", bundle: bundle) }
     static var apiTokenStoredInKeychain: String { String(localized: "Token is stored securely in Keychain.", bundle: bundle) }
-    static var llmSettingsDescription: String { String(localized: "Configure an LLM endpoint for manual summary generation.", bundle: bundle) }
     static var testConnection: String { String(localized: "Test Connection", bundle: bundle) }
     static var testing: String { String(localized: "Testing...", bundle: bundle) }
     static var connectionSuccess: String { String(localized: "Connection successful", bundle: bundle) }

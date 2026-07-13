@@ -9,8 +9,12 @@ import Foundation
         func profilesReturnsOnlyOAuthU2MProfilesWithoutValidation() async throws {
             let recorder = CommandRecorder()
             let response = Data(
-                #"{"profiles":[{"name":"WORK","host":"https://work.example.com","auth_type":"pat"},{"name":"DEV","host":"https://dev.example.com","auth_type":"databricks-cli"}]}"#
-                    .utf8
+                """
+                {"profiles":[
+                    {"name":"WORK","host":"https://work.example.com","auth_type":"pat","workspace_id":"111"},
+                    {"name":"DEV","host":"https://adb-222.7.azuredatabricks.net/","auth_type":"databricks-cli","workspace_id":222}
+                ]}
+                """.utf8
             )
             let client = DatabricksCLIClient { arguments in
                 await recorder.record(arguments)
@@ -20,6 +24,12 @@ import Foundation
             let profiles = try await client.profiles()
 
             #expect(profiles.map(\.name) == ["DEV"])
+            #expect(profiles.compactMap(\.workspaceID) == ["222"])
+            #expect(profiles.first?.host == "https://adb-222.7.azuredatabricks.net/")
+            #expect(
+                profiles.first?.endpointURL
+                    == "https://adb-222.7.azuredatabricks.net/ai-gateway/mlflow/v1/chat/completions"
+            )
             #expect(await recorder.commands.last == [
                 "auth",
                 "profiles",
@@ -27,6 +37,86 @@ import Foundation
                 "--output",
                 "json",
             ])
+        }
+
+        @Test
+        func endpointResolverUsesGCPWorkspaceHostFromSelectedOAuthProfile() async throws {
+            let recorder = CommandRecorder()
+            let response = Data(
+                """
+                {"profiles":[
+                    {"name":"DEV","host":"https://dbc-dev.cloud.databricks.com","auth_type":"databricks-cli","workspace_id":"222"},
+                    {"name":"WORK","host":"https://3333333333333333.3.gcp.databricks.com","auth_type":"databricks-cli","workspace_id":"3333333333333333"}
+                ]}
+                """.utf8
+            )
+            let client = DatabricksCLIClient { arguments in
+                await recorder.record(arguments)
+                return .init(standardOutput: response, standardError: Data(), terminationStatus: 0)
+            }
+            let resolver = LLMEndpointResolver(databricksClient: client)
+
+            let endpoint = try await resolver.endpoint(
+                provider: .databricks,
+                databricksAuthenticationType: .oauthCLI,
+                databricksWorkspaceURL: "https://different.example.com",
+                databricksProfile: "WORK"
+            )
+
+            #expect(
+                endpoint
+                    == "https://3333333333333333.3.gcp.databricks.com/ai-gateway/mlflow/v1/chat/completions"
+            )
+            #expect(await recorder.commands.count == 1)
+        }
+
+        @Test
+        func endpointResolverRejectsOAuthProfileWithoutWorkspaceHost() async {
+            let response = Data(#"{"profiles":[{"name":"WORK","auth_type":"databricks-cli","workspace_id":"333"}]}"#.utf8)
+            let client = DatabricksCLIClient { _ in
+                .init(standardOutput: response, standardError: Data(), terminationStatus: 0)
+            }
+            let resolver = LLMEndpointResolver(databricksClient: client)
+
+            await #expect(throws: LLMEndpointError.self) {
+                _ = try await resolver.endpoint(
+                    provider: .databricks,
+                    databricksAuthenticationType: .oauthCLI,
+                    databricksWorkspaceURL: "https://manual.example.com",
+                    databricksProfile: "WORK"
+                )
+            }
+        }
+
+        @Test
+        func endpointResolverUsesWorkspaceURLForPersonalAccessToken() async throws {
+            let resolver = LLMEndpointResolver()
+
+            let endpoint = try await resolver.endpoint(
+                provider: .databricks,
+                databricksAuthenticationType: .personalAccessToken,
+                databricksWorkspaceURL: " https://e2-demo-tokyo.cloud.databricks.com/ ",
+                databricksProfile: ""
+            )
+
+            #expect(
+                endpoint
+                    == "https://e2-demo-tokyo.cloud.databricks.com/ai-gateway/mlflow/v1/chat/completions"
+            )
+        }
+
+        @Test
+        func endpointResolverRejectsInvalidWorkspaceURLForPersonalAccessToken() async {
+            let resolver = LLMEndpointResolver()
+
+            await #expect(throws: LLMEndpointError.self) {
+                _ = try await resolver.endpoint(
+                    provider: .databricks,
+                    databricksAuthenticationType: .personalAccessToken,
+                    databricksWorkspaceURL: "984752964297111",
+                    databricksProfile: ""
+                )
+            }
         }
 
         @Test
