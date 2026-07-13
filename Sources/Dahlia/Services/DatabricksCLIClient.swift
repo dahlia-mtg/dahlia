@@ -10,6 +10,8 @@ struct DatabricksCLIClient {
 
     struct Profile: Decodable, Hashable, Identifiable {
         let name: String
+        let host: String?
+        let workspaceID: String?
         private let authenticationType: String
 
         var id: String { name }
@@ -18,9 +20,30 @@ struct DatabricksCLIClient {
             authenticationType == "databricks-cli"
         }
 
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decode(String.self, forKey: .name)
+            host = try container.decodeIfPresent(String.self, forKey: .host)
+            authenticationType = try container.decode(String.self, forKey: .authenticationType)
+            if let stringValue = try? container.decode(String.self, forKey: .workspaceID) {
+                workspaceID = stringValue
+            } else if let integerValue = try? container.decode(Int64.self, forKey: .workspaceID) {
+                workspaceID = String(integerValue)
+            } else {
+                workspaceID = nil
+            }
+        }
+
+        var endpointURL: String? {
+            guard let host else { return nil }
+            return AppSettings.databricksEndpointURL(workspaceHost: host)
+        }
+
         private enum CodingKeys: String, CodingKey {
             case name
+            case host
             case authenticationType = "auth_type"
+            case workspaceID = "workspace_id"
         }
     }
 

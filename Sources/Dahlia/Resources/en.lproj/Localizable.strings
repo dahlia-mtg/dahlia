@@ -187,7 +187,8 @@
 "General" = "General";
 "Notifications" = "Notifications";
 "Calendar" = "Calendar";
-"Foundation Models" = "Foundation Models";
+"Account Management" = "Account Management";
+"AI Summary" = "AI Summary";
 "Developer Settings" = "Developer Settings";
 "Vault" = "Vault";
 "Current Vault" = "Current Vault";
@@ -205,7 +206,8 @@
 "Target Language" = "Target Language";
 "Choose which language translated transcript lines should use." = "Choose which language translated transcript lines should use.";
 "Translation is automatically disabled when the target language matches the transcription language." = "Translation is automatically disabled when the target language matches the transcription language.";
-"Configure the LLM connection used for manual summary generation." = "Configure the LLM connection used for manual summary generation.";
+"Manage the OpenAI or Databricks account used for AI summaries." = "Manage the OpenAI or Databricks account used for AI summaries.";
+"Choose the model and output limit used to generate AI summaries." = "Choose the model and output limit used to generate AI summaries.";
 "Run a quick request to validate your endpoint, model, and token." = "Run a quick request to validate your provider settings, model, and token.";
 "Override developer-managed credentials used by external service integrations." = "Override developer-managed credentials used by external service integrations.";
 "Google OAuth Client ID" = "Google OAuth Client ID";
@@ -310,7 +312,6 @@
 "Only selected languages will appear in the language picker. All languages are shown if none are selected." = "Only selected languages will appear in the language picker. All languages are shown if none are selected.";
 
 /* Settings - LLM */
-"LLM Settings" = "Model Settings";
 "OpenAI" = "OpenAI";
 "Databricks" = "Databricks";
 "Model Provider" = "Model Provider";
@@ -329,6 +330,10 @@
 "Refresh Profiles" = "Refresh Profiles";
 "Databricks CLI was not found. Install it and relaunch Dahlia." = "Databricks CLI was not found. Install it and relaunch Dahlia.";
 "Enter a Databricks CLI profile." = "Enter a Databricks CLI profile.";
+"The selected Databricks CLI profile was not found." = "The selected Databricks CLI profile was not found.";
+"Enter a Databricks Workspace ID." = "Enter a Databricks Workspace ID.";
+"The selected Databricks CLI profile does not provide a Workspace ID." = "The selected Databricks CLI profile does not provide a Workspace ID.";
+"The selected Databricks CLI profile does not provide a valid workspace URL." = "The selected Databricks CLI profile does not provide a valid workspace URL.";
 "Databricks CLI authentication failed: %@" = "Databricks CLI authentication failed: %@";
 "Databricks CLI authentication failed." = "Databricks CLI authentication failed.";
 "Databricks CLI returned an invalid OAuth token response." = "Databricks CLI returned an invalid OAuth token response.";
@@ -345,7 +350,6 @@
 "Limits the number of tokens generated for each summary." = "Limits the number of tokens generated for each summary.";
 "API Token" = "API Token";
 "Token is stored securely in Keychain." = "Token is stored securely in Keychain.";
-"Configure an LLM endpoint for manual summary generation." = "Configure the model provider and connection settings used for manual summary generation.";
 "Test Connection" = "Test Connection";
 "Testing..." = "Testing...";
 "Connection successful" = "Connection successful";

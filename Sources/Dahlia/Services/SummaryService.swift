@@ -23,7 +23,12 @@ enum SummaryService {
         repository: MeetingRepository? = nil
     ) async throws -> GeneratedSummary {
         let settings = AppSettings.shared
-        let endpoint = settings.resolvedLLMEndpointURL
+        let endpoint = try await LLMEndpointResolver().endpoint(
+            provider: settings.llmProvider,
+            databricksAuthenticationType: settings.llmDatabricksAuthenticationType,
+            databricksWorkspaceID: settings.llmDatabricksWorkspaceID,
+            databricksProfile: settings.llmDatabricksProfile
+        )
         let model = settings.resolvedLLMModelName
         let maxTokens = settings.llmMaxTokens
         let token = try await LLMCredentialResolver().accessToken(

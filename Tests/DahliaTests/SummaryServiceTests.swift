@@ -474,12 +474,15 @@ struct SummaryServiceTests {
         let settings = AppSettings.shared
         let previousProviderRawValue = settings.llmProviderRawValue
         let previousWorkspaceID = settings.llmDatabricksWorkspaceID
+        let previousAuthenticationTypeRawValue = settings.llmDatabricksAuthenticationTypeRawValue
         defer {
             settings.llmProviderRawValue = previousProviderRawValue
             settings.llmDatabricksWorkspaceID = previousWorkspaceID
+            settings.llmDatabricksAuthenticationTypeRawValue = previousAuthenticationTypeRawValue
         }
 
         settings.llmProvider = .databricks
+        settings.llmDatabricksAuthenticationType = .personalAccessToken
         settings.llmDatabricksWorkspaceID = " 1234567890123456 "
 
         #expect(

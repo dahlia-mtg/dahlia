@@ -24,7 +24,7 @@
         }
 
         @Test
-        func oauthConfigurationRequiresWorkspaceAndCLIProfile() {
+        func oauthConfigurationRequiresOnlyCLIProfile() {
             let settings = AppSettings.shared
             let previousProviderRawValue = settings.llmProviderRawValue
             let previousWorkspaceID = settings.llmDatabricksWorkspaceID
@@ -38,10 +38,11 @@
             }
 
             settings.llmProvider = .databricks
-            settings.llmDatabricksWorkspaceID = "1234567890123456"
+            settings.llmDatabricksWorkspaceID = ""
             settings.llmDatabricksAuthenticationType = .oauthCLI
             settings.llmDatabricksProfile = "WORK"
             #expect(settings.isLLMConfigComplete)
+            #expect(settings.resolvedLLMEndpointURL.isEmpty)
 
             settings.llmDatabricksProfile = "  "
             #expect(!settings.isLLMConfigComplete)

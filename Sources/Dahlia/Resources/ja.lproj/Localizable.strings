@@ -187,7 +187,8 @@
 "General" = "一般";
 "Notifications" = "通知";
 "Calendar" = "カレンダー";
-"Foundation Models" = "基盤モデル";
+"Account Management" = "アカウント管理";
+"AI Summary" = "AI 要約";
 "Developer Settings" = "開発者設定";
 "Vault" = "保管庫";
 "Current Vault" = "現在の保管庫";
@@ -205,7 +206,8 @@
 "Target Language" = "翻訳先の言語";
 "Choose which language translated transcript lines should use." = "翻訳済みの文字起こし行に使う言語を選びます。";
 "Translation is automatically disabled when the target language matches the transcription language." = "翻訳先の言語が文字起こし言語と同じ場合、翻訳は自動的に無効になります。";
-"Configure the LLM connection used for manual summary generation." = "手動の要約生成に使用する LLM 接続設定を管理します。";
+"Manage the OpenAI or Databricks account used for AI summaries." = "AI 要約に使用する OpenAI または Databricks アカウントを管理します。";
+"Choose the model and output limit used to generate AI summaries." = "AI 要約の生成に使用するモデルと出力上限を設定します。";
 "Run a quick request to validate your endpoint, model, and token." = "プロバイダー設定、モデル、トークンの組み合わせを簡易的に検証します。";
 "Override developer-managed credentials used by external service integrations." = "外部サービス連携で使用する開発者管理の認証情報を上書きします。";
 "Google OAuth Client ID" = "Google OAuth クライアント ID";
@@ -310,7 +312,6 @@
 "Only selected languages will appear in the language picker. All languages are shown if none are selected." = "選択した言語のみが言語ピッカーに表示されます。未選択の場合はすべての言語が表示されます。";
 
 /* Settings - LLM */
-"LLM Settings" = "モデル設定";
 "OpenAI" = "OpenAI";
 "Databricks" = "Databricks";
 "Model Provider" = "モデルプロバイダー";
@@ -329,6 +330,10 @@
 "Refresh Profiles" = "プロファイルを再読み込み";
 "Databricks CLI was not found. Install it and relaunch Dahlia." = "Databricks CLI が見つかりません。インストールして Dahlia を再起動してください。";
 "Enter a Databricks CLI profile." = "Databricks CLI プロファイルを入力してください。";
+"The selected Databricks CLI profile was not found." = "選択した Databricks CLI プロファイルが見つかりません。";
+"Enter a Databricks Workspace ID." = "Databricks Workspace ID を入力してください。";
+"The selected Databricks CLI profile does not provide a Workspace ID." = "選択した Databricks CLI プロファイルから Workspace ID を取得できません。";
+"The selected Databricks CLI profile does not provide a valid workspace URL." = "選択した Databricks CLI プロファイルから有効な Workspace URL を取得できません。";
 "Databricks CLI authentication failed: %@" = "Databricks CLI 認証に失敗しました: %@";
 "Databricks CLI authentication failed." = "Databricks CLI 認証に失敗しました。";
 "Databricks CLI returned an invalid OAuth token response." = "Databricks CLI から無効な OAuth トークンレスポンスが返されました。";
@@ -345,7 +350,6 @@
 "Limits the number of tokens generated for each summary." = "要約ごとに生成するトークン数の上限を指定します。";
 "API Token" = "API トークン";
 "Token is stored securely in Keychain." = "トークンはキーチェーンに安全に保存されます。";
-"Configure an LLM endpoint for manual summary generation." = "手動の要約生成に使用するモデルプロバイダーと接続設定を管理します。";
 "Test Connection" = "疎通確認";
 "Testing..." = "テスト中...";
 "Connection successful" = "接続成功";
