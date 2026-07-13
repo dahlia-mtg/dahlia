@@ -10,17 +10,20 @@ struct CalendarEventOriginIcon: View {
             .fixedSize()
             .help(tooltipText)
             .accessibilityLabel(L10n.calendarEventOrigin(event.resolvedTitle))
+            .accessibilityValue(detailLines.joined(separator: ", "))
     }
 
     private var tooltipText: String {
-        [
+        ([
             L10n.calendarEventOriginTitle,
             event.resolvedTitle,
-            dateText,
-            event.description.nilIfBlank,
-        ]
-        .compactMap(\.self)
-        .joined(separator: "\n")
+        ] + detailLines)
+            .joined(separator: "\n")
+    }
+
+    private var detailLines: [String] {
+        [dateText, event.description.nilIfBlank]
+            .compactMap(\.self)
     }
 
     private var dateText: String {
