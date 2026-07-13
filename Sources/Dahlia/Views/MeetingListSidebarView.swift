@@ -678,8 +678,7 @@ private struct MeetingSidebarRow: View {
             components.append(L10n.recordingNow)
         }
         if let calendarEvent = item.calendarEvent {
-            let eventTitle = calendarEvent.title.nilIfBlank ?? L10n.newMeeting
-            components.append(L10n.calendarEventOrigin(eventTitle))
+            components.append(L10n.calendarEventOrigin(calendarEvent.resolvedTitle))
         }
         return components.joined(separator: ", ")
     }

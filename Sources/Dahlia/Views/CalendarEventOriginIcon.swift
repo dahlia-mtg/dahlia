@@ -9,22 +9,18 @@ struct CalendarEventOriginIcon: View {
             .foregroundStyle(.secondary)
             .fixedSize()
             .help(tooltipText)
-            .accessibilityLabel(L10n.calendarEventOrigin(eventTitle))
+            .accessibilityLabel(L10n.calendarEventOrigin(event.resolvedTitle))
     }
 
     private var tooltipText: String {
         [
             L10n.calendarEventOriginTitle,
-            eventTitle,
+            event.resolvedTitle,
             dateText,
             event.description.nilIfBlank,
         ]
         .compactMap(\.self)
         .joined(separator: "\n")
-    }
-
-    private var eventTitle: String {
-        event.title.nilIfBlank ?? L10n.newMeeting
     }
 
     private var dateText: String {

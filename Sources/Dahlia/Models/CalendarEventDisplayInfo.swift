@@ -7,20 +7,12 @@ struct CalendarEventDisplayInfo: Equatable {
     let endDate: Date
     let isAllDay: Bool
 
-    init(
-        title: String,
-        description: String,
-        startDate: Date,
-        endDate: Date,
-        isAllDay: Bool
-    ) {
-        self.title = title
-        self.description = description
-        self.startDate = startDate
-        self.endDate = endDate
-        self.isAllDay = isAllDay
+    var resolvedTitle: String {
+        title.nilIfBlank ?? L10n.newMeeting
     }
+}
 
+extension CalendarEventDisplayInfo {
     init(event: CalendarEvent) {
         self.init(
             title: event.title,
