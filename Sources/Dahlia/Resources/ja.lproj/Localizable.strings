@@ -215,6 +215,12 @@
 
 /* Settings */
 "General" = "一般";
+"App" = "アプリ";
+"Integrations" = "連携";
+"AI" = "AI";
+"Advanced" = "詳細";
+"AI Connection" = "AI 接続";
+"Diagnostics" = "診断";
 "Notifications" = "通知";
 "Calendar" = "カレンダー";
 "AI Summary" = "AI 要約";

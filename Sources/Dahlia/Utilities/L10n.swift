@@ -420,6 +420,12 @@ enum L10n {
     // MARK: - Settings
 
     static var general: String { String(localized: "General", bundle: bundle) }
+    static var app: String { String(localized: "App", bundle: bundle) }
+    static var integrations: String { String(localized: "Integrations", bundle: bundle) }
+    static var ai: String { String(localized: "AI", bundle: bundle) }
+    static var advanced: String { String(localized: "Advanced", bundle: bundle) }
+    static var aiConnection: String { String(localized: "AI Connection", bundle: bundle) }
+    static var diagnostics: String { String(localized: "Diagnostics", bundle: bundle) }
     static var notifications: String { String(localized: "Notifications", bundle: bundle) }
     static var calendar: String { String(localized: "Calendar", bundle: bundle) }
     static var cloudStorage: String { String(localized: "Cloud Storage", bundle: bundle) }

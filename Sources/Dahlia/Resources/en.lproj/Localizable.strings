@@ -215,6 +215,12 @@
 
 /* Settings */
 "General" = "General";
+"App" = "App";
+"Integrations" = "Integrations";
+"AI" = "AI";
+"Advanced" = "Advanced";
+"AI Connection" = "AI Connection";
+"Diagnostics" = "Diagnostics";
 "Notifications" = "Notifications";
 "Calendar" = "Calendar";
 "AI Summary" = "AI Summary";
