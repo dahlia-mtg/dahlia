@@ -187,7 +187,6 @@
 "General" = "General";
 "Notifications" = "Notifications";
 "Calendar" = "Calendar";
-"Account Management" = "Account Management";
 "AI Summary" = "AI Summary";
 "Developer Settings" = "Developer Settings";
 "Vault" = "Vault";
@@ -206,7 +205,7 @@
 "Target Language" = "Target Language";
 "Choose which language translated transcript lines should use." = "Choose which language translated transcript lines should use.";
 "Translation is automatically disabled when the target language matches the transcription language." = "Translation is automatically disabled when the target language matches the transcription language.";
-"Manage the OpenAI or Databricks account used for AI summaries." = "Manage the OpenAI or Databricks account used for AI summaries.";
+"Configure credentials and connection settings for the model provider used by AI summaries." = "Configure credentials and connection settings for the model provider used by AI summaries.";
 "Choose the model and output limit used to generate AI summaries." = "Choose the model and output limit used to generate AI summaries.";
 "Run a quick request to validate your endpoint, model, and token." = "Run a quick request to validate your provider settings, model, and token.";
 "Override developer-managed credentials used by external service integrations." = "Override developer-managed credentials used by external service integrations.";

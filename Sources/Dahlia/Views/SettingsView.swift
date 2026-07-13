@@ -7,7 +7,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case cloudStorage
     case transcription
     case screenshots
-    case accounts
+    case modelProvider = "accounts"
     case aiSummary
     case instructions
     case developer
@@ -23,7 +23,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .transcription: L10n.transcription
         case .audioDiagnostics: L10n.debug
         case .screenshots: L10n.screenshots
-        case .accounts: L10n.accountManagement
+        case .modelProvider: L10n.modelProvider
         case .aiSummary: L10n.aiSummary
         case .instructions: L10n.instructions
         case .developer: L10n.developerSettings
@@ -38,7 +38,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .transcription: "waveform"
         case .audioDiagnostics: "ladybug"
         case .screenshots: "photo.on.rectangle.angled"
-        case .accounts: "person.crop.circle"
+        case .modelProvider: "cpu"
         case .aiSummary: "sparkles"
         case .instructions: "list.bullet.clipboard"
         case .developer: "wrench.and.screwdriver"
@@ -102,9 +102,9 @@ struct SettingsView: View {
             }
 
             Tab(
-                SettingsCategory.accounts.label,
-                systemImage: SettingsCategory.accounts.systemImage,
-                value: SettingsCategory.accounts
+                SettingsCategory.modelProvider.label,
+                systemImage: SettingsCategory.modelProvider.systemImage,
+                value: SettingsCategory.modelProvider
             ) {
                 AccountSettingsView()
             }

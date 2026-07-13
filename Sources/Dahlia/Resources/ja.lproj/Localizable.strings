@@ -187,7 +187,6 @@
 "General" = "一般";
 "Notifications" = "通知";
 "Calendar" = "カレンダー";
-"Account Management" = "アカウント管理";
 "AI Summary" = "AI 要約";
 "Developer Settings" = "開発者設定";
 "Vault" = "保管庫";
@@ -206,7 +205,7 @@
 "Target Language" = "翻訳先の言語";
 "Choose which language translated transcript lines should use." = "翻訳済みの文字起こし行に使う言語を選びます。";
 "Translation is automatically disabled when the target language matches the transcription language." = "翻訳先の言語が文字起こし言語と同じ場合、翻訳は自動的に無効になります。";
-"Manage the OpenAI or Databricks account used for AI summaries." = "AI 要約に使用する OpenAI または Databricks アカウントを管理します。";
+"Configure credentials and connection settings for the model provider used by AI summaries." = "AI 要約に使用するモデルプロバイダーの認証情報と接続設定を管理します。";
 "Choose the model and output limit used to generate AI summaries." = "AI 要約の生成に使用するモデルと出力上限を設定します。";
 "Run a quick request to validate your endpoint, model, and token." = "プロバイダー設定、モデル、トークンの組み合わせを簡易的に検証します。";
 "Override developer-managed credentials used by external service integrations." = "外部サービス連携で使用する開発者管理の認証情報を上書きします。";
@@ -314,7 +313,7 @@
 /* Settings - LLM */
 "OpenAI" = "OpenAI";
 "Databricks" = "Databricks";
-"Model Provider" = "モデルプロバイダー";
+"Model Provider" = "Model Provider";
 "Choose OpenAI or Databricks AI Gateway." = "OpenAI または Databricks AI Gateway を選択します。";
 "Endpoint URL" = "エンドポイント URL";
 "Uses OpenAI's Chat Completions API." = "OpenAI の Chat Completions API を使用します。";

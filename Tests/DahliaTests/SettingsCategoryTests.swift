@@ -5,12 +5,13 @@
 
     struct SettingsCategoryTests {
         @Test
-        func accountAndAISummarySettingsAreSeparateCategories() throws {
-            #expect(SettingsCategory.accounts.label == L10n.accountManagement)
+        func modelProviderAndAISummarySettingsAreSeparateCategories() throws {
+            #expect(SettingsCategory.modelProvider.label == L10n.modelProvider)
+            #expect(SettingsCategory.modelProvider.rawValue == "accounts")
             #expect(SettingsCategory.aiSummary.label == L10n.aiSummary)
-            let accountsIndex = try #require(SettingsCategory.allCases.firstIndex(of: .accounts))
+            let modelProviderIndex = try #require(SettingsCategory.allCases.firstIndex(of: .modelProvider))
             let aiSummaryIndex = try #require(SettingsCategory.allCases.firstIndex(of: .aiSummary))
-            #expect(accountsIndex < aiSummaryIndex)
+            #expect(modelProviderIndex < aiSummaryIndex)
         }
 
         @Test

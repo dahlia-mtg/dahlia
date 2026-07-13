@@ -334,7 +334,6 @@ enum L10n {
     static var notifications: String { String(localized: "Notifications", bundle: bundle) }
     static var calendar: String { String(localized: "Calendar", bundle: bundle) }
     static var cloudStorage: String { String(localized: "Cloud Storage", bundle: bundle) }
-    static var accountManagement: String { String(localized: "Account Management", bundle: bundle) }
     static var aiSummary: String { String(localized: "AI Summary", bundle: bundle) }
     static var developerSettings: String { String(localized: "Developer Settings", bundle: bundle) }
     static var vault: String { String(localized: "Vault", bundle: bundle) }
@@ -383,8 +382,8 @@ enum L10n {
         localized: "Translation is automatically disabled when the target language matches the transcription language.",
         bundle: bundle
     ) }
-    static var accountSettingsDescription: String { String(
-        localized: "Manage the OpenAI or Databricks account used for AI summaries.",
+    static var modelProviderSettingsDescription: String { String(
+        localized: "Configure credentials and connection settings for the model provider used by AI summaries.",
         bundle: bundle
     ) }
     static var aiSummaryModelSettingsDescription: String { String(

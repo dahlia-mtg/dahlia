@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 設定画面「アカウント管理」タブ。LLM プロバイダーの認証と接続設定を管理する。
+/// 設定画面「Model Provider」タブ。LLM プロバイダーの認証と接続設定を管理する。
 struct AccountSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @State private var apiToken = ""
@@ -40,10 +40,8 @@ struct AccountSettingsView: View {
                         Text(L10n.apiTokenStoredInKeychain)
                     }
                 }
-            } header: {
-                Text(L10n.accountManagement)
             } footer: {
-                Text(L10n.accountSettingsDescription)
+                Text(L10n.modelProviderSettingsDescription)
             }
 
             Section {
