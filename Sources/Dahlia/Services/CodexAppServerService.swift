@@ -139,6 +139,13 @@ actor CodexAppServerService {
         isStarting = false
     }
 
+    func reloadConfiguration() async throws {
+        guard !isShuttingDown else { throw CancellationError() }
+        await stopConnection(error: CancellationError())
+        try Task.checkCancellation()
+        try await start()
+    }
+
     func request(
         method: String,
         params: JSONValue = .object([:]),
@@ -426,7 +433,7 @@ private extension CodexAppServerService {
                 request.developerInstructions + "\nDo not call tools. Return only the requested JSON."
             ),
             "ephemeral": .bool(true),
-            "sandbox": .string("readOnly"),
+            "sandbox": .string("read-only"),
         ]
         if let selectedModel {
             threadParams["model"] = .string(selectedModel.model)

@@ -12,13 +12,16 @@ final class CodexAccountController {
 
     private let service: CodexAppServerService
     private let urlOpener: any CodexLoginURLOpening
+    private let configurationManager: CodexConfigurationManager
 
     init(
         service: CodexAppServerService = .shared,
-        urlOpener: any CodexLoginURLOpening = WorkspaceCodexLoginURLOpener()
+        urlOpener: any CodexLoginURLOpening = WorkspaceCodexLoginURLOpener(),
+        configurationManager: CodexConfigurationManager = CodexConfigurationManager()
     ) {
         self.service = service
         self.urlOpener = urlOpener
+        self.configurationManager = configurationManager
     }
 
     var isBusy: Bool {
@@ -32,6 +35,25 @@ final class CodexAccountController {
 
         do {
             accountStatus = try await service.accountStatus(forceRefresh: true)
+        } catch is CancellationError {
+            // SwiftUI cancels this operation when the settings screen disappears.
+        } catch {
+            accountStatus = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func activateChatGPTSubscription() async {
+        isCheckingStatus = true
+        errorMessage = nil
+        defer { isCheckingStatus = false }
+
+        do {
+            if try configurationManager.configureChatGPTSubscription() {
+                try await service.reloadConfiguration()
+            }
+            accountStatus = try await service.accountStatus(forceRefresh: true)
+            AppSettings.shared.codexConfiguredAccountProviderRawValue = AIAccountProvider.chatGPTSubscription.rawValue
         } catch is CancellationError {
             // SwiftUI cancels this operation when the settings screen disappears.
         } catch {

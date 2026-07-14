@@ -23,6 +23,9 @@ enum SummaryService {
         repository: MeetingRepository? = nil
     ) async throws -> GeneratedSummary {
         let settings = AppSettings.shared
+        guard settings.isCodexAccountConfigurationCurrent else {
+            throw CodexConfigurationError.accountNotReady
+        }
         let prompt = resolvedSummaryPrompt(settings: settings, repository: repository)
         let languageName = settings.llmSummaryLanguage.displayName
 

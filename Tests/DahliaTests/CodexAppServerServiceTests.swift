@@ -115,7 +115,7 @@ import Foundation
                 ))
             }
 
-            #expect(await !(methodsSent(to: transport)).contains("thread/start"))
+            #expect(await !methodsSent(to: transport).contains("thread/start"))
             await service.shutdown()
         }
 
@@ -226,6 +226,19 @@ import Foundation
                 try await service.start()
             }
             #expect(launchCount.withLock { $0 } == 1)
+        }
+
+        @Test
+        func configurationReloadStartsAFreshConnection() async throws {
+            let service = CodexAppServerService {
+                TestCodexAppServerTransport(mode: .models)
+            }
+
+            try await service.start()
+            try await service.reloadConfiguration()
+
+            #expect(try await service.models().map(\.model) == ["default-model"])
+            await service.shutdown()
         }
 
         @Test
@@ -362,7 +375,7 @@ import Foundation
             }?.objectValue?["params"]?.objectValue)
             #expect(threadParams["ephemeral"] == .bool(true))
             #expect(threadParams["approvalPolicy"] == .string("never"))
-            #expect(threadParams["sandbox"] == .string("readOnly"))
+            #expect(threadParams["sandbox"] == .string("read-only"))
             let threadConfig = try #require(threadParams["config"]?.objectValue)
             #expect(threadConfig["features.apps"] == .bool(false))
             #expect(threadConfig["features.plugins"] == .bool(false))
@@ -487,6 +500,7 @@ import Foundation
         func expectedCodexConfigurationErrorsAreNotReported() {
             #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(CodexAppServerError.notLoggedIn))
             #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(CodexAppServerError.helperNotBundled))
+            #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(CodexConfigurationError.accountNotReady))
             #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(CancellationError()))
             #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(CodexAppServerError.turnInterrupted))
             #expect(!CaptionViewModel.shouldCaptureSummaryGenerationError(
@@ -697,11 +711,11 @@ import Foundation
                     method: "thread/start",
                     params: .object([
                         "approvalPolicy": .string("never"),
-                        "config": try CodexAppServerService.summaryThreadConfig(from: configResult),
+                        "config": CodexAppServerService.summaryThreadConfig(from: configResult),
                         "cwd": .string(temporaryDirectory.path),
                         "developerInstructions": .string("Do not call tools."),
                         "ephemeral": .bool(true),
-                        "sandbox": .string("readOnly"),
+                        "sandbox": .string("read-only"),
                     ])
                 )
                 let threadID = try #require(result.objectValue?["thread"]?.objectValue?["id"]?.stringValue)

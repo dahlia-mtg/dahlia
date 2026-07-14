@@ -44,8 +44,10 @@ struct AISummarySettingsView: View {
                     )
                 }
 
-                Button(L10n.retry, action: reload)
-                    .disabled(catalog.isLoading)
+                if catalog.errorMessage != nil {
+                    Button(L10n.retry, action: reload)
+                        .disabled(catalog.isLoading)
+                }
             } header: {
                 Text(L10n.aiSummary)
             } footer: {

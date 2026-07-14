@@ -41,5 +41,29 @@ import Foundation
             #expect(await !(transport.isClosed))
             await service.shutdown()
         }
+
+        @Test
+        func activatingChatGPTRemovesDatabricksConfigurationAndReloadsStatus() async throws {
+            let rootURL = FileManager.default.temporaryDirectory
+                .appending(path: "dahlia-chatgpt-activation-\(UUID().uuidString)", directoryHint: .isDirectory)
+            defer { try? FileManager.default.removeItem(at: rootURL) }
+            let locator = ApplicationSupportCodexHomeLocator(applicationSupportURL: rootURL)
+            let configURL = try locator.homeURL().appending(path: "config.toml")
+            try Data("model_provider = \"Databricks\"\n".utf8).write(to: configURL)
+            let service = CodexAppServerService {
+                TestCodexAppServerTransport(mode: .models)
+            }
+            let controller = CodexAccountController(
+                service: service,
+                configurationManager: CodexConfigurationManager(homeLocator: locator)
+            )
+
+            await controller.activateChatGPTSubscription()
+
+            #expect(controller.accountStatus?.isAuthenticated == true)
+            #expect(controller.errorMessage == nil)
+            #expect(!FileManager.default.fileExists(atPath: configURL.path))
+            await service.shutdown()
+        }
     }
 #endif

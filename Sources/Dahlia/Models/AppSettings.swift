@@ -398,9 +398,22 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
 
     // MARK: - LLM 設定
 
+    @AppStorage("codexAccountProvider") var codexAccountProviderRawValue = AIAccountProvider.chatGPTSubscription.rawValue
+    @AppStorage("codexConfiguredAccountProvider") var codexConfiguredAccountProviderRawValue =
+        AIAccountProvider.chatGPTSubscription.rawValue
+    @AppStorage("llmDatabricksProfile") var codexDatabricksProfile = ""
     @AppStorage("codexModelID") var codexModelID = ""
     @AppStorage("codexReasoningEffort") var codexReasoningEffort = CodexReasoningEffortOption.defaultValue
     @AppStorage("llmSummaryLanguage") var llmSummaryLanguageRawValue = SummaryLanguage.ja.rawValue
+
+    var codexAccountProvider: AIAccountProvider {
+        get { AIAccountProvider(rawValue: codexAccountProviderRawValue) ?? .chatGPTSubscription }
+        set { codexAccountProviderRawValue = newValue.rawValue }
+    }
+
+    var isCodexAccountConfigurationCurrent: Bool {
+        codexConfiguredAccountProviderRawValue == codexAccountProvider.rawValue
+    }
 
     var llmSummaryLanguage: SummaryLanguage {
         get { SummaryLanguage(rawValue: llmSummaryLanguageRawValue) ?? .ja }
