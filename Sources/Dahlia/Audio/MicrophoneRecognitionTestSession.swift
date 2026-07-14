@@ -143,7 +143,7 @@ actor MicrophoneRecognitionTestSession {
             onEvent(.transcript(segment.text, isFinal: true))
         case let .failure(_, _, _, message):
             onEvent(.failure(message))
-        case .clearPreview, .translation:
+        case .clearPreview, .previewTranslation, .translation:
             break
         }
     }

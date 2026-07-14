@@ -258,7 +258,7 @@ actor SpeechTranscriberService {
                     await onEvent(.preview(segment))
                     await previewTranslationCoordinator?.unconfirmedSegmentDidChange(segment) { segmentID, translatedText in
                         await onEvent(
-                            .translation(
+                            .previewTranslation(
                                 sessionId: recordingSessionId,
                                 segmentID: segmentID,
                                 translatedText: translatedText

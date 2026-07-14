@@ -151,13 +151,15 @@ final class MeetingPersistenceService {
         try await transcriptWriter.persist(event)
     }
 
+    nonisolated func persist(_ events: [TranscriptionEvent]) async throws {
+        try await transcriptWriter.persist(events)
+    }
+
     /// 最終保存とミーティング完了の記録を行う。
     @discardableResult
     func stop() async -> MeetingPersistenceStopResult {
-        let finalSegmentRecords = persistencePolicy.persistsStreamingSegments
-            ? store.segments
-            .filter(\.isConfirmed)
-            .map { TranscriptSegmentRecord(from: $0, meetingId: meetingId, defaultSessionId: recordingSession.id) }
+        let finalSegments = persistencePolicy.persistsStreamingSegments
+            ? store.segments.filter(\.isConfirmed)
             : []
 
         let now = Date.now
@@ -166,9 +168,9 @@ final class MeetingPersistenceService {
         recordingSession.duration = duration
         recordingSession.updatedAt = now
         do {
+            try await transcriptWriter.persistConfirmedSegments(finalSegments)
             let persistedSession = try await MeetingPersistenceFinalizer.finish(
                 MeetingPersistenceFinalizer.Request(
-                    finalSegmentRecords: finalSegmentRecords,
                     recordingSessionId: recordingSession.id,
                     meetingId: meetingId,
                     endedAt: now,
@@ -186,11 +188,8 @@ final class MeetingPersistenceService {
     }
 
     /// 保存済みセグメント追跡をリセットする。
-    func reset() {
-        let transcriptWriter = transcriptWriter
-        Task {
-            await transcriptWriter.resetTracking()
-        }
+    func reset() async {
+        await transcriptWriter.resetTracking()
     }
 
     /// 録音開始に失敗したセッションを取り消す。

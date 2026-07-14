@@ -42,6 +42,19 @@ struct ScreenshotImageLoaderTests {
         #expect(valid != nil)
     }
 
+    @Test
+    func originalImageKeepsSourceResolution() async throws {
+        let image = try #require(makeImage(width: 320, height: 180))
+        let data = try #require(ImageEncoder.encode(image, quality: 0.8))
+        let loader = ScreenshotImageLoader(cacheCostLimit: 1_024 * 1_024)
+
+        let decoded = await loader.originalImage(data: data)
+
+        let result = try #require(decoded)
+        #expect(result.width == 320)
+        #expect(result.height == 180)
+    }
+
     private func makeImage(width: Int, height: Int) -> CGImage? {
         guard let context = CGContext(
             data: nil,

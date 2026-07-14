@@ -5,8 +5,9 @@ import Foundation
 /// MainActor が描画で長時間占有されても、確定セグメントと翻訳の永続化は独立して進む。
 /// preview は音源ごとに最新値だけを保持し、確定イベントは順序を保ってすべて UI へ渡す。
 actor TranscriptionEventPipeline {
-    typealias UISink = @MainActor @Sendable (TranscriptionEvent) async -> Void
-    typealias PersistenceSink = @Sendable (TranscriptionEvent) async throws -> Void
+    typealias UISink = @MainActor @Sendable ([TranscriptionEvent]) async -> Void
+    typealias PersistenceSink = @Sendable ([TranscriptionEvent]) async throws -> Void
+    typealias PersistenceResetSink = @Sendable () async -> Void
 
     private struct PreviewKey: Hashable {
         let sessionId: UUID?
@@ -16,14 +17,26 @@ actor TranscriptionEventPipeline {
     private enum UIItem {
         case event(TranscriptionEvent)
         case preview(PreviewKey)
+        case barrier(CheckedContinuation<Void, Never>)
+    }
+
+    private struct UIDelivery {
+        let events: [TranscriptionEvent]
+        let barrier: CheckedContinuation<Void, Never>?
+    }
+
+    private enum PersistenceItem {
+        case event(TranscriptionEvent)
+        case reset(CheckedContinuation<Void, Never>)
     }
 
     private let uiSink: UISink
     private let persistenceSink: PersistenceSink
+    private let persistenceResetSink: PersistenceResetSink
     private let uiSignals: AsyncStream<Void>
     private let uiSignalContinuation: AsyncStream<Void>.Continuation
-    private let persistenceSignals: AsyncStream<Void>
-    private let persistenceSignalContinuation: AsyncStream<Void>.Continuation
+    private let persistenceItems: AsyncStream<PersistenceItem>
+    private let persistenceContinuation: AsyncStream<PersistenceItem>.Continuation
 
     private var uiWorker: Task<Void, Never>?
     private var persistenceWorker: Task<Void, Never>?
@@ -35,34 +48,31 @@ actor TranscriptionEventPipeline {
     private var uiDequeueSequence: UInt64 = 0
     private var latestPreviews: [PreviewKey: TranscriptionEvent] = [:]
     private var previewSequences: [PreviewKey: UInt64] = [:]
-    private var isDeliveringUIEvent = false
 
-    private var persistenceEvents: [UInt64: TranscriptionEvent] = [:]
-    private var nextPersistenceSequence: UInt64 = 0
-    private var persistenceDequeueSequence: UInt64 = 0
-    private var isPersistingEvent = false
+    private var pendingPersistenceEvents: [TranscriptionEvent] = []
+    private var persistenceBatchTask: Task<Void, Never>?
     private var firstPersistenceError: Error?
-
-    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         uiSink: @escaping UISink,
-        persistenceSink: @escaping PersistenceSink
+        persistenceSink: @escaping PersistenceSink,
+        persistenceResetSink: @escaping PersistenceResetSink = {}
     ) {
         let uiPair = AsyncStream.makeStream(
             of: Void.self,
             bufferingPolicy: .bufferingNewest(1)
         )
         let persistencePair = AsyncStream.makeStream(
-            of: Void.self,
-            bufferingPolicy: .bufferingNewest(1)
+            of: PersistenceItem.self,
+            bufferingPolicy: .unbounded
         )
         self.uiSink = uiSink
         self.persistenceSink = persistenceSink
+        self.persistenceResetSink = persistenceResetSink
         self.uiSignals = uiPair.stream
         self.uiSignalContinuation = uiPair.continuation
-        self.persistenceSignals = persistencePair.stream
-        self.persistenceSignalContinuation = persistencePair.continuation
+        self.persistenceItems = persistencePair.stream
+        self.persistenceContinuation = persistencePair.continuation
     }
 
     func start() {
@@ -76,14 +86,16 @@ actor TranscriptionEventPipeline {
                 guard let self else { return }
                 await self.drainUIEvents()
             }
+            await self?.drainUIEvents()
         }
 
-        let persistenceSignals = persistenceSignals
+        let persistenceItems = persistenceItems
         persistenceWorker = Task { [weak self] in
-            for await _ in persistenceSignals {
+            for await item in persistenceItems {
                 guard let self else { return }
-                await self.drainPersistenceEvents()
+                await self.consumePersistenceItem(item)
             }
+            await self?.finishPersistenceBatches()
         }
     }
 
@@ -94,23 +106,34 @@ actor TranscriptionEventPipeline {
         uiSignalContinuation.yield()
 
         if event.requiresDurablePersistence {
-            persistenceEvents[nextPersistenceSequence] = event
-            nextPersistenceSequence &+= 1
-            persistenceSignalContinuation.yield()
+            persistenceContinuation.yield(.event(event))
         }
     }
 
-    /// 以後のイベント受付を止め、UI と永続化の両レーンを完全に drain する。
+    /// この呼び出しより前の永続化イベントを保存してから、writer の追跡状態を直列にリセットする。
+    func resetPersistence() async {
+        guard isAcceptingEvents else { return }
+        await withCheckedContinuation { continuation in
+            persistenceContinuation.yield(.reset(continuation))
+        }
+    }
+
+    /// この呼び出しより前に enqueue された UI イベントが MainActor へ反映されるまで待つ。
+    func flushUI() async {
+        guard isAcceptingEvents else { return }
+        await withCheckedContinuation { continuation in
+            appendUIItem(.barrier(continuation))
+            uiSignalContinuation.yield()
+        }
+    }
+
+    /// 以後のイベント受付を止め、両ストリームの worker が最後まで drain するのを待つ。
     func finish() async throws {
         guard isStarted else { return }
         isAcceptingEvents = false
-        uiSignalContinuation.yield()
-        persistenceSignalContinuation.yield()
-
-        await waitUntilIdle()
-
         uiSignalContinuation.finish()
-        persistenceSignalContinuation.finish()
+        persistenceContinuation.finish()
+
         let uiWorker = uiWorker
         let persistenceWorker = persistenceWorker
         self.uiWorker = nil
@@ -141,7 +164,7 @@ actor TranscriptionEventPipeline {
             discardPendingPreview(sessionId: sessionId, sourceLabel: sourceLabel)
             appendUIItem(.event(event))
 
-        case .translation, .failure:
+        case .previewTranslation, .translation, .failure:
             appendUIItem(.event(event))
         }
     }
@@ -161,16 +184,17 @@ actor TranscriptionEventPipeline {
     }
 
     private func drainUIEvents() async {
-        while let event = nextUIEvent() {
-            isDeliveringUIEvent = true
-            await uiSink(event)
-            isDeliveringUIEvent = false
-            notifyIdleWaitersIfNeeded()
+        while let delivery = nextUIDelivery() {
+            if !delivery.events.isEmpty {
+                await uiSink(delivery.events)
+            }
+            delivery.barrier?.resume()
         }
-        notifyIdleWaitersIfNeeded()
     }
 
-    private func nextUIEvent() -> TranscriptionEvent? {
+    private func nextUIDelivery() -> UIDelivery? {
+        var events: [TranscriptionEvent] = []
+
         while uiDequeueSequence < nextUISequence {
             let sequence = uiDequeueSequence
             uiDequeueSequence &+= 1
@@ -178,59 +202,74 @@ actor TranscriptionEventPipeline {
 
             switch item {
             case let .event(event):
-                return event
+                events.append(event)
             case let .preview(key):
                 guard previewSequences[key] == sequence,
                       let event = latestPreviews.removeValue(forKey: key) else { continue }
                 previewSequences[key] = nil
-                return event
+                events.append(event)
+            case let .barrier(continuation):
+                return UIDelivery(events: events, barrier: continuation)
             }
         }
-        return nil
+
+        return events.isEmpty ? nil : UIDelivery(events: events, barrier: nil)
     }
 
-    private func drainPersistenceEvents() async {
-        while let event = nextPersistenceEvent() {
-            isPersistingEvent = true
-            do {
-                try await persistenceSink(event)
-            } catch {
-                if firstPersistenceError == nil {
-                    firstPersistenceError = error
-                }
+    private func enqueuePersistenceBatch(_ event: TranscriptionEvent) {
+        pendingPersistenceEvents.append(event)
+        schedulePersistenceBatchIfNeeded()
+    }
+
+    private func consumePersistenceItem(_ item: PersistenceItem) async {
+        switch item {
+        case let .event(event):
+            enqueuePersistenceBatch(event)
+        case let .reset(continuation):
+            await finishPersistenceBatches()
+            await persistenceResetSink()
+            continuation.resume()
+        }
+    }
+
+    private func schedulePersistenceBatchIfNeeded() {
+        guard persistenceBatchTask == nil else { return }
+        persistenceBatchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            await self?.flushPersistenceBatch()
+        }
+    }
+
+    private func flushPersistenceBatch() async {
+        guard !pendingPersistenceEvents.isEmpty else {
+            persistenceBatchTask = nil
+            return
+        }
+
+        let events = pendingPersistenceEvents
+        pendingPersistenceEvents.removeAll(keepingCapacity: true)
+        do {
+            try await persistenceSink(events)
+        } catch {
+            if firstPersistenceError == nil {
+                firstPersistenceError = error
             }
-            isPersistingEvent = false
-            notifyIdleWaitersIfNeeded()
         }
-        notifyIdleWaitersIfNeeded()
-    }
 
-    private func nextPersistenceEvent() -> TranscriptionEvent? {
-        guard persistenceDequeueSequence < nextPersistenceSequence else { return nil }
-        let sequence = persistenceDequeueSequence
-        persistenceDequeueSequence &+= 1
-        return persistenceEvents.removeValue(forKey: sequence)
-    }
-
-    private func waitUntilIdle() async {
-        guard !isIdle else { return }
-        await withCheckedContinuation { continuation in
-            idleWaiters.append(continuation)
+        persistenceBatchTask = nil
+        if !pendingPersistenceEvents.isEmpty {
+            schedulePersistenceBatchIfNeeded()
         }
     }
 
-    private var isIdle: Bool {
-        uiDequeueSequence == nextUISequence
-            && persistenceDequeueSequence == nextPersistenceSequence
-            && !isDeliveringUIEvent
-            && !isPersistingEvent
-    }
-
-    private func notifyIdleWaitersIfNeeded() {
-        guard isIdle, !idleWaiters.isEmpty else { return }
-        let waiters = idleWaiters
-        idleWaiters.removeAll()
-        waiters.forEach { $0.resume() }
+    private func finishPersistenceBatches() async {
+        while let task = persistenceBatchTask {
+            task.cancel()
+            await task.value
+        }
+        if !pendingPersistenceEvents.isEmpty {
+            await flushPersistenceBatch()
+        }
     }
 }
 
@@ -239,7 +278,7 @@ private extension TranscriptionEvent {
         switch self {
         case .finalized, .translation:
             true
-        case .preview, .clearPreview, .failure:
+        case .preview, .clearPreview, .previewTranslation, .failure:
             false
         }
     }

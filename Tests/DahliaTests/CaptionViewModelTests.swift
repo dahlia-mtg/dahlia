@@ -72,6 +72,27 @@ import GRDB
         }
 
         @Test
+        func transientEmptyDeviceListDoesNotDiscardExplicitSelection() async {
+            let inputProvider = MutableMicrophoneInputProvider(
+                defaultDeviceID: AudioDeviceID(101),
+                devices: [MicrophoneDevice(id: 101, name: "USB Mic")]
+            )
+            let viewModel = CaptionViewModel(
+                availableInputDevicesProvider: { inputProvider.devices },
+                defaultInputDeviceIDProvider: { inputProvider.defaultDeviceID }
+            )
+            await viewModel.refreshAvailableMicrophones()
+            viewModel.microphoneSelection = .device(101)
+
+            inputProvider.devices = []
+            inputProvider.defaultDeviceID = nil
+            await viewModel.refreshAvailableMicrophones()
+
+            #expect(viewModel.microphoneSelection == .device(101))
+            #expect(viewModel.isMicEnabled)
+        }
+
+        @Test
         func unsupportedLocaleFallsBackToPreferredSupportedLanguageVariant() {
             let supportedLocales = [
                 Locale(identifier: "en_AU"),
@@ -472,10 +493,10 @@ import GRDB
     }
 
     private final class MutableMicrophoneInputProvider: @unchecked Sendable {
-        var defaultDeviceID: AudioDeviceID
+        var defaultDeviceID: AudioDeviceID?
         var devices: [MicrophoneDevice]
 
-        init(defaultDeviceID: AudioDeviceID, devices: [MicrophoneDevice]) {
+        init(defaultDeviceID: AudioDeviceID?, devices: [MicrophoneDevice]) {
             self.defaultDeviceID = defaultDeviceID
             self.devices = devices
         }

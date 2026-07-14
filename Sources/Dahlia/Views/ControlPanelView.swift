@@ -88,8 +88,7 @@ private struct DetailTabBar: View {
 private struct ScreenshotOverlayView: View {
     let screenshot: MeetingScreenshotRecord
     let onDismiss: () -> Void
-    @State private var image: CGImage?
-    @State private var imageLoadFailed = false
+    @StateObject private var imageLoader = ScreenshotImageLoadModel()
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -101,14 +100,14 @@ private struct ScreenshotOverlayView: View {
             .pointerStyle(.link)
             .accessibilityLabel(L10n.close)
 
-            if let image {
+            if case let .loaded(image) = imageLoader.state {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .shadow(radius: 20)
                     .padding(24)
-            } else if imageLoadFailed {
+            } else if case .failed = imageLoader.state {
                 Text(L10n.summaryImageUnavailable)
                     .foregroundStyle(.secondary)
             } else {
@@ -123,16 +122,11 @@ private struct ScreenshotOverlayView: View {
                 .pointerStyle(.link)
         }
         .task(id: screenshot.id) {
-            image = nil
-            imageLoadFailed = false
-            let loadedImage = await ScreenshotImageLoader.shared.image(
+            await imageLoader.load(
                 screenshotID: screenshot.id,
                 data: screenshot.imageData,
-                maxPixelSize: 2400
+                targetSize: .original
             )
-            guard !Task.isCancelled else { return }
-            image = loadedImage
-            imageLoadFailed = loadedImage == nil
         }
     }
 }
@@ -143,11 +137,11 @@ private struct ScreenshotThumbnailView: View {
     let timestamp: String
     let viewModel: CaptionViewModel
     @Binding var expandedScreenshot: MeetingScreenshotRecord?
-    @State private var thumbnailImage: CGImage?
+    @StateObject private var imageLoader = ScreenshotImageLoadModel()
 
     var body: some View {
         VStack(spacing: 4) {
-            if let thumbnailImage {
+            if case let .loaded(thumbnailImage) = imageLoader.state {
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) {
                         expandedScreenshot = screenshot
@@ -185,11 +179,10 @@ private struct ScreenshotThumbnailView: View {
         .padding(6)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
         .task(id: screenshot.id) {
-            thumbnailImage = nil
-            thumbnailImage = await ScreenshotImageLoader.shared.image(
+            await imageLoader.load(
                 screenshotID: screenshot.id,
                 data: screenshot.imageData,
-                maxPixelSize: 600
+                targetSize: .maxPixelSize(600)
             )
         }
     }

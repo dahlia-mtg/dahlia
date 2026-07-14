@@ -115,6 +115,32 @@ struct MacCalendarStoreTests {
     }
 
     @Test
+    func olderRefreshCannotOverwriteNewCalendarSelection() async {
+        let defaults = isolatedUserDefaults()
+        defaults.set(true, forKey: MacCalendarStore.didInitializeSelectionKey)
+        defaults.set("[\"home\"]", forKey: MacCalendarStore.selectedCalendarIDsKey)
+        let provider = OverlappingMacCalendarEventStore()
+        let store = MacCalendarStore(
+            eventStoreProvider: provider,
+            userDefaults: defaults,
+            now: { fixtureNow },
+            storeChangedNotification: nil
+        )
+
+        let olderRefresh = Task { await store.refreshIfNeeded(force: true) }
+        await provider.waitUntilFirstEventFetchStarts()
+
+        let newerRefresh = store.setCalendarSelection([secondaryCalendar.id])
+        await newerRefresh?.value
+        await provider.resumeFirstEventFetch()
+        await olderRefresh.value
+
+        #expect(store.selectedCalendarIDs == [secondaryCalendar.id])
+        #expect(store.upcomingEvents.map(\.calendarID) == [secondaryCalendar.id])
+        #expect(store.state == .loaded)
+    }
+
+    @Test
     func sortAndFilterOrdersEventsWithinRefreshWindow() {
         let intervalEnd = Calendar.current.date(byAdding: .day, value: 7, to: fixtureNow)!
         let earlier = fixtureEvent
@@ -271,6 +297,72 @@ private actor MockMacCalendarEventStore: MacCalendarEventStoreProviding {
             fetchEventsCallCount: fetchEventsCallCount,
             requestedCalendars: requestedCalendars
         )
+    }
+}
+
+private actor OverlappingMacCalendarEventStore: MacCalendarEventStoreProviding {
+    nonisolated let initialAuthorizationStatus: MacCalendarAuthorizationStatus = .fullAccess
+    private var fetchCount = 0
+    private var fetchCountWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstFetchContinuation: CheckedContinuation<Void, Never>?
+
+    func authorizationStatus() -> MacCalendarAuthorizationStatus {
+        .fullAccess
+    }
+
+    func requestFullAccessToEvents() async throws -> Bool {
+        true
+    }
+
+    func fetchCalendarList() async throws -> [CalendarListItem] {
+        [primaryCalendar, secondaryCalendar]
+    }
+
+    func fetchUpcomingEvents(
+        calendars: [CalendarListItem],
+        now _: Date,
+        daysAhead _: Int
+    ) async throws -> [CalendarEvent] {
+        fetchCount += 1
+        let waiters = fetchCountWaiters
+        fetchCountWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+
+        if fetchCount == 1 {
+            await withCheckedContinuation { continuation in
+                firstFetchContinuation = continuation
+            }
+        }
+
+        return calendars.map { calendar in
+            CalendarEvent(
+                id: "\(calendar.id)::event",
+                calendarID: calendar.id,
+                calendarName: calendar.title,
+                calendarColorHex: calendar.colorHex,
+                platform: CalendarEventPlatform.macOSCalendar,
+                platformId: "event",
+                title: calendar.title,
+                description: "",
+                icalUid: nil,
+                startDate: fixtureNow.addingTimeInterval(3600),
+                endDate: fixtureNow.addingTimeInterval(7200),
+                isAllDay: false,
+                conferenceURI: nil
+            )
+        }
+    }
+
+    func waitUntilFirstEventFetchStarts() async {
+        guard fetchCount == 0 else { return }
+        await withCheckedContinuation { continuation in
+            fetchCountWaiters.append(continuation)
+        }
+    }
+
+    func resumeFirstEventFetch() {
+        firstFetchContinuation?.resume()
+        firstFetchContinuation = nil
     }
 }
 

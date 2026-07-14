@@ -109,6 +109,7 @@ final class CaptionViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var availableMicrophones: [MicrophoneDevice] = []
     @Published private(set) var defaultInputDeviceID: AudioDeviceID?
+    @Published private var hasResolvedDefaultInputDevice = false
     @Published var microphoneSelection: MicrophoneSelection = .systemDefault
     @Published var isSystemAudioEnabled = true
     @Published var selectedLocale: String = AppSettings.shared.transcriptionLocale {
@@ -283,8 +284,17 @@ final class CaptionViewModel: ObservableObject {
         return L10n.sameAsSystem(deviceName)
     }
 
-    /// マイクが有効か。
-    var isMicEnabled: Bool { selectedMicrophoneID != nil }
+    /// 初回の HAL 問い合わせ中は system default を楽観的に有効とみなし、起動操作を妨げない。
+    var isMicEnabled: Bool {
+        switch microphoneSelection {
+        case .systemDefault:
+            !hasResolvedDefaultInputDevice || defaultInputDeviceID != nil
+        case .device:
+            true
+        case .none:
+            false
+        }
+    }
 
     var isBatchRecording: Bool {
         isListening && activeTranscriptionMode == .batch
@@ -379,14 +389,8 @@ final class CaptionViewModel: ObservableObject {
         recordingContext?.dbQueue ?? currentDbQueue
     }
 
-    init(
-        availableInputDevicesProvider: @escaping @Sendable () -> [MicrophoneDevice] = AudioCaptureManager.availableInputDevices,
-        defaultInputDeviceIDProvider: @escaping @Sendable () -> AudioDeviceID? = AudioCaptureManager.defaultInputDeviceID
-    ) {
-        self.audioHardwareQueryService = AudioHardwareQueryService(
-            availableInputDevicesProvider: availableInputDevicesProvider,
-            defaultInputDeviceIDProvider: defaultInputDeviceIDProvider
-        )
+    init(audioHardwareQueryService: AudioHardwareQueryService = .shared) {
+        self.audioHardwareQueryService = audioHardwareQueryService
         bindStoreSegments()
         Task { [weak self] in
             await self?.refreshAvailableMicrophones()
@@ -436,6 +440,16 @@ final class CaptionViewModel: ObservableObject {
                 self?.handleAutomaticScreenshotIntervalChange()
             }
             .store(in: &automaticScreenshotSettingsCancellables)
+    }
+
+    convenience init(
+        availableInputDevicesProvider: @escaping @Sendable () -> [MicrophoneDevice],
+        defaultInputDeviceIDProvider: @escaping @Sendable () -> AudioDeviceID?
+    ) {
+        self.init(audioHardwareQueryService: AudioHardwareQueryService(
+            availableInputDevicesProvider: availableInputDevicesProvider,
+            defaultInputDeviceIDProvider: defaultInputDeviceIDProvider
+        ))
     }
 
     func configureBatchTranscription(dbQueue: DatabaseQueue) {
@@ -695,11 +709,22 @@ final class CaptionViewModel: ObservableObject {
         if defaultInputDeviceID != snapshot.defaultDeviceID {
             defaultInputDeviceID = snapshot.defaultDeviceID
         }
+        hasResolvedDefaultInputDevice = true
 
         if case let .device(currentMicrophoneID) = microphoneSelection,
+           !devices.isEmpty,
            !devices.contains(where: { $0.id == currentMicrophoneID }) {
             microphoneSelection = .systemDefault
         }
+    }
+
+    private func refreshDefaultInputDevice() async {
+        let deviceID = await audioHardwareQueryService.defaultInputDeviceID()
+        guard !Task.isCancelled else { return }
+        if defaultInputDeviceID != deviceID {
+            defaultInputDeviceID = deviceID
+        }
+        hasResolvedDefaultInputDevice = true
     }
 
     private static let fileDateFormatter: DateFormatter = {
@@ -1472,11 +1497,16 @@ final class CaptionViewModel: ObservableObject {
 
     private func installTranscriptionEventPipeline(persistenceService: MeetingPersistenceService) {
         transcriptionEventPipeline = TranscriptionEventPipeline(
-            uiSink: { [weak self] event in
-                self?.handleTranscriptionEvent(event)
+            uiSink: { [weak self] events in
+                for event in events {
+                    self?.handleTranscriptionEvent(event)
+                }
             },
-            persistenceSink: { event in
-                try await persistenceService.persist(event)
+            persistenceSink: { events in
+                try await persistenceService.persist(events)
+            },
+            persistenceResetSink: {
+                await persistenceService.reset()
             }
         )
     }
@@ -1573,7 +1603,7 @@ final class CaptionViewModel: ObservableObject {
         appendingTo existingMeetingId: UUID? = nil
     ) async {
         guard recordingLifecycle == .idle, !isFinalizingRecording else { return }
-        await refreshAvailableMicrophones()
+        await refreshDefaultInputDevice()
         guard recordingLifecycle == .idle,
               !isFinalizingRecording,
               canStartRecording() else { return }
@@ -1662,6 +1692,7 @@ final class CaptionViewModel: ObservableObject {
                 transcriptionPlan,
                 recordingSessionId: recordingSessionId
             )
+            await transcriptionEventPipeline?.flushUI()
 
             if let failure = pendingRealtimeRecognitionFailure {
                 throw RecordingPipelineFailure(message: failure.message)
@@ -2137,11 +2168,11 @@ final class CaptionViewModel: ObservableObject {
         _ = await screenshotExport
     }
 
-    func clearText() {
+    func clearText() async {
         guard !isFinalizingRecording else { return }
 
         store.clear()
-        persistenceService?.reset()
+        await transcriptionEventPipeline?.resetPersistence()
     }
 
     // MARK: - Screenshot

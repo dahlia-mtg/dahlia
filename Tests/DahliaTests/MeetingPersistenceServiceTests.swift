@@ -707,6 +707,42 @@ import GRDB
 
             #expect(persistedCount == 0)
         }
+
+        @Test
+        func previewTranslationDoesNotLeakIntoFinalizedSegment() async throws {
+            let database = try makeDatabase()
+            let store = TranscriptStore()
+            let startDate = Date(timeIntervalSince1970: 1_776_384_000)
+            store.recordingStartTime = startDate
+            let service = try MeetingPersistenceService(
+                store: store,
+                dbQueue: database.dbQueue,
+                vaultId: testVault.id,
+                projectId: nil,
+                initialName: "Preview translation"
+            )
+            let segment = TranscriptSegment(
+                sessionId: service.recordingSessionId,
+                startTime: startDate,
+                text: "Final",
+                isConfirmed: true,
+                speakerLabel: "mic"
+            )
+
+            try await service.persist(.previewTranslation(
+                sessionId: service.recordingSessionId,
+                segmentID: segment.id,
+                translatedText: "Old preview"
+            ))
+            try await service.persist(.finalized(segment))
+            await service.stop()
+
+            let persisted = try await database.dbQueue.read { db in
+                let record = try TranscriptSegmentRecord.fetchOne(db, key: segment.id)
+                return try #require(record)
+            }
+            #expect(persisted.translatedText == nil)
+        }
     }
 
 #elseif canImport(XCTest)

@@ -1,6 +1,6 @@
+import Combine
 import CoreGraphics
 import Foundation
-import ImageIO
 
 /// スクリーンショットのデコードを直列化し、スクロール中のデコード集中を防ぐ。
 actor ScreenshotImageLoader {
@@ -37,16 +37,7 @@ actor ScreenshotImageLoader {
             return entry.image
         }
 
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
-
-        let thumbnailOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ] as CFDictionary
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions),
+        guard let image = CGImageDecoder.decode(data, maxPixelSize: maxPixelSize),
               !Task.isCancelled else { return nil }
 
         let cost = image.bytesPerRow * image.height
@@ -54,6 +45,12 @@ actor ScreenshotImageLoader {
         cacheCost += cost
         evictIfNeeded(excluding: key)
         return image
+    }
+
+    /// 拡大表示用。巨大な画像をキャッシュへ残さず、元のピクセル解像度でデコードする。
+    func originalImage(data: Data) -> CGImage? {
+        guard !Task.isCancelled else { return nil }
+        return CGImageDecoder.decode(data)
     }
 
     func remove(screenshotID: UUID) {
@@ -73,5 +70,38 @@ actor ScreenshotImageLoader {
             cache.removeValue(forKey: oldest.key)
             cacheCost -= oldest.value.cost
         }
+    }
+}
+
+@MainActor
+final class ScreenshotImageLoadModel: ObservableObject {
+    enum State {
+        case idle
+        case loading
+        case loaded(CGImage)
+        case failed
+    }
+
+    enum TargetSize: Equatable {
+        case original
+        case maxPixelSize(Int)
+    }
+
+    @Published private(set) var state: State = .idle
+
+    func load(screenshotID: UUID, data: Data, targetSize: TargetSize) async {
+        state = .loading
+        let image = switch targetSize {
+        case .original:
+            await ScreenshotImageLoader.shared.originalImage(data: data)
+        case let .maxPixelSize(size):
+            await ScreenshotImageLoader.shared.image(
+                screenshotID: screenshotID,
+                data: data,
+                maxPixelSize: size
+            )
+        }
+        guard !Task.isCancelled else { return }
+        state = image.map(State.loaded) ?? .failed
     }
 }

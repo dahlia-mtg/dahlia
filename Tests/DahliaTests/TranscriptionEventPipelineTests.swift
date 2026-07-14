@@ -17,12 +17,12 @@
                 makeSegment(sessionId: sessionId, text: "final", isConfirmed: true)
             )
             let pipeline = TranscriptionEventPipeline(
-                uiSink: { event in
-                    await uiEvents.append(event)
+                uiSink: { events in
+                    await uiEvents.append(contentsOf: events)
                     await uiGate.wait()
                 },
-                persistenceSink: { event in
-                    await persistedEvents.append(event)
+                persistenceSink: { events in
+                    await persistedEvents.append(contentsOf: events)
                 }
             )
 
@@ -61,12 +61,12 @@
                 makeSegment(sessionId: sessionId, text: "three", isConfirmed: false)
             )
             let pipeline = TranscriptionEventPipeline(
-                uiSink: { event in
-                    await uiEvents.append(event)
+                uiSink: { events in
+                    await uiEvents.append(contentsOf: events)
                     await uiGate.wait()
                 },
-                persistenceSink: { event in
-                    await persistedEvents.append(event)
+                persistenceSink: { events in
+                    await persistedEvents.append(contentsOf: events)
                 }
             )
 
@@ -82,6 +82,56 @@
 
             #expect(await uiEvents.snapshot() == [blockingEvent, latestPreview])
             #expect(await persistedEvents.snapshot().isEmpty)
+        }
+
+        @Test
+        func previewTranslationStaysOnUILane() async throws {
+            let uiEvents = TranscriptionEventProbe()
+            let persistedEvents = TranscriptionEventProbe()
+            let event = TranscriptionEvent.previewTranslation(
+                sessionId: .v7(),
+                segmentID: .v7(),
+                translatedText: "preview"
+            )
+            let pipeline = TranscriptionEventPipeline(
+                uiSink: { events in
+                    await uiEvents.append(contentsOf: events)
+                },
+                persistenceSink: { events in
+                    await persistedEvents.append(contentsOf: events)
+                }
+            )
+
+            await pipeline.start()
+            await pipeline.enqueue(event)
+            try await pipeline.finish()
+
+            #expect(await uiEvents.snapshot() == [event])
+            #expect(await persistedEvents.snapshot().isEmpty)
+        }
+
+        @Test
+        func resetRunsAfterEarlierPersistenceEvents() async throws {
+            let operations = StringProbe()
+            let sessionID = UUID.v7()
+            let pipeline = TranscriptionEventPipeline(
+                uiSink: { _ in },
+                persistenceSink: { _ in
+                    await operations.append("persist")
+                },
+                persistenceResetSink: {
+                    await operations.append("reset")
+                }
+            )
+
+            await pipeline.start()
+            await pipeline.enqueue(.finalized(
+                makeSegment(sessionId: sessionID, text: "final", isConfirmed: true)
+            ))
+            await pipeline.resetPersistence()
+            try await pipeline.finish()
+
+            #expect(await operations.snapshot() == ["persist", "reset"])
         }
 
         private func makeSegment(
@@ -122,8 +172,8 @@
         private var events: [TranscriptionEvent] = []
         private var waiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
-        func append(_ event: TranscriptionEvent) {
-            events.append(event)
+        func append(contentsOf newEvents: [TranscriptionEvent]) {
+            events.append(contentsOf: newEvents)
             resumeSatisfiedWaiters()
         }
 
@@ -142,6 +192,18 @@
             let satisfied = waiters.filter { events.count >= $0.count }
             waiters.removeAll { events.count >= $0.count }
             satisfied.forEach { $0.continuation.resume() }
+        }
+    }
+
+    private actor StringProbe {
+        private var values: [String] = []
+
+        func append(_ value: String) {
+            values.append(value)
+        }
+
+        func snapshot() -> [String] {
+            values
         }
     }
 #endif

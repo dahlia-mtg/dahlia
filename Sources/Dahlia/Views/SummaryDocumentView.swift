@@ -248,16 +248,15 @@ struct SummaryDocumentView: View {
 private struct SummaryScreenshotImageView: View {
     let screenshotID: UUID
     let data: Data
-    @State private var image: CGImage?
-    @State private var imageLoadFailed = false
+    @StateObject private var imageLoader = ScreenshotImageLoadModel()
 
     var body: some View {
         Group {
-            if let image {
+            if case let .loaded(image) = imageLoader.state {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .scaledToFit()
-            } else if imageLoadFailed {
+            } else if case .failed = imageLoader.state {
                 Text(L10n.summaryImageUnavailable)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -269,16 +268,11 @@ private struct SummaryScreenshotImageView: View {
         .frame(maxWidth: .infinity, maxHeight: 360, alignment: .leading)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .task(id: screenshotID) {
-            image = nil
-            imageLoadFailed = false
-            let loadedImage = await ScreenshotImageLoader.shared.image(
+            await imageLoader.load(
                 screenshotID: screenshotID,
                 data: data,
-                maxPixelSize: 1200
+                targetSize: .maxPixelSize(1200)
             )
-            guard !Task.isCancelled else { return }
-            image = loadedImage
-            imageLoadFailed = loadedImage == nil
         }
     }
 }

@@ -63,6 +63,7 @@ final class MacCalendarStore: ObservableObject {
     private let storeChangedNotification: Notification.Name?
     private var lastRefreshAt: Date?
     private var storeChangedTask: Task<Void, Never>?
+    private var refreshGeneration: UInt64 = 0
 
     init(
         eventStoreProvider: any MacCalendarEventStoreProviding = EventKitMacCalendarEventStore(),
@@ -113,7 +114,11 @@ final class MacCalendarStore: ObservableObject {
     }
 
     func refreshIfNeeded(force: Bool = false) async {
-        authorizationStatus = await eventStoreProvider.authorizationStatus()
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
+        let refreshedAuthorizationStatus = await eventStoreProvider.authorizationStatus()
+        guard isCurrentRefresh(generation), !Task.isCancelled else { return }
+        authorizationStatus = refreshedAuthorizationStatus
         guard authorizationStatus.canReadEvents else {
             clearRuntimeState()
             state = Self.state(for: authorizationStatus)
@@ -129,7 +134,10 @@ final class MacCalendarStore: ObservableObject {
 
         beginLoading()
         do {
-            availableCalendars = try await eventStoreProvider.fetchCalendarList()
+            let calendars = try await eventStoreProvider.fetchCalendarList()
+            try Task.checkCancellation()
+            guard isCurrentRefresh(generation) else { return }
+            availableCalendars = calendars
             initializeSelectionIfNeeded()
             pruneSelectedCalendars()
 
@@ -142,35 +150,46 @@ final class MacCalendarStore: ObservableObject {
             }
 
             let selectedCalendars = availableCalendars.filter { selectedCalendarIDs.contains($0.id) }
-            upcomingEvents = try await eventStoreProvider.fetchUpcomingEvents(
+            let events = try await eventStoreProvider.fetchUpcomingEvents(
                 calendars: selectedCalendars,
                 now: now(),
                 daysAhead: daysAhead
             )
+            try Task.checkCancellation()
+            guard isCurrentRefresh(generation) else { return }
+            upcomingEvents = events
             lastRefreshAt = now()
             lastErrorMessage = nil
             recomputeState()
+        } catch is CancellationError {
+            guard isCurrentRefresh(generation) else { return }
+            recomputeState()
         } catch {
+            guard isCurrentRefresh(generation) else { return }
             handle(error)
             recomputeStateIfNeeded()
         }
     }
 
-    func toggleCalendarSelection(id: String) {
-        guard isAuthorized else { return }
+    @discardableResult
+    func toggleCalendarSelection(id: String) -> Task<Void, Never>? {
+        guard isAuthorized else { return nil }
         var nextSelection = selectedCalendarIDs
         nextSelection.toggle(id)
 
+        invalidateCurrentRefresh()
         updateSelectedCalendarIDs(nextSelection)
-        Task {
+        return Task {
             await refreshIfNeeded(force: true)
         }
     }
 
-    func setCalendarSelection(_ ids: Set<String>) {
-        guard isAuthorized else { return }
+    @discardableResult
+    func setCalendarSelection(_ ids: Set<String>) -> Task<Void, Never>? {
+        guard isAuthorized else { return nil }
+        invalidateCurrentRefresh()
         updateSelectedCalendarIDs(ids)
-        Task {
+        return Task {
             await refreshIfNeeded(force: true)
         }
     }
@@ -236,6 +255,14 @@ final class MacCalendarStore: ObservableObject {
     private func handleEventStoreChanged() async {
         lastRefreshAt = nil
         await refreshIfNeeded(force: true)
+    }
+
+    private func invalidateCurrentRefresh() {
+        refreshGeneration &+= 1
+    }
+
+    private func isCurrentRefresh(_ generation: UInt64) -> Bool {
+        generation == refreshGeneration
     }
 
     private static func state(for authorizationStatus: MacCalendarAuthorizationStatus) -> State {

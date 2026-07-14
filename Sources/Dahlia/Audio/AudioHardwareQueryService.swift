@@ -17,6 +17,10 @@ actor AudioHardwareQueryService {
     private let defaultInputDeviceIDProvider: @Sendable () -> AudioDeviceID?
     private let inputDeviceIDsProvider: @Sendable () -> [AudioDeviceID]
     private let isDeviceRunningProvider: @Sendable (AudioDeviceID) -> Bool
+    private let listenerQueue = DispatchQueue(label: "com.dahlia.audioHardwareListeners")
+    private var monitoringOwnerID: UUID?
+    private var deviceListeners: [(id: AudioDeviceID, block: AudioObjectPropertyListenerBlock)] = []
+    private var deviceListChangeBlock: AudioObjectPropertyListenerBlock?
 
     init(
         availableInputDevicesProvider: @escaping @Sendable () -> [MicrophoneDevice] = AudioCaptureManager.availableInputDevices,
@@ -40,6 +44,11 @@ actor AudioHardwareQueryService {
         )
     }
 
+    func defaultInputDeviceID() -> AudioDeviceID? {
+        guard !Task.isCancelled else { return nil }
+        return defaultInputDeviceIDProvider()
+    }
+
     func inputDeviceIDs() -> [AudioDeviceID] {
         guard !Task.isCancelled else { return [] }
         return inputDeviceIDsProvider()
@@ -48,5 +57,78 @@ actor AudioHardwareQueryService {
     func isAnyInputDeviceRunning(in deviceIDs: [AudioDeviceID]) -> Bool {
         guard !Task.isCancelled else { return false }
         return deviceIDs.contains(where: isDeviceRunningProvider)
+    }
+
+    func startMonitoring(
+        ownerID: UUID,
+        onDeviceListChange: @escaping @Sendable () -> Void
+    ) {
+        removeAllListeners()
+        monitoringOwnerID = ownerID
+
+        var address = Self.globalAddress(kAudioHardwarePropertyDevices)
+        let block: AudioObjectPropertyListenerBlock = { _, _ in
+            onDeviceListChange()
+        }
+        deviceListChangeBlock = block
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            block
+        )
+    }
+
+    func replaceRunningStateListeners(
+        ownerID: UUID,
+        deviceIDs: [AudioDeviceID],
+        onRunningStateChange: @escaping @Sendable () -> Void
+    ) {
+        guard monitoringOwnerID == ownerID else { return }
+        removeRunningStateListeners()
+
+        for deviceID in deviceIDs {
+            var address = Self.globalAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)
+            let block: AudioObjectPropertyListenerBlock = { _, _ in
+                onRunningStateChange()
+            }
+            AudioObjectAddPropertyListenerBlock(deviceID, &address, listenerQueue, block)
+            deviceListeners.append((id: deviceID, block: block))
+        }
+    }
+
+    func stopMonitoring(ownerID: UUID) {
+        guard monitoringOwnerID == ownerID else { return }
+        removeAllListeners()
+        monitoringOwnerID = nil
+    }
+
+    private func removeAllListeners() {
+        removeRunningStateListeners()
+        guard let block = deviceListChangeBlock else { return }
+        var address = Self.globalAddress(kAudioHardwarePropertyDevices)
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            listenerQueue,
+            block
+        )
+        deviceListChangeBlock = nil
+    }
+
+    private func removeRunningStateListeners() {
+        for listener in deviceListeners {
+            var address = Self.globalAddress(kAudioDevicePropertyDeviceIsRunningSomewhere)
+            AudioObjectRemovePropertyListenerBlock(listener.id, &address, listenerQueue, listener.block)
+        }
+        deviceListeners.removeAll()
+    }
+
+    private static func globalAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
     }
 }
