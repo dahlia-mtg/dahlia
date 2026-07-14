@@ -164,6 +164,7 @@ actor CodexAppServerProcessTransport: CodexAppServerTransport {
         }
 
         func waitUntilOutputBufferOverflowForTesting() async {
+            startDrainsIfNeeded()
             if outputError as? CodexAppServerError == .outputBufferOverflow { return }
             await withCheckedContinuation { continuation in
                 outputBufferOverflowWaiters.append(continuation)
