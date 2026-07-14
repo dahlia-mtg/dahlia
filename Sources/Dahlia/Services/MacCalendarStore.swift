@@ -114,24 +114,10 @@ final class MacCalendarStore: ObservableObject {
     }
 
     func refreshIfNeeded(force: Bool = false) async {
+        guard await prepareRefresh(force: force) else { return }
+
         refreshGeneration &+= 1
         let generation = refreshGeneration
-        let refreshedAuthorizationStatus = await eventStoreProvider.authorizationStatus()
-        guard isCurrentRefresh(generation), !Task.isCancelled else { return }
-        authorizationStatus = refreshedAuthorizationStatus
-        guard authorizationStatus.canReadEvents else {
-            clearRuntimeState()
-            state = Self.state(for: authorizationStatus)
-            return
-        }
-
-        if !force,
-           let lastRefreshAt,
-           now().timeIntervalSince(lastRefreshAt) < refreshInterval {
-            recomputeStateIfNeeded()
-            return
-        }
-
         beginLoading()
         do {
             let calendars = try await eventStoreProvider.fetchCalendarList()
@@ -169,6 +155,26 @@ final class MacCalendarStore: ObservableObject {
             handle(error)
             recomputeStateIfNeeded()
         }
+    }
+
+    private func prepareRefresh(force: Bool) async -> Bool {
+        let refreshedAuthorizationStatus = await eventStoreProvider.authorizationStatus()
+        guard !Task.isCancelled else { return false }
+        authorizationStatus = refreshedAuthorizationStatus
+        guard authorizationStatus.canReadEvents else {
+            invalidateCurrentRefresh()
+            clearRuntimeState()
+            state = Self.state(for: authorizationStatus)
+            return false
+        }
+
+        if !force,
+           let lastRefreshAt,
+           now().timeIntervalSince(lastRefreshAt) < refreshInterval {
+            recomputeStateIfNeeded()
+            return false
+        }
+        return true
     }
 
     @discardableResult
