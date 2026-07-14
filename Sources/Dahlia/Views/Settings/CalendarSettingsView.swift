@@ -8,7 +8,35 @@ struct CalendarSettingsView: View {
     var body: some View {
         Form {
             Section {
-                ForEach(CalendarSource.allCases) { source in
+                Toggle(isOn: $settings.menuBarCalendarEnabled) {
+                    Text(L10n.menuBarCalendarDisplay)
+                    Text(L10n.menuBarCalendarDisplayDescription)
+                }
+                .toggleStyle(.switch)
+
+                Toggle(isOn: $settings.menuBarCalendarShowsEventTitle) {
+                    Text(L10n.menuBarCalendarEventTitle)
+                    Text(L10n.menuBarCalendarEventTitleDescription)
+                }
+                .toggleStyle(.switch)
+                .disabled(!settings.menuBarCalendarEnabled)
+
+                Toggle(isOn: $settings.menuBarCalendarShowsCountdown) {
+                    Text(L10n.menuBarCalendarCountdown)
+                    Text(L10n.menuBarCalendarCountdownDescription)
+                }
+                .toggleStyle(.switch)
+                .disabled(!settings.menuBarCalendarEnabled)
+            } header: {
+                Text(L10n.menuBarCalendar)
+            } footer: {
+                Text(L10n.menuBarCalendarDescription)
+            }
+
+            CalendarEventFilterSettingsView(settings: settings)
+
+            Section {
+                ForEach(displayedCalendarSources) { source in
                     Toggle(isOn: calendarSourceBinding(for: source)) {
                         Text(source.displayName)
                         Text(calendarSourceDescription(for: source))
@@ -21,14 +49,12 @@ struct CalendarSettingsView: View {
                 Text(L10n.calendarSourcesDescription)
             }
 
-            CalendarEventFilterSettingsView(settings: settings)
+            if settings.isCalendarSourceEnabled(.macOS) {
+                macCalendarSettings
+            }
 
             if settings.isCalendarSourceEnabled(.google) {
                 googleCalendarSettings
-            }
-
-            if settings.isCalendarSourceEnabled(.macOS) {
-                macCalendarSettings
             }
         }
         .task {
@@ -40,6 +66,10 @@ struct CalendarSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private var displayedCalendarSources: [CalendarSource] {
+        [.macOS, .google]
     }
 
     @ViewBuilder

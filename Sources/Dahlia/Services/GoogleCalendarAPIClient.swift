@@ -147,6 +147,7 @@ final class GoogleCalendarAPIClient: GoogleCalendarAPIClientProviding {
             isAllDay: item.start.date != nil,
             hasOtherAttendees: item.hasOtherAttendees,
             isDeclined: item.isDeclinedByCurrentUser,
+            isAttending: item.isCurrentUserAttending,
             isOutOfOffice: item.eventType == "outOfOffice",
             conferenceURI: conferenceURI(for: item),
             url: absoluteURL(from: item.htmlLink)
@@ -415,6 +416,7 @@ extension GoogleCalendarAPIClient {
         let conferenceData: ConferenceData?
         let eventType: String?
         let attendees: [GoogleCalendarAttendee]?
+        let organizer: GoogleCalendarAttendee?
 
         init(
             id: String,
@@ -429,7 +431,8 @@ extension GoogleCalendarAPIClient {
             recurringEventId: String? = nil,
             conferenceData: ConferenceData?,
             eventType: String?,
-            attendees: [GoogleCalendarAttendee]? = nil
+            attendees: [GoogleCalendarAttendee]? = nil,
+            organizer: GoogleCalendarAttendee? = nil
         ) {
             self.id = id
             self.summary = summary
@@ -444,6 +447,7 @@ extension GoogleCalendarAPIClient {
             self.conferenceData = conferenceData
             self.eventType = eventType
             self.attendees = attendees
+            self.organizer = organizer
         }
 
         var hasOtherAttendees: Bool {
@@ -452,6 +456,12 @@ extension GoogleCalendarAPIClient {
 
         var isDeclinedByCurrentUser: Bool {
             attendees?.first(where: \.isCurrentUser)?.responseStatus == "declined"
+        }
+
+        var isCurrentUserAttending: Bool {
+            attendees == nil
+                || organizer?.isCurrentUser == true
+                || attendees?.first(where: \.isCurrentUser)?.responseStatus == "accepted"
         }
     }
 }
