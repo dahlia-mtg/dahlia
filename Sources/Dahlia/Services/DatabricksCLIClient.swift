@@ -90,6 +90,7 @@ struct DatabricksCLIClient {
             "--output",
             "json",
         ])
+        try Task.checkCancellation()
         try validate(output)
 
         guard let response = try? JSONDecoder().decode(ProfilesResponse.self, from: output.standardOutput) else {

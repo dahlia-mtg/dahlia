@@ -13,15 +13,18 @@ final class DatabricksAccountController {
     private let client: DatabricksCLIClient
     private let configurationManager: CodexConfigurationManager
     private let service: CodexAppServerService
+    private let configurationStore: any CodexAccountConfigurationStoring
 
     init(
         client: DatabricksCLIClient = DatabricksCLIClient(),
         configurationManager: CodexConfigurationManager = CodexConfigurationManager(),
-        service: CodexAppServerService = .shared
+        service: CodexAppServerService = .shared,
+        configurationStore: any CodexAccountConfigurationStoring = AppSettings.shared
     ) {
         self.client = client
         self.configurationManager = configurationManager
         self.service = service
+        self.configurationStore = configurationStore
     }
 
     var isBusy: Bool {
@@ -30,6 +33,7 @@ final class DatabricksAccountController {
 
     func prepare(profileName: String) async -> String? {
         await loadProfiles()
+        guard !Task.isCancelled else { return nil }
         guard errorMessage == nil else { return nil }
 
         let resolvedProfileName = resolvedProfileName(current: profileName)
@@ -77,11 +81,18 @@ final class DatabricksAccountController {
         defer { isApplyingConfiguration = false }
 
         do {
+            try Task.checkCancellation()
+            configurationStore.invalidateCodexAccountConfiguration()
             if try configurationManager.configureDatabricks(profile: profile) {
                 try await service.reloadConfiguration()
             }
+            try Task.checkCancellation()
             _ = try await service.models(forceRefresh: true)
-            AppSettings.shared.codexConfiguredAccountProviderRawValue = AIAccountProvider.databricks.rawValue
+            try Task.checkCancellation()
+            configurationStore.markCodexAccountConfigurationCurrent(
+                provider: .databricks,
+                databricksProfile: profile.name
+            )
             isConfigured = true
         } catch is CancellationError {
             // A newer profile selection superseded this configuration attempt.

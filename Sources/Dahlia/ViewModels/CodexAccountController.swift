@@ -13,15 +13,18 @@ final class CodexAccountController {
     private let service: CodexAppServerService
     private let urlOpener: any CodexLoginURLOpening
     private let configurationManager: CodexConfigurationManager
+    private let configurationStore: any CodexAccountConfigurationStoring
 
     init(
         service: CodexAppServerService = .shared,
         urlOpener: any CodexLoginURLOpening = WorkspaceCodexLoginURLOpener(),
-        configurationManager: CodexConfigurationManager = CodexConfigurationManager()
+        configurationManager: CodexConfigurationManager = CodexConfigurationManager(),
+        configurationStore: any CodexAccountConfigurationStoring = AppSettings.shared
     ) {
         self.service = service
         self.urlOpener = urlOpener
         self.configurationManager = configurationManager
+        self.configurationStore = configurationStore
     }
 
     var isBusy: Bool {
@@ -49,11 +52,17 @@ final class CodexAccountController {
         defer { isCheckingStatus = false }
 
         do {
+            try Task.checkCancellation()
+            configurationStore.invalidateCodexAccountConfiguration()
             if try configurationManager.configureChatGPTSubscription() {
                 try await service.reloadConfiguration()
             }
             accountStatus = try await service.accountStatus(forceRefresh: true)
-            AppSettings.shared.codexConfiguredAccountProviderRawValue = AIAccountProvider.chatGPTSubscription.rawValue
+            try Task.checkCancellation()
+            configurationStore.markCodexAccountConfigurationCurrent(
+                provider: .chatGPTSubscription,
+                databricksProfile: ""
+            )
         } catch is CancellationError {
             // SwiftUI cancels this operation when the settings screen disappears.
         } catch {

@@ -230,13 +230,21 @@ import Foundation
 
         @Test
         func configurationReloadStartsAFreshConnection() async throws {
-            let service = CodexAppServerService {
-                TestCodexAppServerTransport(mode: .models)
-            }
+            let first = TestCodexAppServerTransport(mode: .models)
+            let second = TestCodexAppServerTransport(mode: .models)
+            let transports = Mutex([first, second])
+            let launchCount = Mutex(0)
+            let service = CodexAppServerService(transportFactory: {
+                launchCount.withLock { $0 += 1 }
+                return transports.withLock { $0.removeFirst() }
+            })
 
             try await service.start()
             try await service.reloadConfiguration()
 
+            #expect(launchCount.withLock { $0 } == 2)
+            #expect(await first.isClosed)
+            #expect(await !second.isClosed)
             #expect(try await service.models().map(\.model) == ["default-model"])
             await service.shutdown()
         }
