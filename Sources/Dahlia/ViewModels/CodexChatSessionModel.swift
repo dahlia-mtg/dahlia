@@ -144,7 +144,7 @@ final class CodexChatSessionModel: Identifiable {
     }
 
     private func runTurn(text: String, responseID: String) async {
-        var responseIDsByItemID: [String: String] = [:]
+        var accumulator = CodexChatTurnAccumulator()
         do {
             if models.isEmpty {
                 await prepare()
@@ -173,7 +173,7 @@ final class CodexChatSessionModel: Identifiable {
             )
             var turnCompleted = false
             for try await event in stream {
-                apply(event, responseID: responseID, responseIDsByItemID: &responseIDsByItemID)
+                apply(event, responseID: responseID, accumulator: &accumulator)
                 if case .completed(itemID: nil, text: nil) = event {
                     turnCompleted = true
                 }
@@ -182,10 +182,10 @@ final class CodexChatSessionModel: Identifiable {
                 await reconcileFromRollout()
             }
         } catch is CancellationError {
-            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
+            completeTurnResponse(responseID: responseID)
         } catch {
             errorMessage = error.localizedDescription
-            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
+            completeTurnResponse(responseID: responseID)
         }
         finishGeneration()
     }
@@ -193,7 +193,7 @@ final class CodexChatSessionModel: Identifiable {
     private func apply(
         _ event: CodexChatTurnEvent,
         responseID: String,
-        responseIDsByItemID: inout [String: String]
+        accumulator: inout CodexChatTurnAccumulator
     ) {
         switch event {
         case let .started(turnID):
@@ -202,30 +202,24 @@ final class CodexChatSessionModel: Identifiable {
                 Task { await service.interrupt(threadID: backendThreadID, turnID: turnID) }
             }
         case let .delta(itemID, text):
-            let messageID = responseMessageID(
-                for: itemID,
-                pendingResponseID: responseID,
-                responseIDsByItemID: &responseIDsByItemID
-            )
-            guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-            messages[index].text += text
+            accumulator.appendResponseDelta(itemID: itemID, text: text)
+            updateTurnResponse(id: responseID, from: accumulator)
         case let .completed(itemID?, text):
-            let messageID = responseMessageID(
-                for: itemID,
-                pendingResponseID: responseID,
-                responseIDsByItemID: &responseIDsByItemID
-            )
-            if let text, let index = messages.firstIndex(where: { $0.id == messageID }) {
-                messages[index].text = text
-                messages[index].isStreaming = false
-            }
+            accumulator.completeResponse(itemID: itemID, text: text)
+            updateTurnResponse(id: responseID, from: accumulator)
         case .completed(itemID: nil, text: _):
-            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
+            completeTurnResponse(responseID: responseID)
+        case let .reasoningDelta(itemID, summaryIndex, text):
+            accumulator.appendReasoningDelta(itemID: itemID, summaryIndex: summaryIndex, text: text)
+            updateTurnResponse(id: responseID, from: accumulator)
+        case let .reasoningCompleted(itemID, text):
+            accumulator.completeReasoning(itemID: itemID, text: text)
+            updateTurnResponse(id: responseID, from: accumulator)
         case .interrupted:
-            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
+            completeTurnResponse(responseID: responseID)
         case let .failed(message):
             errorMessage = CodexAppServerError.turnFailed(message).localizedDescription
-            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
+            completeTurnResponse(responseID: responseID)
         }
     }
 
@@ -243,40 +237,18 @@ final class CodexChatSessionModel: Identifiable {
         }
     }
 
-    private func markResponseComplete(id: String) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+    private func completeTurnResponse(responseID: String) {
+        guard let index = messages.firstIndex(where: { $0.id == responseID }) else { return }
         messages[index].isStreaming = false
+        if messages[index].text.isEmpty, messages[index].reasoning.isEmpty {
+            messages.remove(at: index)
+        }
     }
 
-    private func responseMessageID(
-        for itemID: String,
-        pendingResponseID: String,
-        responseIDsByItemID: inout [String: String]
-    ) -> String {
-        if let existingID = responseIDsByItemID[itemID] {
-            return existingID
-        }
-
-        if responseIDsByItemID.isEmpty {
-            responseIDsByItemID[itemID] = pendingResponseID
-            return pendingResponseID
-        }
-
-        let messageID = "response-\(itemID)"
-        responseIDsByItemID[itemID] = messageID
-        messages.append(CodexChatMessage(id: messageID, role: .assistant, text: "", isStreaming: true))
-        return messageID
-    }
-
-    private func completeTurnResponses(
-        responseID: String,
-        responseIDsByItemID: [String: String]
-    ) {
-        markResponseComplete(id: responseID)
-        for messageID in responseIDsByItemID.values where messageID != responseID {
-            markResponseComplete(id: messageID)
-        }
-        messages.removeAll { $0.id == responseID && $0.text.isEmpty }
+    private func updateTurnResponse(id: String, from accumulator: CodexChatTurnAccumulator) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[index].text = accumulator.responseText
+        messages[index].reasoning = accumulator.reasoningText
     }
 
     private func reconcileFromRollout() async {

@@ -156,6 +156,7 @@ actor CodexChatService: CodexChatServicing {
                     "text": .string(text),
                 ]),
             ]),
+            "summary": .string("auto"),
             "threadId": .string(threadID),
         ]
         if let model = model?.nilIfBlank {
@@ -253,29 +254,54 @@ private extension CodexChatService {
 
     nonisolated static func parseMessages(_ turn: JSONValue) -> [CodexChatMessage] {
         guard let items = turn.objectValue?["items"]?.arrayValue else { return [] }
-        return items.compactMap { item in
+        var messages: [CodexChatMessage] = []
+        var assistantItemID: String?
+        var assistantTexts: [String] = []
+        var reasoningTexts: [String] = []
+
+        for item in items {
             guard let object = item.objectValue,
                   let id = object["id"]?.stringValue,
                   let type = object["type"]?.stringValue
-            else { return nil }
+            else { continue }
 
             switch type {
             case "userMessage":
-                let text = object["content"]?.arrayValue?
-                    .compactMap { input -> String? in
-                        guard input.objectValue?["type"]?.stringValue == "text" else { return nil }
-                        return input.objectValue?["text"]?.stringValue
-                    }
-                    .joined(separator: "\n")
-                guard let text = text?.nilIfBlank else { return nil }
-                return CodexChatMessage(id: id, role: .user, text: text)
+                messages.append(contentsOf: parseUserMessages(object, id: id))
             case "agentMessage":
-                guard let text = object["text"]?.stringValue?.nilIfBlank else { return nil }
-                return CodexChatMessage(id: id, role: .assistant, text: text)
+                guard let text = object["text"]?.stringValue?.nilIfBlank else { continue }
+                assistantItemID = assistantItemID ?? id
+                assistantTexts.append(text)
+            case "reasoning":
+                let summaries = object["summary"]?.arrayValue?
+                    .compactMap(\.stringValue)
+                    .compactMap(\.nilIfBlank)
+                reasoningTexts.append(contentsOf: summaries ?? [])
             default:
-                return nil
+                continue
             }
         }
+
+        if let assistantItemID, !assistantTexts.isEmpty {
+            messages.append(CodexChatMessage(
+                id: assistantItemID,
+                role: .assistant,
+                text: assistantTexts.joined(separator: "\n\n"),
+                reasoning: reasoningTexts.joined(separator: "\n\n")
+            ))
+        }
+        return messages
+    }
+
+    nonisolated static func parseUserMessages(_ object: [String: JSONValue], id: String) -> [CodexChatMessage] {
+        let text = object["content"]?.arrayValue?
+            .compactMap { input -> String? in
+                guard input.objectValue?["type"]?.stringValue == "text" else { return nil }
+                return input.objectValue?["text"]?.stringValue
+            }
+            .joined(separator: "\n")
+        guard let text = text?.nilIfBlank else { return [] }
+        return [CodexChatMessage(id: id, role: .user, text: text)]
     }
 
     nonisolated static func parseTurnEvent(_ value: JSONValue) throws -> CodexChatTurnEvent? {
@@ -289,6 +315,8 @@ private extension CodexChatService {
         switch method {
         case "item/agentMessage/delta":
             return try parseDelta(params)
+        case "item/reasoning/summaryTextDelta":
+            return try parseReasoningDelta(params)
         case "item/completed":
             return try parseCompletedItem(params)
         case "turn/completed":
@@ -296,6 +324,16 @@ private extension CodexChatService {
         default:
             return nil
         }
+    }
+
+    nonisolated static func parseReasoningDelta(_ params: [String: JSONValue]) throws -> CodexChatTurnEvent {
+        guard let itemID = params["itemId"]?.stringValue,
+              let summaryIndex = params["summaryIndex"]?.intValue,
+              let delta = params["delta"]?.stringValue
+        else {
+            throw CodexAppServerError.invalidProtocolResponse
+        }
+        return .reasoningDelta(itemID: itemID, summaryIndex: summaryIndex, text: delta)
     }
 
     nonisolated static func parseDelta(_ params: [String: JSONValue]) throws -> CodexChatTurnEvent {
@@ -311,13 +349,26 @@ private extension CodexChatService {
         guard let item = params["item"]?.objectValue else {
             throw CodexAppServerError.invalidProtocolResponse
         }
-        guard item["type"]?.stringValue == "agentMessage" else { return nil }
         guard let itemID = item["id"]?.stringValue,
-              let text = item["text"]?.stringValue
+              let type = item["type"]?.stringValue
         else {
             throw CodexAppServerError.invalidProtocolResponse
         }
-        return .completed(itemID: itemID, text: text)
+        switch type {
+        case "agentMessage":
+            guard let text = item["text"]?.stringValue else {
+                throw CodexAppServerError.invalidProtocolResponse
+            }
+            return .completed(itemID: itemID, text: text)
+        case "reasoning":
+            let text = item["summary"]?.arrayValue?
+                .compactMap(\.stringValue)
+                .compactMap(\.nilIfBlank)
+                .joined(separator: "\n\n") ?? ""
+            return .reasoningCompleted(itemID: itemID, text: text)
+        default:
+            return nil
+        }
     }
 
     nonisolated static func parseTurnCompletion(_ params: [String: JSONValue]) throws -> CodexChatTurnEvent {

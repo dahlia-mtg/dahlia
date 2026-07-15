@@ -156,6 +156,14 @@ actor TestCodexChatAppServerTransport: CodexAppServerTransport {
 
     private func enqueueCompletedTurn(requestID: Int) {
         enqueue(.object([
+            "method": .string("item/reasoning/summaryTextDelta"),
+            "params": turnParams([
+                "itemId": .string("reasoning-1"),
+                "summaryIndex": .number(0),
+                "delta": .string("Checked the request"),
+            ]),
+        ]))
+        enqueue(.object([
             "method": .string("item/agentMessage/delta"),
             "params": turnParams([
                 "itemId": .string("item-1"),
@@ -170,6 +178,17 @@ actor TestCodexChatAppServerTransport: CodexAppServerTransport {
             ]),
         ]))
         enqueueResponse(requestID, result: inProgressTurn)
+        enqueue(.object([
+            "method": .string("item/completed"),
+            "params": turnParams([
+                "item": .object([
+                    "id": .string("reasoning-1"),
+                    "type": .string("reasoning"),
+                    "summary": .array([.string("Checked the request")]),
+                    "content": .array([]),
+                ]),
+            ]),
+        ]))
         enqueue(.object([
             "method": .string("item/completed"),
             "params": turnParams([
@@ -282,6 +301,15 @@ actor TestCodexChatAppServerTransport: CodexAppServerTransport {
                             "id": .string("agent-1"),
                             "type": .string("agentMessage"),
                             "text": .string("Answer"),
+                        ]),
+                        .object([
+                            "id": .string("reasoning-1"),
+                            "type": .string("reasoning"),
+                            "summary": .array([
+                                .string("Reviewed the question"),
+                                .string("Prepared the answer"),
+                            ]),
+                            "content": .array([]),
                         ]),
                     ]),
                 ]),

@@ -33,7 +33,9 @@ import Foundation
             #expect(thread.id == "thread-1")
             #expect(events == [
                 .started(turnID: "turn-1"),
+                .reasoningDelta(itemID: "reasoning-1", summaryIndex: 0, text: "Checked the request"),
                 .delta(itemID: "item-1", text: "Hello"),
+                .reasoningCompleted(itemID: "reasoning-1", text: "Checked the request"),
                 .completed(itemID: "item-1", text: "Hello"),
                 .completed(itemID: nil, text: nil),
             ])
@@ -71,6 +73,7 @@ import Foundation
             }?.objectValue?["params"]?.objectValue)
             #expect(turnParams["outputSchema"] == nil)
             #expect(turnParams["effort"] == .string("high"))
+            #expect(turnParams["summary"] == .string("auto"))
             await appServer.shutdown()
         }
 
@@ -135,6 +138,7 @@ import Foundation
             #expect(page.threads.map(\.id) == ["thread-history"])
             #expect(page.nextCursor == "next-page")
             #expect(loaded.messages.map(\.text) == ["Question", "Answer"])
+            #expect(loaded.messages.last?.reasoning == "Reviewed the question\n\nPrepared the answer")
             #expect(resumed.model == "default-model")
             #expect(resumed.reasoningEffort == "high")
 

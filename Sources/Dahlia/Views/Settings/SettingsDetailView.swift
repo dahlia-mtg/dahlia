@@ -22,8 +22,8 @@ struct SettingsDetailView: View {
                 AccountSettingsView()
             case .aiSummary:
                 AISummarySettingsView()
-            case .meetingDataAccess:
-                MeetingDataAccessSettingsView()
+            case .mcp:
+                MCPSettingsView()
             case .instructions:
                 InstructionsSettingsView(sidebarViewModel: sidebarViewModel)
             case .developer:

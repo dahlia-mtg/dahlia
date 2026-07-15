@@ -671,17 +671,18 @@
 "Resize" = "Resize";
 "Show all chats" = "Show all";
 "Copy message" = "Copy message";
+"Thought process" = "Thought process";
 "Selected" = "Selected";
 "Response performance" = "Response performance";
 
-/* Meeting Data Access */
-"Meeting Data Access" = "Meeting Data Access";
+/* MCP */
+"MCP" = "MCP";
 "Vault Name" = "Vault Name";
 "Vault ID" = "Vault ID";
 "Copy Command" = "Copy Command";
 "Codex CLI" = "Codex CLI";
 "Claude Code" = "Claude Code";
-"The meeting access helper is not available in this app build." = "The meeting access helper is not available in this app build.";
-"Select a vault before configuring meeting data access." = "Select a vault before configuring meeting data access.";
+"The MCP helper is not available in this app build." = "The MCP helper is not available in this app build.";
+"Select a vault before configuring MCP." = "Select a vault before configuring MCP.";
 "Each command registers read-only access to only the selected vault. Run it again after switching vaults." = "Each command registers read-only access to only the selected vault. Run it again after switching vaults.";
 "%@ registration command" = "%@ registration command";

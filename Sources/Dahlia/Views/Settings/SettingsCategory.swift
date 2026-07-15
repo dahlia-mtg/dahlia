@@ -1,6 +1,6 @@
 import Foundation
 
-/// 設定項目。rawValue は保存済みの選択状態との互換性のため維持する。
+/// 設定画面のカテゴリ。
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case general
     case transcription
@@ -9,7 +9,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case cloudStorage
     case modelProvider = "accounts"
     case aiSummary
-    case meetingDataAccess
+    case mcp
     case instructions
     case developer
     case audioDiagnostics
@@ -25,7 +25,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .cloudStorage: L10n.export
         case .modelProvider: L10n.aiConnection
         case .aiSummary: L10n.aiSummary
-        case .meetingDataAccess: L10n.meetingDataAccess
+        case .mcp: L10n.mcp
         case .instructions: L10n.instructions
         case .developer: L10n.developerSettings
         case .audioDiagnostics: L10n.diagnostics
@@ -41,7 +41,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .cloudStorage: "square.and.arrow.up"
         case .modelProvider: "link"
         case .aiSummary: "sparkles"
-        case .meetingDataAccess: "server.rack"
+        case .mcp: "network"
         case .instructions: "list.bullet.clipboard"
         case .developer: "wrench.and.screwdriver"
         case .audioDiagnostics: "stethoscope"
