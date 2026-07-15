@@ -7,15 +7,22 @@ struct CodexChatWindowView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        CodexChatView(
-            session: coordinator.session(for: sessionID),
-            coordinator: coordinator,
-            allowsPopOut: false,
-            onNewChat: openNewWindow,
-            onPopOut: {},
-            onHide: dismissWindow,
-            onOpenHistory: openHistory
-        )
+        Group {
+            if let session = coordinator.session(for: sessionID) {
+                CodexChatView(
+                    session: session,
+                    coordinator: coordinator,
+                    allowsPopOut: false,
+                    onNewChat: openNewWindow,
+                    onPopOut: {},
+                    onHide: dismissWindow,
+                    onOpenHistory: openHistory
+                )
+            } else {
+                ProgressView()
+                    .task { coordinator.ensureDetachedSession(id: sessionID) }
+            }
+        }
         .frame(minWidth: 420, minHeight: 360)
         .onDisappear {
             coordinator.detachedWindowClosed(sessionID: sessionID)
@@ -33,10 +40,10 @@ struct CodexChatWindowView: View {
 
     private func openHistory(_ thread: CodexChatThreadSummary) {
         Task {
-            let id = await coordinator.openHistoryThread(thread)
-            if coordinator.detachedSessionIDs.contains(id) {
-                openWindow(id: WindowID.codexChat, value: id)
-            }
+            let id = await coordinator.openHistoryThreadInDetachedWindow(thread)
+            guard id != sessionID else { return }
+            dismissWindow()
+            openWindow(id: WindowID.codexChat, value: id)
         }
     }
 }

@@ -47,12 +47,15 @@ struct CodexChatView: View {
                 CodexChatConversationView(messages: session.messages)
             }
 
-            if let errorMessage = session.errorMessage ?? coordinator.historyError {
+            if let errorMessage = session.errorMessage {
                 CodexChatErrorView(
                     message: errorMessage,
-                    canRetryTurn: session.lastSubmittedText != nil,
-                    onRetryTurn: session.retry,
-                    onRetryConnection: retryConnection
+                    onRetry: session.lastSubmittedText == nil ? retryConnection : session.retry
+                )
+            } else if let historyError = coordinator.historyError {
+                CodexChatErrorView(
+                    message: historyError,
+                    onRetry: retryHistory
                 )
             }
 
@@ -96,5 +99,9 @@ struct CodexChatView: View {
 
     private func retryConnection() {
         Task { await session.prepare(forceRefresh: true) }
+    }
+
+    private func retryHistory() {
+        Task { await coordinator.refreshHistory() }
     }
 }

@@ -27,16 +27,21 @@ final class CodexChatCoordinator {
     }
 
     var floatingSession: CodexChatSessionModel {
-        session(for: floatingSessionID)
+        guard let session = sessions[floatingSessionID] else {
+            preconditionFailure("Floating chat session must always exist")
+        }
+        return session
     }
 
-    func session(for id: CodexChatSessionID) -> CodexChatSessionModel {
-        if let session = sessions[id] {
-            return session
+    func session(for id: CodexChatSessionID) -> CodexChatSessionModel? {
+        sessions[id]
+    }
+
+    func ensureDetachedSession(id: CodexChatSessionID) {
+        if sessions[id] == nil {
+            sessions[id] = CodexChatSessionModel(id: id, service: service, settings: settings)
         }
-        let session = CodexChatSessionModel(id: id, service: service, settings: settings)
-        sessions[id] = session
-        return session
+        detachedSessionIDs.insert(id)
     }
 
     func showFloating() {
@@ -51,9 +56,7 @@ final class CodexChatCoordinator {
 
     func newFloatingChat() {
         let session = CodexChatSessionModel(service: service, settings: settings)
-        sessions[session.id] = session
-        floatingSessionID = session.id
-        isFloatingVisible = true
+        replaceFloatingSession(with: session, isVisible: true)
         Task { await session.prepare() }
         Task { await refreshHistory() }
     }
@@ -62,14 +65,13 @@ final class CodexChatCoordinator {
         let id = floatingSessionID
         detachedSessionIDs.insert(id)
         let replacement = CodexChatSessionModel(service: service, settings: settings)
-        sessions[replacement.id] = replacement
-        floatingSessionID = replacement.id
-        isFloatingVisible = false
+        replaceFloatingSession(with: replacement, isVisible: false)
         return id
     }
 
     func detachedWindowClosed(sessionID: CodexChatSessionID) {
         detachedSessionIDs.remove(sessionID)
+        removeSessionIfUnused(sessionID)
     }
 
     func newDetachedChat() -> CodexChatSessionID {
@@ -83,8 +85,30 @@ final class CodexChatCoordinator {
     func openHistoryThread(_ thread: CodexChatThreadSummary) async -> CodexChatSessionID {
         if let existing = sessions.values.first(where: { $0.backendThreadID == thread.id }) {
             if !detachedSessionIDs.contains(existing.id) {
-                floatingSessionID = existing.id
-                isFloatingVisible = true
+                replaceFloatingSession(with: existing, isVisible: true)
+            }
+            return existing.id
+        }
+
+        let session = CodexChatSessionModel(
+            backendThreadID: thread.id,
+            title: thread.title,
+            service: service,
+            settings: settings
+        )
+        replaceFloatingSession(with: session, isVisible: true)
+        await session.restore()
+        return session.id
+    }
+
+    func openHistoryThreadInDetachedWindow(_ thread: CodexChatThreadSummary) async -> CodexChatSessionID {
+        if let existing = sessions.values.first(where: { $0.backendThreadID == thread.id }) {
+            if existing.id == floatingSessionID {
+                detachedSessionIDs.insert(existing.id)
+                let replacement = CodexChatSessionModel(service: service, settings: settings)
+                replaceFloatingSession(with: replacement, isVisible: false)
+            } else {
+                detachedSessionIDs.insert(existing.id)
             }
             return existing.id
         }
@@ -96,8 +120,7 @@ final class CodexChatCoordinator {
             settings: settings
         )
         sessions[session.id] = session
-        floatingSessionID = session.id
-        isFloatingVisible = true
+        detachedSessionIDs.insert(session.id)
         await session.restore()
         return session.id
     }
@@ -122,5 +145,24 @@ final class CodexChatCoordinator {
         } catch {
             historyError = error.localizedDescription
         }
+    }
+
+    private func removeSessionIfUnused(_ id: CodexChatSessionID) {
+        guard id != floatingSessionID,
+              !detachedSessionIDs.contains(id),
+              let session = sessions.removeValue(forKey: id)
+        else { return }
+        session.release()
+    }
+
+    private func replaceFloatingSession(
+        with session: CodexChatSessionModel,
+        isVisible: Bool
+    ) {
+        let previousID = floatingSessionID
+        sessions[session.id] = session
+        floatingSessionID = session.id
+        isFloatingVisible = isVisible
+        removeSessionIfUnused(previousID)
     }
 }

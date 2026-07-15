@@ -54,6 +54,60 @@ import Foundation
             #expect(await service.interruptCount == 1)
         }
 
+        @Test
+        func staleRolloutDoesNotReplaceCompletedStream() async {
+            let service = TestCodexChatService(mode: .staleRollout)
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service
+            )
+
+            session.draft = "Question"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+
+            #expect(session.messages.map(\.text) == ["Question", "Final answer"])
+        }
+
+        @Test
+        func multipleAgentMessageItemsUseSeparateBubbles() async {
+            let service = TestCodexChatService(mode: .multipleMessages)
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service
+            )
+
+            session.draft = "Question"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+
+            #expect(session.messages.map(\.text) == ["Question", "First answer", "Second answer"])
+            #expect(session.messages.allSatisfy { !$0.isStreaming })
+        }
+
+        @Test
+        func releasedGeneratingSessionUnsubscribesAfterTurnFinishes() async {
+            let service = TestCodexChatService(mode: .block)
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service
+            )
+            session.draft = "Question"
+            session.sendDraft()
+            await waitUntil { session.activeTurnID != nil }
+
+            session.release()
+            #expect(await service.unsubscribeCount == 0)
+            session.stop()
+            await waitUntil { !session.isGenerating }
+            await waitUntilAsync { await service.unsubscribeCount == 1 }
+
+            #expect(await service.unsubscribedThreadIDs == ["thread-1"])
+        }
+
         private func waitUntil(
             _ predicate: @MainActor () -> Bool
         ) async {
@@ -63,18 +117,35 @@ import Foundation
             }
             Issue.record("Timed out waiting for chat state")
         }
+
+        private func waitUntilAsync(
+            _ predicate: @escaping @Sendable () async -> Bool
+        ) async {
+            for _ in 0 ..< 1000 {
+                if await predicate() { return }
+                await Task.yield()
+            }
+            Issue.record("Timed out waiting for asynchronous chat state")
+        }
     }
 
     private actor TestCodexChatService: CodexChatServicing {
         enum Mode {
             case complete
             case block
+            case staleRollout
+            case multipleMessages
         }
 
         let mode: Mode
         private(set) var sentTexts: [String] = []
         private(set) var interruptCount = 0
+        private(set) var unsubscribedThreadIDs: [String] = []
         private var blockedContinuation: AsyncThrowingStream<CodexChatTurnEvent, any Error>.Continuation?
+
+        var unsubscribeCount: Int {
+            unsubscribedThreadIDs.count
+        }
 
         init(mode: Mode) {
             self.mode = mode
@@ -89,13 +160,16 @@ import Foundation
         }
 
         func loadThread(id: String) async throws -> CodexChatThread {
-            CodexChatThread(
+            let assistantMessages: [CodexChatMessage] = switch mode {
+            case .complete, .block:
+                [CodexChatMessage(role: .assistant, text: "Final answer")]
+            case .staleRollout, .multipleMessages:
+                []
+            }
+            return CodexChatThread(
                 id: id,
                 title: "Question",
-                messages: [
-                    CodexChatMessage(role: .user, text: sentTexts.last ?? "Question"),
-                    CodexChatMessage(role: .assistant, text: "Final answer"),
-                ],
+                messages: [CodexChatMessage(role: .user, text: sentTexts.last ?? "Question")] + assistantMessages,
                 model: nil,
                 reasoningEffort: nil
             )
@@ -125,7 +199,7 @@ import Foundation
             let (stream, continuation) = AsyncThrowingStream<CodexChatTurnEvent, any Error>.makeStream()
             continuation.yield(.started(turnID: "turn-1"))
             switch mode {
-            case .complete:
+            case .complete, .staleRollout:
                 continuation.yield(.delta(itemID: "item-1", text: "Final "))
                 continuation.yield(.completed(itemID: "item-1", text: "Final answer"))
                 continuation.yield(.completed(itemID: nil, text: nil))
@@ -133,6 +207,13 @@ import Foundation
             case .block:
                 continuation.yield(.delta(itemID: "item-1", text: "Partial"))
                 blockedContinuation = continuation
+            case .multipleMessages:
+                continuation.yield(.delta(itemID: "item-1", text: "First "))
+                continuation.yield(.completed(itemID: "item-1", text: "First answer"))
+                continuation.yield(.delta(itemID: "item-2", text: "Second "))
+                continuation.yield(.completed(itemID: "item-2", text: "Second answer"))
+                continuation.yield(.completed(itemID: nil, text: nil))
+                continuation.finish()
             }
             return stream
         }
@@ -144,7 +225,9 @@ import Foundation
             blockedContinuation = nil
         }
 
-        func unsubscribe(threadID _: String) async {}
+        func unsubscribe(threadID: String) async {
+            unsubscribedThreadIDs.append(threadID)
+        }
 
         private static let model = CodexModel(
             id: "default",

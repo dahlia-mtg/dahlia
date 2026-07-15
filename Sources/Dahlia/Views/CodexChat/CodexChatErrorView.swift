@@ -2,9 +2,7 @@ import SwiftUI
 
 struct CodexChatErrorView: View {
     let message: String
-    let canRetryTurn: Bool
-    let onRetryTurn: () -> Void
-    let onRetryConnection: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -12,7 +10,7 @@ struct CodexChatErrorView: View {
                 .font(.callout)
                 .foregroundStyle(.red)
             HStack {
-                Button(L10n.retry, action: canRetryTurn ? onRetryTurn : onRetryConnection)
+                Button(L10n.retry, action: onRetry)
                 SettingsLink { Text(L10n.openAISettings) }
             }
             .controlSize(.small)

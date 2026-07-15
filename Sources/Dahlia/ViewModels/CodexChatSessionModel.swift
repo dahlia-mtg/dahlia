@@ -21,6 +21,8 @@ final class CodexChatSessionModel: Identifiable {
     @ObservationIgnored private let service: any CodexChatServicing
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private var isStopRequested = false
+    @ObservationIgnored private var isReleased = false
+    @ObservationIgnored private var didUnsubscribe = false
 
     init(
         id: CodexChatSessionID = CodexChatSessionID(),
@@ -61,7 +63,10 @@ final class CodexChatSessionModel: Identifiable {
         guard models.isEmpty || forceRefresh else { return }
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            unsubscribeIfPossible()
+        }
         do {
             models = try await service.models(forceRefresh: forceRefresh)
             resolveSelections()
@@ -79,7 +84,10 @@ final class CodexChatSessionModel: Identifiable {
         }
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            unsubscribeIfPossible()
+        }
         do {
             async let availableModels = service.models(forceRefresh: false)
             async let restoredThread = service.resumeThread(id: backendThreadID)
@@ -121,6 +129,12 @@ final class CodexChatSessionModel: Identifiable {
         Task { await service.interrupt(threadID: backendThreadID, turnID: activeTurnID) }
     }
 
+    func release() {
+        guard !isReleased else { return }
+        isReleased = true
+        unsubscribeIfPossible()
+    }
+
     private func send(_ text: String) {
         guard !isGenerating, text.nilIfBlank != nil else { return }
         isGenerating = true
@@ -136,6 +150,7 @@ final class CodexChatSessionModel: Identifiable {
     }
 
     private func runTurn(text: String, responseID: String) async {
+        var responseIDsByItemID: [String: String] = [:]
         do {
             if models.isEmpty {
                 await prepare()
@@ -160,7 +175,7 @@ final class CodexChatSessionModel: Identifiable {
             )
             var turnCompleted = false
             for try await event in stream {
-                apply(event, responseID: responseID)
+                apply(event, responseID: responseID, responseIDsByItemID: &responseIDsByItemID)
                 if case .completed(itemID: nil, text: nil) = event {
                     turnCompleted = true
                 }
@@ -169,36 +184,50 @@ final class CodexChatSessionModel: Identifiable {
                 await reconcileFromRollout()
             }
         } catch is CancellationError {
-            markResponseComplete(id: responseID)
+            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
         } catch {
             errorMessage = error.localizedDescription
-            markResponseComplete(id: responseID)
+            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
         }
         finishGeneration()
     }
 
-    private func apply(_ event: CodexChatTurnEvent, responseID: String) {
+    private func apply(
+        _ event: CodexChatTurnEvent,
+        responseID: String,
+        responseIDsByItemID: inout [String: String]
+    ) {
         switch event {
         case let .started(turnID):
             activeTurnID = turnID
             if isStopRequested, let backendThreadID {
                 Task { await service.interrupt(threadID: backendThreadID, turnID: turnID) }
             }
-        case let .delta(_, text):
-            guard let index = messages.firstIndex(where: { $0.id == responseID }) else { return }
+        case let .delta(itemID, text):
+            let messageID = responseMessageID(
+                for: itemID,
+                pendingResponseID: responseID,
+                responseIDsByItemID: &responseIDsByItemID
+            )
+            guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
             messages[index].text += text
-        case let .completed(_, text):
-            if let text, let index = messages.firstIndex(where: { $0.id == responseID }) {
+        case let .completed(itemID?, text):
+            let messageID = responseMessageID(
+                for: itemID,
+                pendingResponseID: responseID,
+                responseIDsByItemID: &responseIDsByItemID
+            )
+            if let text, let index = messages.firstIndex(where: { $0.id == messageID }) {
                 messages[index].text = text
                 messages[index].isStreaming = false
-            } else if text == nil {
-                markResponseComplete(id: responseID)
             }
+        case .completed(itemID: nil, text: _):
+            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
         case .interrupted:
-            markResponseComplete(id: responseID)
+            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
         case let .failed(message):
             errorMessage = CodexAppServerError.turnFailed(message).localizedDescription
-            markResponseComplete(id: responseID)
+            completeTurnResponses(responseID: responseID, responseIDsByItemID: responseIDsByItemID)
         }
     }
 
@@ -221,17 +250,60 @@ final class CodexChatSessionModel: Identifiable {
         messages[index].isStreaming = false
     }
 
+    private func responseMessageID(
+        for itemID: String,
+        pendingResponseID: String,
+        responseIDsByItemID: inout [String: String]
+    ) -> String {
+        if let existingID = responseIDsByItemID[itemID] {
+            return existingID
+        }
+
+        if responseIDsByItemID.isEmpty {
+            responseIDsByItemID[itemID] = pendingResponseID
+            return pendingResponseID
+        }
+
+        let messageID = "response-\(itemID)"
+        responseIDsByItemID[itemID] = messageID
+        messages.append(CodexChatMessage(id: messageID, role: .assistant, text: "", isStreaming: true))
+        return messageID
+    }
+
+    private func completeTurnResponses(
+        responseID: String,
+        responseIDsByItemID: [String: String]
+    ) {
+        markResponseComplete(id: responseID)
+        for messageID in responseIDsByItemID.values where messageID != responseID {
+            markResponseComplete(id: messageID)
+        }
+        messages.removeAll { $0.id == responseID && $0.text.isEmpty }
+    }
+
     private func reconcileFromRollout() async {
         guard let backendThreadID,
               let thread = try? await service.loadThread(id: backendThreadID)
         else { return }
-        apply(thread)
+        apply(thread, preservingPendingMessages: thread.messages.count < messages.count)
     }
 
     private func finishGeneration() {
         isGenerating = false
         activeTurnID = nil
         isStopRequested = false
+        unsubscribeIfPossible()
+    }
+
+    private func unsubscribeIfPossible() {
+        guard isReleased,
+              !isGenerating,
+              !isLoading,
+              !didUnsubscribe,
+              let backendThreadID
+        else { return }
+        didUnsubscribe = true
+        Task { await service.unsubscribe(threadID: backendThreadID) }
     }
 
     private func resolveSelections() {
