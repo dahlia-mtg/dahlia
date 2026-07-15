@@ -233,14 +233,22 @@ import GRDB
                 tags: []
             )
 
-            let updatedDocument = try await context.repo.deleteScreenshots(
+            let result = try #require(try await context.repo.deleteScreenshots(
                 ids: [deletedScreenshot.id],
                 meetingId: context.meeting.id
-            )
+            ))
+            let updatedDocument = try #require(result.updatedDocument)
+            let updatedSummary = try #require(try context.repo.fetchSummary(forMeetingId: context.meeting.id))
 
             #expect(try context.repo.fetchScreenshots(forMeetingId: context.meeting.id).isEmpty)
-            #expect(updatedDocument?.sections[0].blocks == [.paragraph(caption)])
+            #expect(updatedDocument.sections[0].blocks == [.paragraph(caption)])
             #expect(try context.repo.fetchSummary(forMeetingId: context.meeting.id)?.loadDocument() == updatedDocument)
+            #expect(updatedSummary.summary == """
+            ## Launch
+
+            Launch screen ([[\(context.meeting.id.uuidString)#00:00:42|00:00:42]])
+            """)
+            #expect(result.updatedSummaryMarkdown?.contains("![[") == false)
         }
 
         @Test
@@ -268,12 +276,13 @@ import GRDB
                 )
             )
 
-            let updatedDocument = try await context.repo.deleteScreenshots(
+            let result = try #require(try await context.repo.deleteScreenshots(
                 ids: [screenshot.id],
                 meetingId: context.meeting.id
-            )
+            ))
 
-            #expect(updatedDocument == nil)
+            #expect(result.updatedDocument == nil)
+            #expect(result.deletedScreenshots.map(\.id) == [screenshot.id])
             #expect(try context.repo.fetchSummary(forMeetingId: context.meeting.id)?.document == nil)
         }
 

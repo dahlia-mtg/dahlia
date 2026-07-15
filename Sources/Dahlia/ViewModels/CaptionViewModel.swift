@@ -2605,22 +2605,37 @@ final class CaptionViewModel: ObservableObject {
         guard !ids.isEmpty,
               !isSummaryGenerating,
               !isDeletingScreenshots,
-              let dbQueue = activeDbQueueForSessionControls else { return }
+              let dbQueue = activeDbQueueForSessionControls,
+              let vaultURL = currentVaultURL else { return }
         let screenshotIds = ids
         isDeletingScreenshots = true
         Task { [weak self] in
             defer { self?.isDeletingScreenshots = false }
             do {
-                let document = try await MeetingRepository(dbQueue: dbQueue).deleteScreenshots(
+                guard let result = try await MeetingRepository(dbQueue: dbQueue).deleteScreenshots(
                     ids: screenshotIds,
                     meetingId: meetingId
-                )
-                for screenshotId in screenshotIds {
-                    await ScreenshotImageLoader.shared.remove(screenshotID: screenshotId)
+                ) else { return }
+                for screenshot in result.deletedScreenshots {
+                    await ScreenshotImageLoader.shared.remove(screenshotID: screenshot.id)
+                }
+                do {
+                    try await Task.detached(priority: .utility) {
+                        try VaultSummaryExportService.synchronizeScreenshotDeletion(
+                            vaultURL: vaultURL,
+                            storedSummaryRelativePath: result.storedSummaryRelativePath,
+                            updatedSummaryMarkdown: result.updatedSummaryMarkdown,
+                            deletedScreenshots: result.deletedScreenshots
+                        )
+                    }.value
+                } catch {
+                    captionViewModelLogger.error("Failed to synchronize deleted screenshots with the Vault: \(error)")
+                    ErrorReportingService.capture(error, context: ["source": "synchronizeScreenshotDeletion"])
                 }
                 guard let self, self.currentMeetingId == meetingId else { return }
-                self.screenshots.removeAll { screenshotIds.contains($0.id) }
-                if let document {
+                let deletedIds = Set(result.deletedScreenshots.map(\.id))
+                self.screenshots.removeAll { deletedIds.contains($0.id) }
+                if let document = result.updatedDocument {
                     self.currentSummaryDocument = document
                 }
             } catch {
@@ -2637,14 +2652,14 @@ final class CaptionViewModel: ObservableObject {
             panel.allowedContentTypes = [contentType]
         }
         panel.nameFieldStringValue = "screenshot_\(Self.fileDateFormatter.string(from: screenshot.capturedAt)).\(fileExtension)"
-        panel.begin { response in
+        panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             do {
                 try screenshot.imageData.write(to: url, options: .atomic)
             } catch {
                 captionViewModelLogger.error("Failed to download screenshot: \(error)")
                 ErrorReportingService.capture(error, context: ["source": "downloadScreenshot"])
-                self.errorMessage = L10n.screenshotDownloadFailed(error.localizedDescription)
+                self?.errorMessage = L10n.screenshotDownloadFailed(error.localizedDescription)
             }
         }
     }

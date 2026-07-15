@@ -464,29 +464,71 @@ final class MeetingRepository {
         }
     }
 
-    func deleteScreenshots(ids: Set<UUID>, meetingId: UUID) async throws -> SummaryDocument? {
+    struct ScreenshotDeletionResult {
+        let deletedScreenshots: [MeetingScreenshotRecord]
+        let updatedDocument: SummaryDocument?
+        let updatedSummaryMarkdown: String?
+        let storedSummaryRelativePath: String?
+    }
+
+    func deleteScreenshots(ids: Set<UUID>, meetingId: UUID) async throws -> ScreenshotDeletionResult? {
         guard !ids.isEmpty else { return nil }
         return try await dbQueue.write { db in
-            let deletedIds = try Set(MeetingScreenshotRecord
-                .select(Column("id"))
+            let deletedScreenshots = try MeetingScreenshotRecord
                 .filter(ids.contains(Column("id")))
                 .filter(Column("meetingId") == meetingId)
-                .asRequest(of: UUID.self)
                 .fetchAll(db)
-            )
-            guard !deletedIds.isEmpty else { return nil }
+            guard !deletedScreenshots.isEmpty else { return nil }
+            let deletedIds = Set(deletedScreenshots.map(\.id))
 
             _ = try MeetingScreenshotRecord
                 .filter(deletedIds.contains(Column("id")))
                 .deleteAll(db)
 
-            guard var summary = try SummaryRecord.fetchOne(db, key: meetingId) else { return nil }
+            guard var summary = try SummaryRecord.fetchOne(db, key: meetingId) else {
+                return ScreenshotDeletionResult(
+                    deletedScreenshots: deletedScreenshots,
+                    updatedDocument: nil,
+                    updatedSummaryMarkdown: nil,
+                    storedSummaryRelativePath: nil
+                )
+            }
+            let storedSummaryRelativePath = try SummaryExportRecord
+                .fetchOne(meetingId: meetingId, type: .vault, in: db)?.vaultRelativePath
+                ?? summary.vaultRelativePath
             let existingDocument = summary.loadDocument()
             let updatedDocument = existingDocument.removingScreenshotReferences(deletedIds)
-            guard updatedDocument != existingDocument else { return nil }
+            guard updatedDocument != existingDocument,
+                  let meeting = try MeetingRecord.fetchOne(db, key: meetingId)
+            else {
+                return ScreenshotDeletionResult(
+                    deletedScreenshots: deletedScreenshots,
+                    updatedDocument: nil,
+                    updatedSummaryMarkdown: nil,
+                    storedSummaryRelativePath: storedSummaryRelativePath
+                )
+            }
+            let remainingScreenshots = try MeetingScreenshotRecord
+                .filter(Column("meetingId") == meetingId)
+                .order(Column("capturedAt").asc)
+                .fetchAll(db)
+            let rendered = ObsidianMarkdownSummaryRenderer.render(
+                document: updatedDocument,
+                context: SummaryRenderContext(
+                    meetingId: meetingId,
+                    createdAt: meeting.createdAt,
+                    screenshots: remainingScreenshots
+                )
+            )
+            summary.summary = rendered.body
             summary.document = try updatedDocument.databaseJSONString()
             try summary.update(db)
-            return updatedDocument
+            return ScreenshotDeletionResult(
+                deletedScreenshots: deletedScreenshots,
+                updatedDocument: updatedDocument,
+                updatedSummaryMarkdown: rendered.markdown,
+                storedSummaryRelativePath: storedSummaryRelativePath
+            )
         }
     }
 
