@@ -72,6 +72,10 @@ enum L10n {
         localized: "The recording is not in a state that allows this operation.",
         bundle: bundle
     ) }
+    static var recordingAudioMissingSessionLease: String { String(
+        localized: "The recording session lease is not held.",
+        bundle: bundle
+    ) }
     static var recordingAudioMissing: String { String(
         localized: "A recording file is missing.",
         bundle: bundle

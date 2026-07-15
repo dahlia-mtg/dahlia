@@ -73,22 +73,27 @@ actor BatchAudioRecordingSession {
         continuingFromActiveRange: Bool
     ) async throws -> (writer: SegmentedAudioSourceWriter, origin: BatchRecordingRangeOrigin) {
         if let existing = writers[source] {
-            let boundary = await existing.captureLocaleBoundary()
-            if let boundary {
+            guard let boundary = await existing.captureLocaleBoundary() else {
+                throw RecordingAudioStoreError.invalidState
+            }
+            do {
                 try await store.rotateLocaleRanges(
                     boundaries: [boundary],
                     localeIdentifier: locale.identifier
                 )
-                await existing.commitLocale(locale)
-                return (
-                    existing,
-                    BatchRecordingRangeOrigin(
-                        source: source,
-                        startFrame: existing.acceptedFrameCount,
-                        sessionRelativeOriginSeconds: boundary.sessionOffsetSeconds
-                    )
-                )
+            } catch {
+                await existing.cancelLocaleBoundary()
+                throw error
             }
+            await existing.commitLocale(locale)
+            return (
+                existing,
+                BatchRecordingRangeOrigin(
+                    source: source,
+                    startFrame: existing.acceptedFrameCount,
+                    sessionRelativeOriginSeconds: boundary.sessionOffsetSeconds
+                )
+            )
         }
 
         let writer = try await writer(
@@ -117,10 +122,15 @@ actor BatchAudioRecordingSession {
         guard let writer = writers[source], let boundary = await writer.captureLocaleBoundary() else {
             throw RecordingAudioStoreError.invalidState
         }
-        try await store.rotateLocaleRanges(
-            boundaries: [boundary],
-            localeIdentifier: locale.identifier
-        )
+        do {
+            try await store.rotateLocaleRanges(
+                boundaries: [boundary],
+                localeIdentifier: locale.identifier
+            )
+        } catch {
+            await writer.cancelLocaleBoundary()
+            throw error
+        }
         await writer.commitLocale(locale)
         return writer
     }
@@ -132,14 +142,26 @@ actor BatchAudioRecordingSession {
     ) async throws -> [RecordingAudioSource: BatchRecordingRangeOrigin] {
         var boundaries: [RecordingAudioRangeBoundary] = []
         for source in sourceOrigins.map(\.source) {
-            if let writer = writers[source], let boundary = await writer.captureLocaleBoundary() {
-                boundaries.append(boundary)
+            guard let writer = writers[source] else { continue }
+            guard let boundary = await writer.captureLocaleBoundary() else {
+                for capturedBoundary in boundaries {
+                    await writers[capturedBoundary.source]?.cancelLocaleBoundary()
+                }
+                throw RecordingAudioStoreError.invalidState
             }
+            boundaries.append(boundary)
         }
-        try await store.rotateLocaleRanges(
-            boundaries: boundaries,
-            localeIdentifier: locale.identifier
-        )
+        do {
+            try await store.rotateLocaleRanges(
+                boundaries: boundaries,
+                localeIdentifier: locale.identifier
+            )
+        } catch {
+            for boundary in boundaries {
+                await writers[boundary.source]?.cancelLocaleBoundary()
+            }
+            throw error
+        }
         var result: [RecordingAudioSource: BatchRecordingRangeOrigin] = [:]
         for boundary in boundaries {
             guard let writer = writers[boundary.source] else { continue }

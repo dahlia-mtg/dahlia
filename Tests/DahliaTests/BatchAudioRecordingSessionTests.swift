@@ -6,6 +6,14 @@ import GRDB
 #if canImport(Testing)
     import Testing
 
+    private actor BoundaryCompletionProbe {
+        private(set) var isCompleted = false
+
+        func complete() {
+            isCompleted = true
+        }
+    }
+
     @MainActor
     @Suite(.serialized)
     struct BatchAudioRecordingSessionTests {
@@ -19,13 +27,13 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            firstWriter.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try firstWriter.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             let secondWriter = try await recorder.rotateRange(
                 source: .microphone,
                 locale: Locale(identifier: "en_US")
             )
             #expect(firstWriter === secondWriter)
-            secondWriter.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try secondWriter.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             try await recorder.finish()
 
             let result = try await fixture.database.dbQueue.read { db in
@@ -68,8 +76,8 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 80, startValue: 0))
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 120, startValue: 80))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80, startValue: 0))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 120, startValue: 80))
             try await recorder.finish()
 
             let segments = try await fixture.database.dbQueue.read { db in
@@ -84,9 +92,53 @@ import GRDB
             var samples: [Int16] = []
             for segment in segments {
                 let url = fixture.managedRootURL.appending(path: segment.finalRelativePath)
-                samples.append(contentsOf: try readSamples(url: url))
+                try samples.append(contentsOf: readSamples(url: url))
             }
             #expect(samples == (0 ..< 200).map { Int16($0) })
+        }
+
+        @Test
+        func localeBoundaryPausesRolloverUntilLocaleIsCommitted() async throws {
+            let fixture = try BatchAudioTestFixture(name: "LocaleBoundaryPause")
+            defer { fixture.removeFiles() }
+            let recorder = try makeRecorder(
+                fixture: fixture,
+                configuration: configuration(targetMilliseconds: 5)
+            )
+            let writer = try await recorder.beginRange(
+                source: .microphone,
+                locale: Locale(identifier: "ja_JP"),
+                at: fixture.now
+            )
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            let firstBoundary = try #require(await writer.captureLocaleBoundary())
+
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            let probe = BoundaryCompletionProbe()
+            let secondBoundaryTask = Task {
+                let boundary = await writer.captureLocaleBoundary()
+                await probe.complete()
+                return boundary
+            }
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(50))
+            #expect(await probe.isCompleted == false)
+
+            await writer.commitLocale(Locale(identifier: "en_US"))
+            let secondBoundary = try #require(await secondBoundaryTask.value)
+            #expect(secondBoundary.segmentId != firstBoundary.segmentId)
+            #expect(secondBoundary.frame == 80)
+            await writer.cancelLocaleBoundary()
+            try await recorder.finish()
+
+            let result = try await fixture.database.dbQueue.read { db in
+                let segments = try RecordingAudioSegmentRecord.order(Column("segmentIndex").asc).fetchAll(db)
+                let ranges = try RecordingAudioSegmentRangeRecord.fetchAll(db)
+                return (segments, ranges)
+            }
+            #expect(result.0.count == 2)
+            let secondSegment = try #require(result.0.last)
+            #expect(result.1.filter { $0.audioSegmentId == secondSegment.id }.map(\.localeIdentifier) == ["en_US"])
         }
 
         @Test
@@ -104,8 +156,8 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now.addingTimeInterval(0.5)
             )
-            microphone.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 80))
-            system.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 120))
+            try microphone.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try system.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 120))
 
             try await fixture.database.dbQueue.write { db in
                 try db.execute(sql: """
@@ -143,8 +195,8 @@ import GRDB
                 ],
                 locale: Locale(identifier: "en_US")
             )
-            microphone.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 40))
-            system.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 60))
+            try microphone.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 40))
+            try system.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 60))
             try await recorder.finish()
 
             let result = try await fixture.database.dbQueue.read { db in
@@ -167,9 +219,9 @@ import GRDB
             defer { fixture.removeFiles() }
             let recorder = try makeRecorder(fixture: fixture)
             let writer = try await recorder.beginRange(source: .microphone, locale: Locale(identifier: "ja_JP"))
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 100))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 100))
             #expect(writer.seal() == 100)
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 50))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 50))
             try await recorder.finish()
 
             let segment = try await fixture.database.dbQueue.read { db in
@@ -189,14 +241,14 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            first.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try first.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
             try await recorder.endRangeForReconfiguration(source: .microphone)
             let second = try await recorder.beginRange(
                 source: .microphone,
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now.addingTimeInterval(1)
             )
-            second.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 120))
+            try second.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 120))
             try await recorder.finish()
 
             let segments = try await fixture.database.dbQueue.read { db in
@@ -222,7 +274,7 @@ import GRDB
                 targetSegmentDuration: .milliseconds(5),
                 maximumFinalizingSegmentCountPerSource: 2,
                 maximumActiveSegmentDuration: .seconds(600),
-                maximumActiveSegmentByteCount: 64 * 1_024 * 1_024,
+                maximumActiveSegmentByteCount: 64 * 1024 * 1024,
                 minimumAvailableCapacity: 0,
                 capacityCheckInterval: .seconds(5),
                 simulatedFinalizationDelay: .milliseconds(250)
@@ -241,7 +293,7 @@ import GRDB
                 at: fixture.now
             )
             for offset in 0 ..< 4 {
-                writer.appendBuffer(try makeBuffer(
+                try writer.appendBuffer(makeBuffer(
                     format: recorder.targetFormat,
                     frameCount: 80,
                     startValue: offset * 80
@@ -256,7 +308,7 @@ import GRDB
             try await Task.sleep(for: .milliseconds(600))
             let recovered = await writer.backlogSnapshot()
             #expect(recovered.segmentCount == 0)
-            writer.appendBuffer(try makeBuffer(
+            try writer.appendBuffer(makeBuffer(
                 format: recorder.targetFormat,
                 frameCount: 80,
                 startValue: 320
@@ -297,7 +349,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
 
             await #expect(throws: RecordingAudioStoreError.activeSegmentSafetyLimit) {
                 try await recorder.finish()
@@ -308,6 +360,79 @@ import GRDB
             #expect(segment?.state == .ready)
             #expect(segment?.sealedFrameCount == 80)
             #expect(segment?.sha256?.count == 32)
+        }
+
+        @Test
+        func writeFailureResumesPendingLocaleBoundary() async throws {
+            let fixture = try BatchAudioTestFixture(name: "WriteFailureBoundary")
+            defer { fixture.removeFiles() }
+            let configuration = RecordingAudioStore.Configuration(
+                targetSegmentDuration: .seconds(60),
+                maximumFinalizingSegmentCountPerSource: 2,
+                maximumActiveSegmentDuration: .seconds(600),
+                maximumActiveSegmentByteCount: 100,
+                minimumAvailableCapacity: 0,
+                capacityCheckInterval: .seconds(5)
+            )
+            let recorder = try makeRecorder(fixture: fixture, configuration: configuration)
+            let writer = try await recorder.beginRange(
+                source: .microphone,
+                locale: Locale(identifier: "ja_JP"),
+                at: fixture.now
+            )
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+
+            #expect(await writer.captureLocaleBoundary() == nil)
+            await #expect(throws: RecordingAudioStoreError.activeSegmentSafetyLimit) {
+                try await recorder.finish()
+            }
+        }
+
+        @Test
+        func finalizationFailureKeepsSourceProgressFailed() async throws {
+            let fixture = try BatchAudioTestFixture(name: "FailedSourceProgress")
+            defer { fixture.removeFiles() }
+            let configuration = RecordingAudioStore.Configuration(
+                targetSegmentDuration: .seconds(60),
+                maximumFinalizingSegmentCountPerSource: 2,
+                maximumActiveSegmentDuration: .seconds(600),
+                maximumActiveSegmentByteCount: 64 * 1024 * 1024,
+                minimumAvailableCapacity: 0,
+                capacityCheckInterval: .seconds(5),
+                simulatedFinalizationDelay: .milliseconds(250)
+            )
+            let recorder = try makeRecorder(fixture: fixture, configuration: configuration)
+            let writer = try await recorder.beginRange(
+                source: .microphone,
+                locale: Locale(identifier: "ja_JP"),
+                at: fixture.now
+            )
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            let finishTask = Task { try await recorder.finish() }
+
+            var finalizingSegment: RecordingAudioSegmentRecord?
+            for _ in 0 ..< 100 {
+                finalizingSegment = try await fixture.database.dbQueue.read { db in
+                    try RecordingAudioSegmentRecord.fetchOne(db)
+                }
+                if finalizingSegment?.state == .finalizing { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            let segment = try #require(finalizingSegment)
+            #expect(segment.state == .finalizing)
+            try await Task.sleep(for: .milliseconds(50))
+            let partialURL = fixture.managedRootURL.appending(path: segment.partialRelativePath)
+            try Data("not a caf".utf8).write(to: partialURL)
+
+            await #expect(throws: RecordingAudioStoreError.integrityMismatch) {
+                try await finishTask.value
+            }
+            let progress = try await fixture.database.dbQueue.read { db in
+                try RecordingAudioSourceProgressRecord.fetchOne(db)
+            }
+            #expect(progress?.captureState == .failed)
+            #expect(progress?.failureCode == "integrityMismatch")
         }
 
         @Test
@@ -353,14 +478,14 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            microphone.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try microphone.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             await recorder.freezeRequiredSources()
             let lateSystem = try await recorder.beginRange(
                 source: .system,
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            lateSystem.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try lateSystem.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
             try await recorder.finish()
 
             let durable = await recorder.fullyDurableThroughOffsetSeconds()
@@ -394,7 +519,7 @@ import GRDB
                 targetSegmentDuration: .milliseconds(targetMilliseconds),
                 maximumFinalizingSegmentCountPerSource: 2,
                 maximumActiveSegmentDuration: .seconds(600),
-                maximumActiveSegmentByteCount: 64 * 1_024 * 1_024,
+                maximumActiveSegmentByteCount: 64 * 1024 * 1024,
                 minimumAvailableCapacity: 0,
                 capacityCheckInterval: .seconds(5)
             )

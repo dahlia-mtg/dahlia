@@ -8,6 +8,7 @@ enum RecordingAudioStoreError: LocalizedError, Equatable {
     case integrityMismatch
     case invalidPath
     case invalidState
+    case missingSessionLease
     case missingFile
     case storageUnavailable
     case writeQueueOverflow
@@ -28,6 +29,8 @@ enum RecordingAudioStoreError: LocalizedError, Equatable {
             L10n.recordingAudioInvalidPath
         case .invalidState:
             L10n.recordingAudioInvalidState
+        case .missingSessionLease:
+            L10n.recordingAudioMissingSessionLease
         case .missingFile:
             L10n.recordingAudioMissing
         case .storageUnavailable:

@@ -19,6 +19,7 @@
 "The recording failed its integrity check." = "The recording failed its integrity check.";
 "Dahlia refused an unsafe recording file path." = "Dahlia refused an unsafe recording file path.";
 "The recording is not in a state that allows this operation." = "The recording is not in a state that allows this operation.";
+"The recording session lease is not held." = "The recording session lease is not held.";
 "A recording file is missing." = "A recording file is missing.";
 "Recording continues, but durable storage is temporarily delayed." = "Recording continues, but durable storage is temporarily delayed.";
 "Recording stopped because the active segment reached its safety limit." = "Recording stopped because the active segment reached its safety limit.";

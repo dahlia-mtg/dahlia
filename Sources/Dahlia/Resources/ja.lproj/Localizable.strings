@@ -19,6 +19,7 @@
 "The recording failed its integrity check." = "録音データの完全性を確認できませんでした。";
 "Dahlia refused an unsafe recording file path." = "安全でない録音ファイルのパスを拒否しました。";
 "The recording is not in a state that allows this operation." = "現在の録音状態ではこの操作を実行できません。";
+"The recording session lease is not held." = "録音セッションの排他ロックを保持していません。";
 "A recording file is missing." = "録音ファイルが見つかりません。";
 "Recording continues, but durable storage is temporarily delayed." = "録音は継続していますが、ディスクへの確定が一時的に遅れています。";
 "Recording stopped because the active segment reached its safety limit." = "録音中セグメントが安全上限に達したため、録音を停止しました。";

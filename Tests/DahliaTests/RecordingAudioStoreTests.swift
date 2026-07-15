@@ -203,7 +203,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
 
             let competingStore = try makeStore(fixture)
             await #expect(throws: RecordingAudioStoreError.activeSession) {
@@ -221,6 +221,31 @@ import GRDB
                 #expect(!FileManager.default.fileExists(
                     atPath: fixture.managedRootURL.appending(path: finalPath).path
                 ))
+            }
+            let meetingDirectory = fixture.managedRootURL.appending(path: fixture.meeting.id.uuidString)
+            let sessionDirectory = meetingDirectory.appending(path: fixture.session.id.uuidString)
+            #expect(!FileManager.default.fileExists(atPath: sessionDirectory.path))
+            #expect(!FileManager.default.fileExists(atPath: meetingDirectory.path))
+        }
+
+        @Test
+        func creatingSegmentWithoutSessionLeaseUsesSpecificError() async throws {
+            let fixture = try BatchAudioTestFixture(name: "MissingSessionLease")
+            defer { fixture.removeFiles() }
+            let store = try makeStore(fixture)
+
+            await #expect(throws: RecordingAudioStoreError.missingSessionLease) {
+                try await store.createSegment(
+                    meetingId: fixture.meeting.id,
+                    sessionId: fixture.session.id,
+                    source: .microphone,
+                    segmentIndex: 0,
+                    sessionStartOffsetSeconds: 0,
+                    localeIdentifier: "ja_JP",
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    isRequiredSource: true
+                )
             }
         }
 
@@ -290,6 +315,29 @@ import GRDB
             )
             #expect(!FileManager.default.fileExists(atPath: finalURL.path))
             #expect(try repository.fetchMeeting(id: fixture.meeting.id) == nil)
+        }
+
+        @Test
+        func explicitMeetingDeletionPurgesFailedSegment() async throws {
+            let fixture = try BatchAudioTestFixture(name: "FailedMeetingDeletion")
+            defer { fixture.removeFiles() }
+            let ready = try await makeReadySegment(fixture: fixture)
+            let finalURL = fixture.managedRootURL.appending(path: ready.finalRelativePath)
+            let store = try makeStore(fixture)
+            try await store.fail(segmentId: ready.id, stage: "test", code: "damaged")
+            let repository = MeetingRepository(dbQueue: fixture.database.dbQueue)
+
+            try await repository.deleteMeetingSafely(
+                id: fixture.meeting.id,
+                managedRootURL: fixture.managedRootURL
+            )
+
+            #expect(!FileManager.default.fileExists(atPath: finalURL.path))
+            #expect(try repository.fetchMeeting(id: fixture.meeting.id) == nil)
+            let sessionDirectory = fixture.managedRootURL
+                .appending(path: fixture.meeting.id.uuidString)
+                .appending(path: fixture.session.id.uuidString)
+            #expect(!FileManager.default.fileExists(atPath: sessionDirectory.path))
         }
 
         @Test
@@ -444,7 +492,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             try await fixture.database.dbQueue.write { db in
                 try db.execute(sql: """
                 CREATE TRIGGER reject_finalizing_barrier
@@ -477,7 +525,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             try await fixture.database.dbQueue.write { db in
                 try db.execute(sql: """
                 CREATE TRIGGER reject_integrity_barrier
@@ -518,7 +566,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 160))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 160))
             try await fixture.database.dbQueue.write { db in
                 try db.execute(sql: """
                 CREATE TRIGGER reject_ready_commit
@@ -561,7 +609,7 @@ import GRDB
                 locale: Locale(identifier: "ja_JP"),
                 at: fixture.now
             )
-            writer.appendBuffer(try makeBuffer(format: recorder.targetFormat, frameCount: 320))
+            try writer.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 320))
             try await recorder.finish()
             return try await fixture.database.dbQueue.read { db in
                 try #require(try RecordingAudioSegmentRecord.fetchOne(db))
@@ -593,7 +641,7 @@ import GRDB
                 targetSegmentDuration: .seconds(60),
                 maximumFinalizingSegmentCountPerSource: 2,
                 maximumActiveSegmentDuration: .seconds(600),
-                maximumActiveSegmentByteCount: 64 * 1_024 * 1_024,
+                maximumActiveSegmentByteCount: 64 * 1024 * 1024,
                 minimumAvailableCapacity: 0,
                 capacityCheckInterval: .seconds(5)
             )

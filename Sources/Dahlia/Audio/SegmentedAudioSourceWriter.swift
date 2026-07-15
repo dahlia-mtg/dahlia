@@ -78,7 +78,7 @@ actor SegmentedAudioSourceWriter {
 
     private struct BoundaryWaiter {
         let targetFrame: Int64
-        let continuation: CheckedContinuation<RecordingAudioRangeBoundary, Never>
+        let continuation: CheckedContinuation<RecordingAudioRangeBoundary?, Never>
     }
 
     // SwiftFormat and the fallback SwiftLint modifier order disagree for nonisolated stored properties.
@@ -106,6 +106,9 @@ actor SegmentedAudioSourceWriter {
     private var oldestFinalizationStartedAt: Date?
     private var totalProcessedFrameCount: Int64 = 0
     private var boundaryWaiters: [BoundaryWaiter] = []
+    private var pendingBoundaryCommitCount = 0
+    private var boundaryCommitWaiter: CheckedContinuation<Void, Never>?
+    private var isConsuming = false
     private var finalizationIsDelayed = false
     private var writeError: RecordingAudioStoreError?
 
@@ -188,9 +191,13 @@ actor SegmentedAudioSourceWriter {
     }
 
     func captureLocaleBoundary() async -> RecordingAudioRangeBoundary? {
+        guard writeError == nil else { return nil }
         let targetFrame = acceptedFrameCount
-        if totalProcessedFrameCount >= targetFrame {
-            return currentBoundary()
+        if totalProcessedFrameCount >= targetFrame,
+           !isConsuming || pendingBoundaryCommitCount > 0 {
+            guard let boundary = currentBoundary() else { return nil }
+            pendingBoundaryCommitCount += 1
+            return boundary
         }
         return await withCheckedContinuation { continuation in
             boundaryWaiters.append(BoundaryWaiter(targetFrame: targetFrame, continuation: continuation))
@@ -199,6 +206,11 @@ actor SegmentedAudioSourceWriter {
 
     func commitLocale(_ locale: Locale) {
         currentLocaleIdentifier = locale.identifier
+        completeBoundaryCommit()
+    }
+
+    func cancelLocaleBoundary() {
+        completeBoundaryCommit()
     }
 
     func backlogSnapshot() -> BacklogSnapshot {
@@ -211,6 +223,8 @@ actor SegmentedAudioSourceWriter {
 
     func finish() async throws {
         seal()
+        resumeAllBoundaryWaiters(returning: nil)
+        cancelAllBoundaryCommits()
         continuation.finish()
         await writerTask?.value
         writerTask = nil
@@ -235,15 +249,21 @@ actor SegmentedAudioSourceWriter {
     }
 
     private func consume(_ chunk: AudioChunk) async {
+        await waitForBoundaryCommits()
         guard writeError == nil else { return }
+        isConsuming = true
+        defer { isConsuming = false }
         do {
             try await rotateIfNeeded()
             guard let current else { throw RecordingAudioStoreError.invalidState }
             try await store.ensureAvailableCapacityIfNeeded(sessionId: sessionId, source: source)
             try current.write(chunk, format: format)
             totalProcessedFrameCount += Int64(chunk.frameCount)
-            resumeBoundaryWaitersIfNeeded()
+            let resumedBoundary = resumeBoundaryWaitersIfNeeded()
             try enforceActiveSafetyBudget(current)
+            if resumedBoundary {
+                await waitForBoundaryCommits()
+            }
         } catch {
             recordFailure(error)
         }
@@ -363,13 +383,21 @@ actor SegmentedAudioSourceWriter {
         )
     }
 
-    private func resumeBoundaryWaitersIfNeeded() {
+    private func resumeBoundaryWaitersIfNeeded() -> Bool {
         let ready = boundaryWaiters.filter { totalProcessedFrameCount >= $0.targetFrame }
         boundaryWaiters.removeAll { totalProcessedFrameCount >= $0.targetFrame }
-        guard let boundary = currentBoundary() else { return }
+        guard !ready.isEmpty else { return false }
+        guard let boundary = currentBoundary() else {
+            for waiter in ready {
+                waiter.continuation.resume(returning: nil)
+            }
+            return false
+        }
+        pendingBoundaryCommitCount += ready.count
         for waiter in ready {
             waiter.continuation.resume(returning: boundary)
         }
+        return true
     }
 
     private func recordFailure(_ error: Error) {
@@ -377,7 +405,38 @@ actor SegmentedAudioSourceWriter {
         if writeError == nil {
             writeError = storageError
             failCallback(storageError)
+            resumeAllBoundaryWaiters(returning: nil)
+            cancelAllBoundaryCommits()
             eventHandler(.failed(source: source, error: storageError))
+        }
+    }
+
+    private func waitForBoundaryCommits() async {
+        guard pendingBoundaryCommitCount > 0 else { return }
+        await withCheckedContinuation { continuation in
+            boundaryCommitWaiter = continuation
+        }
+    }
+
+    private func completeBoundaryCommit() {
+        guard pendingBoundaryCommitCount > 0 else { return }
+        pendingBoundaryCommitCount -= 1
+        guard pendingBoundaryCommitCount == 0 else { return }
+        boundaryCommitWaiter?.resume()
+        boundaryCommitWaiter = nil
+    }
+
+    private func cancelAllBoundaryCommits() {
+        pendingBoundaryCommitCount = 0
+        boundaryCommitWaiter?.resume()
+        boundaryCommitWaiter = nil
+    }
+
+    private func resumeAllBoundaryWaiters(returning boundary: RecordingAudioRangeBoundary?) {
+        let waiters = boundaryWaiters
+        boundaryWaiters.removeAll()
+        for waiter in waiters {
+            waiter.continuation.resume(returning: boundary)
         }
     }
 

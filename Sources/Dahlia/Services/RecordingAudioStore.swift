@@ -117,7 +117,7 @@ actor RecordingAudioStore {
         at now: Date = .now
     ) async throws -> SegmentCreation {
         guard sessionLeases[sessionId] != nil else {
-            throw RecordingAudioStoreError.activeSession
+            throw RecordingAudioStoreError.missingSessionLease
         }
         try ensureAvailableCapacity()
 
@@ -396,7 +396,7 @@ actor RecordingAudioStore {
             guard var progress = try RecordingAudioSourceProgressRecord.fetchOne(
                 db,
                 key: ["recordingSessionId": sessionId, "source": source]
-            ) else { return }
+            ), progress.captureState != .failed else { return }
             progress.captureState = .ended
             progress.updatedAt = now
             try progress.update(db)
@@ -517,7 +517,7 @@ actor RecordingAudioStore {
                     .fetchCount(db)
             }
             guard count > 0 else { continue }
-            try await requestPurge(sessionId: sessionId)
+            try await requestPurge(sessionId: sessionId, includeFailed: true)
             let hasLiveReference = try await dbQueue.read { db in
                 try RecordingAudioSegmentRecord
                     .filter(Column("recordingSessionId") == sessionId)
@@ -898,6 +898,7 @@ actor RecordingAudioStore {
                 try current.update(db)
             }
         }
+        try await removePurgedSessionDirectoryIfPossible(sessionId: sessionId)
     }
 
     private func acquireTemporarySessionLease(sessionId: UUID) async throws -> AdvisoryFileLock {
@@ -1134,6 +1135,50 @@ actor RecordingAudioStore {
         }
         guard unlinkat(descriptor, leaf, 0) == 0 else {
             if errno == ENOENT { return }
+            throw RecordingAudioStoreError.storageUnavailable
+        }
+    }
+
+    private func removePurgedSessionDirectoryIfPossible(sessionId: UUID) async throws {
+        let context = try await dbQueue.read { db -> (meetingId: UUID, hasUnpurgedSegments: Bool)? in
+            guard let meetingId = try UUID.fetchOne(
+                db,
+                sql: "SELECT meetingId FROM recording_sessions WHERE id = ?",
+                arguments: [sessionId]
+            ) else { return nil }
+            let hasUnpurgedSegments = try RecordingAudioSegmentRecord
+                .filter(Column("recordingSessionId") == sessionId)
+                .filter(Column("state") != RecordingAudioSegmentState.purged.rawValue)
+                .fetchCount(db) > 0
+            return (meetingId, hasUnpurgedSegments)
+        }
+        guard let context, !context.hasUnpurgedSegments else { return }
+
+        let meetingPath = context.meetingId.uuidString
+        let sessionPath = "\(meetingPath)/\(sessionId.uuidString)"
+        try removeManagedFile(relativePath: "\(sessionPath)/.lease")
+        try removeManagedDirectory(relativePath: sessionPath)
+        try removeManagedDirectory(relativePath: meetingPath)
+    }
+
+    private func removeManagedDirectory(relativePath: String) throws {
+        _ = try safeURL(relativePath: "\(relativePath)/placeholder")
+        let components = relativePath.split(separator: "/").map(String.init)
+        guard let leaf = components.last else { throw RecordingAudioStoreError.invalidPath }
+        var descriptor = open(managedRootURL.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        guard descriptor >= 0 else { throw RecordingAudioStoreError.storageUnavailable }
+        defer { close(descriptor) }
+        for component in components.dropLast() {
+            let next = openat(descriptor, component, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+            guard next >= 0 else {
+                if errno == ENOENT { return }
+                throw RecordingAudioStoreError.invalidPath
+            }
+            close(descriptor)
+            descriptor = next
+        }
+        guard unlinkat(descriptor, leaf, AT_REMOVEDIR) == 0 else {
+            if errno == ENOENT || errno == ENOTEMPTY { return }
             throw RecordingAudioStoreError.storageUnavailable
         }
     }
