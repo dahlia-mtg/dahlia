@@ -9,6 +9,7 @@ A macOS native real-time transcription app. Captures microphone and system audio
 - **Dual Audio Capture** — Record microphone (AVAudioEngine) and system audio (ScreenCaptureKit) at the same time
 - **On-Device Transcription** — Real-time speech-to-text using Apple Speech framework
 - **Codex Summaries** — Generate structured summaries through the bundled Codex app-server (optional)
+- **AI Meeting Access** — Query summaries and confirmed original transcripts through a vault-scoped, read-only local MCP server
 - **Project Management** — Organize transcripts into vault/project hierarchy synced with filesystem folders
 - **Meeting Detection** — Automatically detect meeting sessions with 3-layer detection
 - **Screenshot Capture** — Attach screenshots to transcripts for multimodal summaries
@@ -22,6 +23,8 @@ A macOS native real-time transcription app. Captures microphone and system audio
 - Xcode 26+ (for Swift toolchain)
 
 Dahlia keeps its bundled Codex state and authentication separate from other Codex apps and the Codex CLI. In **Settings → AI Connection**, choose either a ChatGPT Subscription or an OAuth profile created by `databricks auth login`. The ChatGPT login is stored under Dahlia's Application Support directory; Databricks tokens remain managed by Databricks CLI.
+
+The in-app chat uses the bundled `dahlia-mcp` helper and is restricted to the currently selected vault. To give Claude Code or Codex CLI the same read-only access, open **Settings → Meeting Data Access** and copy the registration command. The command includes both the signed helper path and `--vault-id <UUID>`; rerun it after choosing another vault. The MCP tools expose compact meeting search, stored Markdown summaries, and paginated confirmed original transcript segments. They do not expose notes, screenshots, audio, translated text, or unconfirmed text.
 
 ## Build & Run
 
