@@ -27,5 +27,20 @@
 
             #expect(!state.googleDocsExport.isTerminal)
         }
+
+        @Test
+        func delayedDismissDoesNotHideNewerProgress() {
+            let state = SummaryProgressState()
+            let firstPresentationID = state.show()
+            let secondPresentationID = state.show()
+
+            state.dismiss(ifCurrent: firstPresentationID)
+
+            #expect(state.isVisible)
+
+            state.dismiss(ifCurrent: secondPresentationID)
+
+            #expect(!state.isVisible)
+        }
     }
 #endif

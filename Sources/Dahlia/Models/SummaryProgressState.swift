@@ -40,6 +40,7 @@ final class SummaryProgressState {
     var vaultExport: StepStatus = .pending
     var googleDocsExport: StepStatus = .pending
     var summaryGeneration: StepStatus = .pending
+    private var presentationID: UUID?
 
     /// 全ステップが完了またはスキップ済みか。
     var isAllDone: Bool {
@@ -54,12 +55,22 @@ final class SummaryProgressState {
         summaryGeneration = .pending
     }
 
-    func show() {
+    @discardableResult
+    func show() -> UUID {
+        let presentationID = UUID()
         reset()
+        self.presentationID = presentationID
         isVisible = true
+        return presentationID
     }
 
     func dismiss() {
+        presentationID = nil
         isVisible = false
+    }
+
+    func dismiss(ifCurrent presentationID: UUID) {
+        guard self.presentationID == presentationID else { return }
+        dismiss()
     }
 }

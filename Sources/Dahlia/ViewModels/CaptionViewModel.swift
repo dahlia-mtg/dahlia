@@ -2019,6 +2019,7 @@ final class CaptionViewModel: ObservableObject {
         summaryError = nil
         googleDocsExportError = nil
         lastSummaryURL = nil
+        var progressPresentationID: UUID?
 
         do {
             let dbQueue = currentDbQueue
@@ -2036,7 +2037,7 @@ final class CaptionViewModel: ObservableObject {
                 }
             }
 
-            summaryProgress.show()
+            progressPresentationID = summaryProgress.show()
             summaryProgress.vaultExport = exportOptions.exportsToVault ? .pending : .skipped
             summaryProgress.googleDocsExport = exportOptions.exportsToGoogleDocs ? .pending : .skipped
 
@@ -2070,6 +2071,7 @@ final class CaptionViewModel: ObservableObject {
             summaryProgress.summaryGeneration = .completed
             if currentMeetingId == meetingId {
                 currentSummaryDocument = generatedSummary.document
+                currentSummaryGoogleFileId = nil
             }
 
             if exportOptions.exportsToVault {
@@ -2148,10 +2150,10 @@ final class CaptionViewModel: ObservableObject {
         }
 
         // 全完了後に自動で非表示
-        if summaryProgress.isAllDone {
+        if summaryProgress.isAllDone, let progressPresentationID {
             try? await Task.sleep(for: .seconds(2))
             withAnimation(.easeOut(duration: 0.3)) {
-                summaryProgress.dismiss()
+                summaryProgress.dismiss(ifCurrent: progressPresentationID)
             }
         }
 
