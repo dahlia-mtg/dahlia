@@ -12,6 +12,8 @@ struct CodexChatComposer: View {
                 .lineLimit(1 ... 5)
                 .padding(.leading, 8)
                 .padding(.vertical, 6)
+                .contentShape(.rect)
+                .onContinuousHover(perform: updateTextInputCursor)
                 .accessibilityLabel(L10n.messageCodex)
                 .onSubmit(handleSubmit)
 
@@ -64,5 +66,14 @@ struct CodexChatComposer: View {
         }
 
         textView.insertNewlineIgnoringFieldEditor(nil)
+    }
+
+    private func updateTextInputCursor(_ phase: HoverPhase) {
+        switch phase {
+        case .active:
+            NSCursor.iBeam.set()
+        case .ended:
+            NSCursor.arrow.set()
+        }
     }
 }
