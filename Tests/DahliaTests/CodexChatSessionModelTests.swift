@@ -31,6 +31,7 @@ import Foundation
 
             #expect(session.backendThreadID == "thread-1")
             #expect(session.messages.map(\.text) == ["Question", "Final answer"])
+            #expect(session.messages.last?.reasoning == "Considered the question")
             #expect(session.title == "Question")
             #expect(await service.sentTexts == ["Question"])
         }
@@ -78,7 +79,27 @@ import Foundation
         }
 
         @Test
-        func multipleAgentMessageItemsUseSeparateBubbles() async {
+        func rolloutWithoutReasoningPreservesStreamedSummary() async {
+            let service = TestCodexChatService(mode: .rolloutWithoutReasoning)
+            let settings = AppSettings()
+            settings.currentVault = Self.testVault()
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings
+            )
+
+            session.draft = "Question"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+
+            #expect(session.messages.last?.text == "Final answer")
+            #expect(session.messages.last?.reasoning == "Considered the question")
+        }
+
+        @Test
+        func multipleAgentMessageItemsAreCombinedIntoOneResponse() async {
             let service = TestCodexChatService(mode: .multipleMessages)
             let settings = AppSettings()
             settings.currentVault = Self.testVault()
@@ -93,7 +114,7 @@ import Foundation
             session.sendDraft()
             await waitUntil { !session.isGenerating }
 
-            #expect(session.messages.map(\.text) == ["Question", "First answer", "Second answer"])
+            #expect(session.messages.map(\.text) == ["Question", "First answer\n\nSecond answer"])
             #expect(session.messages.allSatisfy { !$0.isStreaming })
         }
 
@@ -174,6 +195,7 @@ import Foundation
             case complete
             case block
             case staleRollout
+            case rolloutWithoutReasoning
             case multipleMessages
         }
 
@@ -202,6 +224,8 @@ import Foundation
         func loadThread(id: String) async throws -> CodexChatThread {
             let assistantMessages: [CodexChatMessage] = switch mode {
             case .complete, .block:
+                [CodexChatMessage(role: .assistant, text: "Final answer", reasoning: "Considered the question")]
+            case .rolloutWithoutReasoning:
                 [CodexChatMessage(role: .assistant, text: "Final answer")]
             case .staleRollout, .multipleMessages:
                 []
@@ -239,7 +263,13 @@ import Foundation
             let (stream, continuation) = AsyncThrowingStream<CodexChatTurnEvent, any Error>.makeStream()
             continuation.yield(.started(turnID: "turn-1"))
             switch mode {
-            case .complete, .staleRollout:
+            case .complete, .staleRollout, .rolloutWithoutReasoning:
+                continuation.yield(.reasoningDelta(
+                    itemID: "reasoning-1",
+                    summaryIndex: 0,
+                    text: "Considered the question"
+                ))
+                continuation.yield(.reasoningCompleted(itemID: "reasoning-1", text: "Considered the question"))
                 continuation.yield(.delta(itemID: "item-1", text: "Final "))
                 continuation.yield(.completed(itemID: "item-1", text: "Final answer"))
                 continuation.yield(.completed(itemID: nil, text: nil))

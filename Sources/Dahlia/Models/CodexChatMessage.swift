@@ -9,17 +9,20 @@ struct CodexChatMessage: Identifiable, Equatable {
     let id: String
     let role: Role
     var text: String
+    var reasoning: String
     var isStreaming: Bool
 
     init(
         id: String = UUID.v7().uuidString,
         role: Role,
         text: String,
+        reasoning: String = "",
         isStreaming: Bool = false
     ) {
         self.id = id
         self.role = role
         self.text = text
+        self.reasoning = reasoning
         self.isStreaming = isStreaming
     }
 }

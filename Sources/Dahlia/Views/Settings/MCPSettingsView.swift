@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct MeetingDataAccessSettingsView: View {
+struct MCPSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
@@ -22,20 +22,20 @@ struct MeetingDataAccessSettingsView: View {
                             command: commands.claude
                         )
                     } else {
-                        Text(L10n.meetingDataAccessHelperUnavailable)
+                        Text(L10n.mcpHelperUnavailable)
                             .foregroundStyle(.secondary)
                     }
                 } else {
                     ContentUnavailableView(
                         L10n.noVaultSelected,
                         systemImage: "externaldrive.badge.questionmark",
-                        description: Text(L10n.selectVaultForMeetingDataAccess)
+                        description: Text(L10n.selectVaultForMCP)
                     )
                 }
             } header: {
-                Text(L10n.meetingDataAccess)
+                Text(L10n.mcp)
             } footer: {
-                Text(L10n.meetingDataAccessFooter)
+                Text(L10n.mcpFooter)
             }
         }
         .formStyle(.grouped)
