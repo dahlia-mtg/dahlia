@@ -149,7 +149,7 @@ import GRDB
 
             let store = try makeStore(fixture)
             await #expect(throws: (any Error).self) {
-                try await store.withVerifiedReadySegments(sessionId: fixture.session.id) { _ in true }
+                try await store.withVerifiedTranscribableSegments(sessionId: fixture.session.id) { _ in true }
             }
             let failed = try await fixture.database.dbQueue.read { db in
                 try (
@@ -162,6 +162,85 @@ import GRDB
             #expect(failed.1?.durableThroughOffsetSeconds == 0)
             #expect(failed.1?.lastContiguousReadySegmentIndex == nil)
             #expect(FileManager.default.fileExists(atPath: finalURL.path))
+        }
+
+        @Test
+        func unreadableFinalizingTailStillAllowsTranscribingCommonDurablePrefix() async throws {
+            let fixture = try BatchAudioTestFixture(name: "FailedTailDurablePrefix")
+            defer { fixture.removeFiles() }
+            let segmentedConfiguration = RecordingAudioStore.Configuration(
+                targetSegmentDuration: .milliseconds(5),
+                maximumFinalizingSegmentCountPerSource: 2,
+                maximumActiveSegmentDuration: .seconds(600),
+                maximumActiveSegmentByteCount: 64 * 1024 * 1024,
+                minimumAvailableCapacity: 0,
+                capacityCheckInterval: .seconds(5)
+            )
+            let recorder = try BatchAudioRecordingSession(
+                dbQueue: fixture.database.dbQueue,
+                managedRootURL: fixture.managedRootURL,
+                meetingId: fixture.meeting.id,
+                recordingSessionId: fixture.session.id,
+                recordingStartTime: fixture.now,
+                sampleRate: 16000,
+                configuration: segmentedConfiguration
+            )
+            let microphone = try await recorder.beginRange(
+                source: .microphone,
+                locale: Locale(identifier: "ja_JP"),
+                at: fixture.now
+            )
+            let system = try await recorder.beginRange(
+                source: .system,
+                locale: Locale(identifier: "ja_JP"),
+                at: fixture.now
+            )
+            try microphone.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 40))
+            _ = try await recorder.rotateRange(
+                source: .microphone,
+                locale: Locale(identifier: "en_US")
+            )
+            try microphone.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 120))
+            try system.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try system.appendBuffer(makeBuffer(format: recorder.targetFormat, frameCount: 80))
+            try await recorder.finish()
+
+            let segments = try await fixture.database.dbQueue.read { db in
+                try RecordingAudioSegmentRecord
+                    .order(Column("source").asc, Column("segmentIndex").asc)
+                    .fetchAll(db)
+            }
+            #expect(segments.count == 3)
+            let failedTail = try #require(segments.first { $0.source == .system && $0.segmentIndex == 1 })
+            let finalURL = fixture.managedRootURL.appending(path: failedTail.finalRelativePath)
+            let partialURL = fixture.managedRootURL.appending(path: failedTail.partialRelativePath)
+            try FileManager.default.moveItem(at: finalURL, to: partialURL)
+            try Data("not a caf".utf8).write(to: partialURL)
+            try await fixture.database.dbQueue.write { db in
+                guard var segment = try RecordingAudioSegmentRecord.fetchOne(db, key: failedTail.id) else { return }
+                segment.state = .finalizing
+                segment.finalizedAt = nil
+                try segment.update(db)
+            }
+
+            let store = try makeStore(fixture)
+            let transcribable = try await store.withVerifiedTranscribableSegments(
+                sessionId: fixture.session.id
+            ) { verified in
+                Dictionary(uniqueKeysWithValues: verified.map { segment in
+                    (segment.segment.source, segment.ranges.map { range in
+                        "\(range.localeIdentifier):\(range.frameCount ?? -1):\(range.sessionOffsetSeconds)"
+                    })
+                })
+            }
+
+            #expect(transcribable[.microphone] == ["ja_JP:40:0.0", "en_US:40:0.0025"])
+            #expect(transcribable[.system] == ["ja_JP:80:0.0"])
+            let recoveredTail = try await fixture.database.dbQueue.read { db in
+                try RecordingAudioSegmentRecord.fetchOne(db, key: failedTail.id)
+            }
+            #expect(recoveredTail?.state == .failed)
+            #expect(recoveredTail?.failureCode == "integrityMismatch")
         }
 
         @Test

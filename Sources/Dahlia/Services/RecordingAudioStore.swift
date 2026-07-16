@@ -69,6 +69,11 @@ actor RecordingAudioStore {
         let ranges: [RecordingAudioSegmentRangeRecord]
     }
 
+    private struct TranscriptionReadPlan {
+        let records: [RecordingAudioSegmentRecord]
+        let cutoff: TimeInterval?
+    }
+
     let configuration: Configuration
 
     private let dbQueue: DatabaseQueue
@@ -417,29 +422,21 @@ actor RecordingAudioStore {
         }
     }
 
-    func withVerifiedReadySegments<T: Sendable>(
+    func withVerifiedTranscribableSegments<T: Sendable>(
         sessionId: UUID,
         operation: @Sendable ([VerifiedSegment]) async throws -> T
     ) async throws -> T {
         let temporaryLease = try await acquireTemporarySessionLease(sessionId: sessionId)
         defer { withExtendedLifetime(temporaryLease) {} }
+        try await reconcilePendingSegmentsForReading(sessionId: sessionId)
         readLeaseCounts[sessionId, default: 0] += 1
         defer {
             let remaining = max(0, readLeaseCounts[sessionId, default: 1] - 1)
             readLeaseCounts[sessionId] = remaining == 0 ? nil : remaining
         }
-        let records = try await dbQueue.read { db in
-            try RecordingAudioSegmentRecord
-                .filter(Column("recordingSessionId") == sessionId)
-                .order(Column("source").asc, Column("segmentIndex").asc)
-                .fetchAll(db)
-        }
-        guard !records.isEmpty else { throw RecordingAudioStoreError.missingFile }
-        guard records.allSatisfy({ $0.state == .ready }), Self.hasContiguousSegmentIndices(records) else {
-            throw RecordingAudioStoreError.invalidState
-        }
+        let readPlan = try await transcriptionReadPlan(sessionId: sessionId)
         var verified: [VerifiedSegment] = []
-        for record in records {
+        for record in readPlan.records {
             guard let expectedFrames = record.sealedFrameCount,
                   let expectedBytes = record.byteCount,
                   let expectedDigest = record.sha256 else {
@@ -459,12 +456,24 @@ actor RecordingAudioStore {
                 guard metadata.byteCount == expectedBytes, metadata.sha256 == expectedDigest else {
                     throw RecordingAudioStoreError.integrityMismatch
                 }
-                let ranges = try await dbQueue.read { db in
+                var ranges = try await dbQueue.read { db in
                     try RecordingAudioSegmentRangeRecord
                         .filter(Column("audioSegmentId") == record.id)
                         .order(Column("startFrame").asc)
                         .fetchAll(db)
                 }
+                guard ranges.allSatisfy({ $0.frameCount != nil }) else {
+                    throw RecordingAudioStoreError.integrityMismatch
+                }
+                if let cutoff = readPlan.cutoff {
+                    ranges = Self.clippedRanges(
+                        ranges,
+                        toSessionOffset: cutoff,
+                        in: record,
+                        sealedFrameCount: expectedFrames
+                    )
+                }
+                guard !ranges.isEmpty else { continue }
                 verified.append(VerifiedSegment(segment: record, url: url, ranges: ranges))
             } catch RecordingAudioStoreError.integrityMismatch {
                 try await fail(segmentId: record.id, stage: "read", code: "integrityMismatch")
@@ -474,7 +483,79 @@ actor RecordingAudioStore {
                 throw RecordingAudioStoreError.missingFile
             }
         }
+        guard !verified.isEmpty else { throw RecordingAudioStoreError.invalidState }
         return try await operation(verified)
+    }
+
+    private func reconcilePendingSegmentsForReading(sessionId: UUID) async throws {
+        let segmentIds = try await dbQueue.read { db in
+            try UUID.fetchAll(
+                db,
+                sql: """
+                SELECT id FROM recording_audio_segments
+                WHERE recordingSessionId = ? AND state IN (?, ?)
+                ORDER BY source, segmentIndex
+                """,
+                arguments: [
+                    sessionId,
+                    RecordingAudioSegmentState.recording.rawValue,
+                    RecordingAudioSegmentState.finalizing.rawValue,
+                ]
+            )
+        }
+        for segmentId in segmentIds {
+            do {
+                _ = try await reconcile(segmentId: segmentId)
+            } catch RecordingAudioStoreError.integrityMismatch, RecordingAudioStoreError.missingFile {
+                // Reconciliation has already persisted a terminal failed state.
+                // The verified contiguous prefix can still be transcribed.
+            }
+        }
+    }
+
+    private func transcriptionReadPlan(sessionId: UUID) async throws -> TranscriptionReadPlan {
+        try await dbQueue.read { db in
+            let records = try RecordingAudioSegmentRecord
+                .filter(Column("recordingSessionId") == sessionId)
+                .order(Column("source").asc, Column("segmentIndex").asc)
+                .fetchAll(db)
+            guard !records.isEmpty else { throw RecordingAudioStoreError.missingFile }
+            guard records.allSatisfy({ [.ready, .failed].contains($0.state) }) else {
+                throw RecordingAudioStoreError.invalidState
+            }
+            guard records.contains(where: { $0.state == .failed }) else {
+                guard Self.hasContiguousSegmentIndices(records) else {
+                    throw RecordingAudioStoreError.invalidState
+                }
+                return TranscriptionReadPlan(records: records, cutoff: nil)
+            }
+
+            let progress = try RecordingAudioSourceProgressRecord
+                .filter(Column("recordingSessionId") == sessionId)
+                .fetchAll(db)
+            let requiredProgress = progress.filter(\.isRequired)
+            guard !requiredProgress.isEmpty,
+                  let durableCutoff = requiredProgress.map(\.durableThroughOffsetSeconds).min(),
+                  durableCutoff > 0 else {
+                throw RecordingAudioStoreError.invalidState
+            }
+            let readyPrefixBySource = Dictionary(
+                uniqueKeysWithValues: progress.compactMap { item in
+                    item.lastContiguousReadySegmentIndex.map { (item.source, $0) }
+                }
+            )
+            let transcribableRecords = records.filter { record in
+                guard record.state == .ready,
+                      let lastReadyIndex = readyPrefixBySource[record.source],
+                      record.segmentIndex <= lastReadyIndex else { return false }
+                return record.sessionStartOffsetSeconds < durableCutoff
+            }
+            guard !transcribableRecords.isEmpty,
+                  Self.hasContiguousSegmentIndices(transcribableRecords) else {
+                throw RecordingAudioStoreError.invalidState
+            }
+            return TranscriptionReadPlan(records: transcribableRecords, cutoff: durableCutoff)
+        }
     }
 
     func requestPurge(sessionId: UUID, includeFailed: Bool = false, at now: Date = .now) async throws {
@@ -1250,6 +1331,27 @@ actor RecordingAudioStore {
             sourceRecords.enumerated().allSatisfy { offset, record in
                 record.segmentIndex == offset
             }
+        }
+    }
+
+    private static func clippedRanges(
+        _ ranges: [RecordingAudioSegmentRangeRecord],
+        toSessionOffset cutoff: TimeInterval,
+        in segment: RecordingAudioSegmentRecord,
+        sealedFrameCount: Int64
+    ) -> [RecordingAudioSegmentRangeRecord] {
+        let duration = max(0, cutoff - segment.sessionStartOffsetSeconds)
+        let cutoffFrame = Int64((duration * segment.sampleRate).rounded(.down))
+        let availableFrameCount = min(sealedFrameCount, cutoffFrame)
+        guard availableFrameCount > 0 else { return [] }
+
+        return ranges.compactMap { range in
+            guard let frameCount = range.frameCount else { return nil }
+            let clippedFrameCount = min(range.startFrame + frameCount, availableFrameCount) - range.startFrame
+            guard clippedFrameCount > 0 else { return nil }
+            var clipped = range
+            clipped.frameCount = clippedFrameCount
+            return clipped
         }
     }
 

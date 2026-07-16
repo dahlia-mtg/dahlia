@@ -189,7 +189,7 @@ actor BatchTranscriptionCoordinator {
         guard let recordingAudioStore else {
             throw RecordingAudioStoreError.storageUnavailable
         }
-        return try await recordingAudioStore.withVerifiedReadySegments(sessionId: job.session.id) { verified in
+        return try await recordingAudioStore.withVerifiedTranscribableSegments(sessionId: job.session.id) { verified in
             try await self.transcribe(
                 verifiedSegments: verified,
                 job: job,
