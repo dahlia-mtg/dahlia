@@ -1,7 +1,4 @@
-import CoreGraphics
 import Foundation
-import ImageIO
-import UniformTypeIdentifiers
 
 enum GoogleDocsSummaryRenderer {
     struct RenderedDocument: Equatable {
@@ -9,14 +6,7 @@ enum GoogleDocsSummaryRenderer {
         let mimeType: String
     }
 
-    private struct PreparedImage {
-        let data: Data
-        let pixelWidth: Int
-        let pixelHeight: Int
-    }
-
     private static let documentWidthTwips = 9000
-    private static let imageMaxLongEdge = 1600
 
     static func render(
         document: SummaryDocument,
@@ -25,7 +15,7 @@ enum GoogleDocsSummaryRenderer {
         imageUnavailableText: String
     ) -> RenderedDocument {
         let screenshotsByID = Dictionary(uniqueKeysWithValues: context.screenshots.map { ($0.id, $0) })
-        var imageCache: [UUID: PreparedImage] = [:]
+        var imageCache: [UUID: GoogleDocsImageEncoder.EncodedImage] = [:]
         var body = ""
 
         if let title = normalizedText(document.title) {
@@ -70,7 +60,7 @@ enum GoogleDocsSummaryRenderer {
     private static func renderBlock(
         _ block: SummaryBlock,
         screenshotsByID: [UUID: MeetingScreenshotRecord],
-        imageCache: inout [UUID: PreparedImage],
+        imageCache: inout [UUID: GoogleDocsImageEncoder.EncodedImage],
         imageUnavailableText: String
     ) -> String {
         switch block.content {
@@ -160,15 +150,15 @@ enum GoogleDocsSummaryRenderer {
         screenshotID: UUID,
         caption: String,
         screenshotsByID: [UUID: MeetingScreenshotRecord],
-        imageCache: inout [UUID: PreparedImage],
+        imageCache: inout [UUID: GoogleDocsImageEncoder.EncodedImage],
         imageUnavailableText: String
     ) -> String {
-        let image: PreparedImage
+        let image: GoogleDocsImageEncoder.EncodedImage
         if let cached = imageCache[screenshotID] {
             image = cached
         } else {
             guard let screenshot = screenshotsByID[screenshotID],
-                  let prepared = prepareImage(screenshot.imageData) else {
+                  let prepared = GoogleDocsImageEncoder.encode(screenshot.imageData) else {
                 return unavailableImageBlock(caption: caption, message: imageUnavailableText)
             }
             imageCache[screenshotID] = prepared
@@ -285,28 +275,6 @@ enum GoogleDocsSummaryRenderer {
     private static func isSafeLink(_ link: URL) -> Bool {
         guard let scheme = link.scheme?.lowercased() else { return false }
         return ["http", "https", "mailto"].contains(scheme)
-    }
-
-    private static func prepareImage(_ data: Data) -> PreparedImage? {
-        guard let image = CGImageDecoder.decode(data, maxPixelSize: imageMaxLongEdge) else { return nil }
-
-        let encoded = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(
-            encoded,
-            UTType.jpeg.identifier as CFString,
-            1,
-            nil
-        ) else { return nil }
-        CGImageDestinationAddImage(destination, image, [
-            kCGImageDestinationLossyCompressionQuality: 0.78,
-        ] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-
-        return PreparedImage(
-            data: encoded as Data,
-            pixelWidth: image.width,
-            pixelHeight: image.height
-        )
     }
 
     private static func hexEncoded(_ data: Data) -> String {
