@@ -33,7 +33,8 @@ import Foundation
             #expect(session.messages.map(\.text) == ["Question", "Final answer"])
             #expect(session.messages.last?.reasoning == "Considered the question")
             #expect(session.title == "Question")
-            #expect(await service.sentTexts == ["Question"])
+            #expect(await service.sentTextBlocks == [["Question"]])
+            #expect(await service.threadNames == ["Question"])
         }
 
         @Test
@@ -192,9 +193,9 @@ import Foundation
             session.sendDraft()
             await waitUntil { !session.isGenerating }
 
-            #expect(await service.sentTexts == [
-                CodexChatPromptCodec.encode(text: "First question", context: firstContext),
-                CodexChatPromptCodec.encode(text: "Second question", context: secondContext),
+            #expect(await service.sentTextBlocks == [
+                CodexChatPromptCodec.encodeTextBlocks(text: "First question", context: firstContext),
+                CodexChatPromptCodec.encodeTextBlocks(text: "Second question", context: secondContext),
             ])
             #expect(session.messages.filter { $0.role == .user }.map(\.text) == [
                 "First question", "Second question",
@@ -202,6 +203,7 @@ import Foundation
             #expect(session.messages.filter { $0.role == .user }.map(\.context) == [
                 firstContext, secondContext,
             ])
+            #expect(await service.threadNames == ["First question"])
         }
 
         @Test
@@ -228,7 +230,7 @@ import Foundation
             #expect(session.messages.isEmpty)
             #expect(session.errorMessage != nil)
             #expect(session.lastSubmittedText == "Keep this")
-            #expect(await service.sentTexts.isEmpty)
+            #expect(await service.sentTextBlocks.isEmpty)
         }
 
         @Test
@@ -255,14 +257,14 @@ import Foundation
 
             #expect(session.lastSubmittedText == "Current question")
             #expect(session.draft == "Current question")
-            #expect(await service.sentTexts == ["Previous question"])
+            #expect(await service.sentTextBlocks == [["Previous question"]])
 
             contextProvider.error = nil
             session.retry()
             await waitUntil { !session.isGenerating }
 
             #expect(session.draft.isEmpty)
-            #expect(await service.sentTexts == ["Previous question", "Current question"])
+            #expect(await service.sentTextBlocks == [["Previous question"], ["Current question"]])
         }
 
         @Test
@@ -293,7 +295,7 @@ import Foundation
             #expect(session.draft == "Keep selected meeting question")
             #expect(session.messages.isEmpty)
             #expect(session.errorMessage == L10n.chatSelectedMeetingUnavailable)
-            #expect(await service.sentTexts.isEmpty)
+            #expect(await service.sentTextBlocks.isEmpty)
         }
 
         private static func testVault() -> VaultRecord {
@@ -337,7 +339,8 @@ import Foundation
         }
 
         let mode: Mode
-        private(set) var sentTexts: [String] = []
+        private(set) var sentTextBlocks: [[String]] = []
+        private(set) var threadNames: [String] = []
         private(set) var interruptCount = 0
         private(set) var unsubscribedThreadIDs: [String] = []
         private var blockedContinuation: AsyncThrowingStream<CodexChatTurnEvent, any Error>.Continuation?
@@ -367,7 +370,8 @@ import Foundation
             case .staleRollout, .multipleMessages:
                 []
             }
-            let decoded = CodexChatPromptCodec.decode(sentTexts.last ?? "Question")
+            let flattenedText = sentTextBlocks.last?.joined() ?? "Question"
+            let decoded = CodexChatPromptCodec.decodeTextBlocks([flattenedText])
             return CodexChatThread(
                 id: id,
                 title: "Question",
@@ -397,13 +401,17 @@ import Foundation
             )
         }
 
+        func setThreadName(threadID _: String, name: String) async {
+            threadNames.append(name)
+        }
+
         func send(
             threadID _: String,
-            text: String,
+            textBlocks: [String],
             model _: String?,
             effort _: String
         ) async throws -> AsyncThrowingStream<CodexChatTurnEvent, any Error> {
-            sentTexts.append(text)
+            sentTextBlocks.append(textBlocks)
             let (stream, continuation) = AsyncThrowingStream<CodexChatTurnEvent, any Error>.makeStream()
             continuation.yield(.started(turnID: "turn-1"))
             switch mode {

@@ -21,7 +21,7 @@ import Foundation
             let thread = try await service.startThread(model: "default-model", effort: "medium", vaultID: vaultID)
             let stream = try await service.send(
                 threadID: thread.id,
-                text: "Hi",
+                textBlocks: ["Meeting context", "Hi"],
                 model: "default-model",
                 effort: "high"
             )
@@ -60,6 +60,35 @@ import Foundation
             #expect(turnParams["outputSchema"] == nil)
             #expect(turnParams["effort"] == .string("high"))
             #expect(turnParams["summary"] == .string("auto"))
+            #expect(turnParams["input"] == .array([
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Meeting context"),
+                ]),
+                .object([
+                    "type": .string("text"),
+                    "text": .string("Hi"),
+                ]),
+            ]))
+            await appServer.shutdown()
+        }
+
+        @Test
+        func threadNameUsesPlainUserText() async throws {
+            let transport = TestCodexChatAppServerTransport()
+            let appServer = CodexAppServerService(transportFactory: { transport })
+            let service = CodexChatService(
+                appServer: appServer,
+                workspaceLocator: TestCodexChatWorkspaceLocator(url: URL(filePath: "/tmp/dahlia-chat-tests"))
+            )
+
+            await service.setThreadName(threadID: "thread-1", name: "Hi")
+
+            let params = try #require(await transport.messages().first {
+                $0.objectValue?["method"]?.stringValue == "thread/name/set"
+            }?.objectValue?["params"]?.objectValue)
+            #expect(params["threadId"] == .string("thread-1"))
+            #expect(params["name"] == .string("Hi"))
             await appServer.shutdown()
         }
 
@@ -90,7 +119,7 @@ import Foundation
             )
             let stream = try await service.send(
                 threadID: "thread-1",
-                text: "Disconnect",
+                textBlocks: ["Disconnect"],
                 model: "default-model",
                 effort: "medium"
             )
@@ -161,7 +190,7 @@ import Foundation
             )
             let stream = try await service.send(
                 threadID: "thread-1",
-                text: "Test",
+                textBlocks: ["Test"],
                 model: "default-model",
                 effort: "medium"
             )

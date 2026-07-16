@@ -23,7 +23,7 @@ import Foundation
 
             #expect(session.draft == "Do not start")
             #expect(session.messages.isEmpty)
-            #expect(await service.sentTexts.isEmpty)
+            #expect(await service.sentTextBlocks.isEmpty)
         }
 
         @Test
@@ -48,7 +48,7 @@ import Foundation
 
             #expect(session.draft == "Stay in old vault")
             #expect(session.messages.isEmpty)
-            #expect(await service.sentTexts.isEmpty)
+            #expect(await service.sentTextBlocks.isEmpty)
         }
 
         private static func session(

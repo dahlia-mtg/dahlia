@@ -146,6 +146,8 @@ final class CodexChatSessionModel: Identifiable {
                     vaultID: vaultID
                 )
                 apply(thread, preservingPendingMessages: true)
+                title = text
+                await service.setThreadName(threadID: thread.id, name: text)
             }
             guard let backendThreadID else {
                 throw CodexAppServerError.invalidProtocolResponse
@@ -153,7 +155,7 @@ final class CodexChatSessionModel: Identifiable {
 
             let stream = try await service.send(
                 threadID: backendThreadID,
-                text: CodexChatPromptCodec.encode(text: text, context: context),
+                textBlocks: CodexChatPromptCodec.encodeTextBlocks(text: text, context: context),
                 model: selectedModelID.nilIfBlank,
                 effort: selectedEffort
             )

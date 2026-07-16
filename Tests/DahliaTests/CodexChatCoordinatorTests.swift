@@ -145,9 +145,9 @@ import Foundation
             historySession.sendDraft()
             await waitUntil { await MainActor.run { !historySession.isGenerating } }
 
-            let prompts = await service.sentTexts
-            #expect(prompts.count == 3)
-            let contexts = prompts.map { CodexChatPromptCodec.decode($0).context }
+            let prompts = await service.sentTextBlocks
+            #expect(prompts.allSatisfy { $0.count == 2 })
+            let contexts = prompts.map { CodexChatPromptCodec.decodeTextBlocks($0).context }
             #expect(contexts.map { $0?.meetingName } == ["First draft", "Second draft", "History draft"])
         }
 
@@ -205,9 +205,11 @@ import Foundation
             Self.thread(id: "new")
         }
 
+        func setThreadName(threadID _: String, name _: String) async {}
+
         func send(
             threadID _: String,
-            text _: String,
+            textBlocks _: [String],
             model _: String?,
             effort _: String
         ) async throws -> AsyncThrowingStream<CodexChatTurnEvent, any Error> {
@@ -235,7 +237,7 @@ import Foundation
         private let failFirstHistoryRequest: Bool
         private var historyRequestCount = 0
         private(set) var unsubscribedThreadIDs: [String] = []
-        private(set) var sentTexts: [String] = []
+        private(set) var sentTextBlocks: [[String]] = []
 
         init(failFirstHistoryRequest: Bool = false) {
             self.failFirstHistoryRequest = failFirstHistoryRequest
@@ -268,13 +270,15 @@ import Foundation
             CodexChatThread(id: "new-thread", title: "", messages: [], model: "default-model", reasoningEffort: effort)
         }
 
+        func setThreadName(threadID _: String, name _: String) async {}
+
         func send(
             threadID _: String,
-            text: String,
+            textBlocks: [String],
             model _: String?,
             effort _: String
         ) async throws -> AsyncThrowingStream<CodexChatTurnEvent, any Error> {
-            sentTexts.append(text)
+            sentTextBlocks.append(textBlocks)
             return AsyncThrowingStream<CodexChatTurnEvent, any Error> { $0.finish() }
         }
 

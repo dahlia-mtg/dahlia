@@ -7,9 +7,7 @@ enum TestCodexChatFixtures {
       Type: Meeting
       <meeting_id>AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA</meeting_id>
       <meeting_name>History meeting</meeting_name>
-    </context>
-
-    Question
+    </context>Question
     """
 
     nonisolated static var modelList: JSONValue {

@@ -149,18 +149,18 @@ actor CodexChatService: CodexChatServicing {
 
     func send(
         threadID: String,
-        text: String,
+        textBlocks: [String],
         model: String?,
         effort: String
     ) async throws -> AsyncThrowingStream<CodexChatTurnEvent, any Error> {
         var params: [String: JSONValue] = [
             "effort": .string(effort),
-            "input": .array([
+            "input": .array(textBlocks.map { text in
                 .object([
                     "type": .string("text"),
                     "text": .string(text),
-                ]),
-            ]),
+                ])
+            }),
             "summary": .string("auto"),
             "threadId": .string(threadID),
         ]
@@ -190,6 +190,16 @@ actor CodexChatService: CodexChatServicing {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    func setThreadName(threadID: String, name: String) async {
+        _ = try? await appServer.request(
+            method: "thread/name/set",
+            params: .object([
+                "name": .string(name),
+                "threadId": .string(threadID),
+            ])
+        )
     }
 
     func interrupt(threadID: String, turnID: String) async {
@@ -299,14 +309,14 @@ private extension CodexChatService {
     }
 
     nonisolated static func parseUserMessages(_ object: [String: JSONValue], id: String) -> [CodexChatMessage] {
-        let text = object["content"]?.arrayValue?
+        let textBlocks = object["content"]?.arrayValue?
             .compactMap { input -> String? in
                 guard input.objectValue?["type"]?.stringValue == "text" else { return nil }
                 return input.objectValue?["text"]?.stringValue
             }
-            .joined(separator: "\n")
-        guard let text = text?.nilIfBlank else { return [] }
-        let decoded = CodexChatPromptCodec.decode(text)
+        guard let textBlocks, !textBlocks.isEmpty else { return [] }
+        let decoded = CodexChatPromptCodec.decodeTextBlocks(textBlocks)
+        guard decoded.text.nilIfBlank != nil else { return [] }
         return [
             CodexChatMessage(
                 id: id,

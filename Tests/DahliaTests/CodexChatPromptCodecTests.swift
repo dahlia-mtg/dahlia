@@ -22,6 +22,7 @@ import Foundation
                 )
             )
 
+            let textBlocks = CodexChatPromptCodec.encodeTextBlocks(text: "What changed?", context: context)
             let prompt = CodexChatPromptCodec.encode(text: "What changed?", context: context)
 
             #expect(prompt == """
@@ -43,10 +44,20 @@ import Foundation
             What changed?
             """)
             #expect(!prompt.contains("<summary>"))
+            #expect(textBlocks.count == 2)
+            #expect(textBlocks[0] + "\n\n" + textBlocks[1] == prompt)
+            #expect(textBlocks[1] == "What changed?")
 
             let decoded = CodexChatPromptCodec.decode(prompt)
             #expect(decoded.text == "What changed?")
             #expect(decoded.context == context)
+            let decodedBlocks = CodexChatPromptCodec.decodeTextBlocks(textBlocks)
+            #expect(decodedBlocks.text == "What changed?")
+            #expect(decodedBlocks.context == context)
+            let flattenedMessage = CodexChatPromptCodec.decodeTextBlocks([textBlocks.joined()])
+            #expect(flattenedMessage.text == "What changed?")
+            #expect(flattenedMessage.context == context)
+            #expect(CodexChatPromptCodec.visibleUserText(from: textBlocks.joined()) == "What changed?")
         }
 
         @Test
@@ -153,6 +164,15 @@ import Foundation
             #expect(CodexChatPromptCodec.decode(legacy).context == nil)
             #expect(CodexChatPromptCodec.decode(malformed).text == malformed)
             #expect(CodexChatPromptCodec.decode(malformed).context == nil)
+
+            let malformedBlocks = ["<context>not Dahlia context</context>", "Keep this visible"]
+            let decodedBlocks = CodexChatPromptCodec.decodeTextBlocks(malformedBlocks)
+            #expect(decodedBlocks.text == malformedBlocks.joined(separator: "\n"))
+            #expect(decodedBlocks.context == nil)
+
+            let unrelatedBlocks = ["First visible", "Second hidden", "Third hidden"]
+            #expect(CodexChatPromptCodec.decodeTextBlocks(unrelatedBlocks).text == unrelatedBlocks.joined(separator: "\n"))
+            #expect(CodexChatPromptCodec.visibleUserText(from: malformedBlocks.joined()) == malformedBlocks.joined())
         }
     }
 #endif

@@ -3,12 +3,21 @@ import Foundation
 enum CodexChatPromptCodec {
     private static let contextStart = "<context>\n"
     private static let contextEnd = "</context>\n\n"
+    private static let contextClosingTag = "</context>"
     private static let meetingDescription = "  You are viewing a meeting in the Dahlia App.\n"
     private static let meetingDraftDescription = "  You are viewing an unsaved meeting draft in the Dahlia App.\n"
 
     static func encode(text: String, context: CodexChatContext?) -> String {
         guard let context else { return text }
+        return encodeContext(context) + "\n\n" + text
+    }
 
+    static func encodeTextBlocks(text: String, context: CodexChatContext?) -> [String] {
+        guard let context else { return [text] }
+        return [encodeContext(context), text]
+    }
+
+    private static func encodeContext(_ context: CodexChatContext) -> String {
         var lines = ["<context>"]
         switch context {
         case let .meeting(id, name, calendarEvent):
@@ -24,7 +33,7 @@ enum CodexChatPromptCodec {
             append(calendarEvent, to: &lines)
         }
         lines.append("</context>")
-        return lines.joined(separator: "\n") + "\n\n" + text
+        return lines.joined(separator: "\n")
     }
 
     static func decode(_ prompt: String) -> (text: String, context: CodexChatContext?) {
@@ -37,13 +46,45 @@ enum CodexChatPromptCodec {
 
         let contextBlock = String(prompt[..<contextEndRange.lowerBound]) + "</context>"
         let text = String(prompt[contextEndRange.upperBound...])
-        guard let context = decodeContext(contextBlock) else {
-            return (prompt, nil)
-        }
-        guard encode(text: text, context: context) == prompt else {
+        guard let context = canonicalContext(from: contextBlock) else {
             return (prompt, nil)
         }
         return (text, context)
+    }
+
+    static func decodeTextBlocks(_ textBlocks: [String]) -> (text: String, context: CodexChatContext?) {
+        guard let firstText = textBlocks.first else { return ("", nil) }
+        if textBlocks.count == 2,
+           let context = canonicalContext(from: firstText) {
+            return (textBlocks[1], context)
+        }
+        return decodeUserText(textBlocks.joined(separator: "\n"))
+    }
+
+    static func visibleUserText(from text: String) -> String {
+        decodeUserText(text).text
+    }
+
+    private static func decodeUserText(_ text: String) -> (text: String, context: CodexChatContext?) {
+        let decoded = decode(text)
+        if decoded.context != nil {
+            return decoded
+        }
+        return decodeContextPrefix(from: text) ?? decoded
+    }
+
+    private static func decodeContextPrefix(from text: String) -> (text: String, context: CodexChatContext)? {
+        guard text.hasPrefix(contextStart),
+              let closingRange = text.range(of: contextClosingTag)
+        else { return nil }
+        let contextBlock = String(text[..<closingRange.upperBound])
+        guard let context = canonicalContext(from: contextBlock) else { return nil }
+        return (String(text[closingRange.upperBound...]), context)
+    }
+
+    private static func canonicalContext(from block: String) -> CodexChatContext? {
+        guard let context = decodeContext(block), encodeContext(context) == block else { return nil }
+        return context
     }
 
     private static func append(
