@@ -254,11 +254,11 @@ enum SummaryShareRenderer {
         guard destination == .googleDocs else { return captionHTML }
 
         guard let screenshot = screenshotsByID[screenshotID],
-              let mimeType = ImageEncoder.mimeType(for: screenshot.imageData) else {
+              let encodedImage = GoogleDocsImageEncoder.encode(screenshot.imageData) else {
             return captionHTML.map { "<p>\($0)</p>" }
         }
 
-        let source = "data:\(mimeType);base64,\(screenshot.imageData.base64EncodedString())"
+        let source = "data:image/jpeg;base64,\(encodedImage.data.base64EncodedString())"
         let alt = normalizedCaption.map { " alt=\"\(escapeHTMLAttribute($0))\"" } ?? ""
         let image = "<img src=\"\(source)\"\(alt)>"
         guard let captionHTML else { return image }

@@ -70,7 +70,7 @@ import Foundation
         }
 
         @Test
-        func embedsReferencedScreenshotOnlyInGoogleDocsHTML() throws {
+        func embedsReferencedScreenshotAsJPEGOnlyInGoogleDocsHTML() throws {
             let screenshotID = UUID.v7()
             let screenshot = MeetingScreenshotRecord(
                 id: screenshotID,
@@ -103,7 +103,7 @@ import Foundation
                 screenshots: [screenshot]
             )
 
-            #expect(googleDocsContent.html.contains("<img src=\"data:image/png;base64,"))
+            #expect(googleDocsContent.html.contains("<img src=\"data:image/jpeg;base64,"))
             #expect(googleDocsContent.html.contains("alt=\"Launch &lt;screen&gt;\""))
             #expect(googleDocsContent.html.contains("<figcaption><em>Launch &lt;screen&gt;</em></figcaption>"))
             #expect(googleDocsContent.markdown.contains("Launch <screen>"))
