@@ -422,6 +422,15 @@ actor RecordingAudioStore {
         }
     }
 
+    func hasFailedSegments(sessionId: UUID) async throws -> Bool {
+        try await dbQueue.read { db in
+            try RecordingAudioSegmentRecord
+                .filter(Column("recordingSessionId") == sessionId)
+                .filter(Column("state") == RecordingAudioSegmentState.failed.rawValue)
+                .fetchCount(db) > 0
+        }
+    }
+
     func withVerifiedTranscribableSegments<T: Sendable>(
         sessionId: UUID,
         operation: @Sendable ([VerifiedSegment]) async throws -> T

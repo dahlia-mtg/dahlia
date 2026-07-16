@@ -241,6 +241,7 @@ import GRDB
             }
             #expect(recoveredTail?.state == .failed)
             #expect(recoveredTail?.failureCode == "integrityMismatch")
+            #expect(try await store.hasFailedSegments(sessionId: fixture.session.id))
         }
 
         @Test
