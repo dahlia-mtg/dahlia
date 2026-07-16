@@ -155,9 +155,14 @@ actor BatchTranscriptionCoordinator {
         } catch {
             ErrorReportingService.capture(error, context: ["source": "batchTranscriptExport"])
         }
-        guard !job.session.retainAudioAfterBatch else { return }
+        guard !job.session.retainAudioAfterBatch,
+              let recordingAudioStore else { return }
         do {
-            try await recordingAudioStore?.requestPurge(sessionId: job.session.id)
+            // A failed tail is intentionally retained after partial recovery. Force-purging it
+            // cannot be resumed safely if deletion is interrupted before its intent is persisted.
+            let hasFailedSegments = try await recordingAudioStore.hasFailedSegments(sessionId: job.session.id)
+            guard !hasFailedSegments else { return }
+            try await recordingAudioStore.requestPurge(sessionId: job.session.id)
         } catch {
             ErrorReportingService.capture(error, context: ["source": "batchAudioPurge"])
         }
@@ -189,7 +194,7 @@ actor BatchTranscriptionCoordinator {
         guard let recordingAudioStore else {
             throw RecordingAudioStoreError.storageUnavailable
         }
-        return try await recordingAudioStore.withVerifiedReadySegments(sessionId: job.session.id) { verified in
+        return try await recordingAudioStore.withVerifiedTranscribableSegments(sessionId: job.session.id) { verified in
             try await self.transcribe(
                 verifiedSegments: verified,
                 job: job,
