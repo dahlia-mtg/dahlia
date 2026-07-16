@@ -227,7 +227,42 @@ import Foundation
             #expect(session.draft == "Keep this")
             #expect(session.messages.isEmpty)
             #expect(session.errorMessage != nil)
+            #expect(session.lastSubmittedText == "Keep this")
             #expect(await service.sentTexts.isEmpty)
+        }
+
+        @Test
+        func contextFailureReplacesStaleRetryAndSuccessfulRetryClearsDraft() async {
+            let service = TestCodexChatService(mode: .staleRollout)
+            let settings = AppSettings()
+            settings.currentVault = Self.testVault()
+            let contextProvider = TestCodexChatContextProvider()
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings,
+                contextProvider: contextProvider
+            )
+            session.draft = "Previous question"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+
+            contextProvider.error = CodexAppServerError.invalidProtocolResponse
+            session.draft = "Current question"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+
+            #expect(session.lastSubmittedText == "Current question")
+            #expect(session.draft == "Current question")
+            #expect(await service.sentTexts == ["Previous question"])
+
+            contextProvider.error = nil
+            session.retry()
+            await waitUntil { !session.isGenerating }
+
+            #expect(session.draft.isEmpty)
+            #expect(await service.sentTexts == ["Previous question", "Current question"])
         }
 
         @Test
@@ -426,7 +461,7 @@ import Foundation
     @MainActor
     private final class TestCodexChatContextProvider: CodexChatContextProviding {
         var context: CodexChatContext?
-        private let error: CodexAppServerError?
+        var error: CodexAppServerError?
 
         init(
             context: CodexChatContext? = nil,

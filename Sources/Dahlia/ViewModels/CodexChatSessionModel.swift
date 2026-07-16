@@ -110,7 +110,7 @@ final class CodexChatSessionModel: Identifiable {
 
     func retry() {
         guard let lastSubmittedText else { return }
-        submit(lastSubmittedText, clearsDraft: false)
+        submit(lastSubmittedText, clearsDraft: draft == lastSubmittedText)
     }
 
     func stop() {
@@ -319,6 +319,7 @@ private extension CodexChatSessionModel {
             guard let vaultID else { throw CodexAppServerError.invalidProtocolResponse }
             context = try await contextProvider.currentContext(vaultID: vaultID)
         } catch {
+            lastSubmittedText = text
             errorMessage = error.localizedDescription
             finishGeneration()
             return
