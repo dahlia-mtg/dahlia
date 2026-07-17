@@ -31,7 +31,7 @@ jobs:
           swift --version
 
       - name: Install lint tools
-        run: brew install swiftformat swiftlint
+        run: brew install swiftlint
 
       - name: Run lint
         run: ./scripts/lint.sh

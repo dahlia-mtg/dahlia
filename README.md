@@ -53,6 +53,8 @@ swift test
 
 > **Note:** `swift run Dahlia` has no bundled Codex helper and cannot use Data Protection Keychain. Use `run-dev.sh` for full functionality. On their first run, the app-bundle scripts download the pinned official Codex 0.144.4 GitHub Release for `aarch64-apple-darwin`, verify its SHA-256, and cache it under `.build`.
 
+The lint script and pre-commit hook use the repository-pinned SwiftFormat release. If that exact version is not installed, they verify and cache the official release binary under `.build` automatically.
+
 If you set `SENTRY_DSN` before running `build-app.sh` or `notarize.sh`, the generated release app embeds the DSN into `Info.plist` and enables Sentry when launched from Finder. Debug runs remain disabled, so `swift run Dahlia` and `run-dev.sh` do not send Sentry events by default.
 
 `build-app.sh` and `run-dev.sh` never upload files externally. When `notarize.sh` builds a Sentry-enabled release, it requires `SENTRY_AUTH_TOKEN` and `sentry-cli`, verifies that the executable and dSYM UUIDs match, then uploads the dSYM after notarization succeeds:
