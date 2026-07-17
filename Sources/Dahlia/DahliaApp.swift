@@ -33,10 +33,8 @@ struct DahliaApp: App {
 
     @MainActor
     init() {
-        let isDevelopmentProfile = ProcessInfo.processInfo.environment["DAHLIA_RUNTIME_PROFILE"] == "development"
-        let shouldStartUpdater = !isDevelopmentProfile && Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: shouldStartUpdater,
+            startingUpdater: AppUpdatePolicy.shouldStartUpdater(),
             updaterDelegate: nil,
             userDriverDelegate: nil
         )

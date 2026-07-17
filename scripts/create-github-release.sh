@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APP_NAME="Dahlia"
+RELEASE_REPOSITORY="dahlia-mtg/dahlia"
 INVOCATION_DIR="$(pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -12,6 +13,10 @@ source "${SCRIPT_DIR}/common.sh"
 GENERATED_NOTES_FILE=""
 DMG_MOUNT_DIR=""
 SPARKLE_RELEASE_DIR=""
+DMG_SPARKLE_FEED_URL=""
+DMG_SPARKLE_PUBLIC_KEY=""
+DMG_SPARKLE_REQUIRES_SIGNED_FEED=""
+DMG_SPARKLE_VERIFIES_BEFORE_EXTRACTION=""
 
 cleanup() {
     if [ -n "$DMG_MOUNT_DIR" ]; then
@@ -72,6 +77,10 @@ validate_dmg_version() {
 
     app_info_plist="${DMG_MOUNT_DIR}/${APP_NAME}.app/Contents/Info.plist"
     dmg_version="$(read_marketing_version "$app_info_plist")"
+    DMG_SPARKLE_FEED_URL="$(/usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$app_info_plist")"
+    DMG_SPARKLE_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$app_info_plist")"
+    DMG_SPARKLE_REQUIRES_SIGNED_FEED="$(/usr/libexec/PlistBuddy -c "Print :SURequireSignedFeed" "$app_info_plist")"
+    DMG_SPARKLE_VERIFIES_BEFORE_EXTRACTION="$(/usr/libexec/PlistBuddy -c "Print :SUVerifyUpdateBeforeExtraction" "$app_info_plist")"
 
     hdiutil detach "$DMG_MOUNT_DIR" >/dev/null
     rmdir "$DMG_MOUNT_DIR"
@@ -83,10 +92,55 @@ validate_dmg_version() {
     fi
 }
 
+validate_sparkle_release_configuration() {
+    local generate_keys="${PROJECT_DIR}/.build/artifacts/sparkle/Sparkle/bin/generate_keys"
+    local sparkle_key_account="${SPARKLE_KEY_ACCOUNT:-com.dahlia.app}"
+    local expected_feed_url="https://github.com/${RELEASE_REPOSITORY}/releases/latest/download/appcast.xml"
+    local current_repository
+    local keychain_public_key
+
+    if [ ! -x "$generate_keys" ]; then
+        cat >&2 <<EOF
+error: Sparkle's generate_keys tool was not found.
+
+Resolve package artifacts first with:
+  swift package resolve
+EOF
+        exit 1
+    fi
+
+    current_repository="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')"
+    if [ "$current_repository" != "$RELEASE_REPOSITORY" ]; then
+        echo "error: release repository is ${current_repository}, expected ${RELEASE_REPOSITORY}" >&2
+        exit 1
+    fi
+    if [ "$DMG_SPARKLE_FEED_URL" != "$expected_feed_url" ]; then
+        echo "error: DMG Sparkle feed is ${DMG_SPARKLE_FEED_URL}, expected ${expected_feed_url}" >&2
+        exit 1
+    fi
+    if [ "$DMG_SPARKLE_REQUIRES_SIGNED_FEED" != "true" ] || [ "$DMG_SPARKLE_VERIFIES_BEFORE_EXTRACTION" != "true" ]; then
+        echo "error: DMG must require a signed Sparkle feed and verify updates before extraction" >&2
+        exit 1
+    fi
+
+    keychain_public_key="$("$generate_keys" --account "$sparkle_key_account" -p)"
+    if [ "$keychain_public_key" != "$DMG_SPARKLE_PUBLIC_KEY" ]; then
+        echo "error: Sparkle key ${sparkle_key_account} does not match SUPublicEDKey in the DMG" >&2
+        exit 1
+    fi
+}
+
 has_release_notes() {
     local notes_file="$1"
 
     [ -s "$notes_file" ] && grep -q '[^[:space:]]' "$notes_file"
+}
+
+sha256_digest() {
+    local checksum
+
+    checksum="$(shasum -a 256 "$1")"
+    printf '%s\n' "${checksum%% *}"
 }
 
 create_sparkle_appcast() {
@@ -107,14 +161,23 @@ EOF
     cp "$DMG_PATH" "${SPARKLE_RELEASE_DIR}/${EXPECTED_DMG_NAME}"
     cp "$NOTES_FILE" "${SPARKLE_RELEASE_DIR}/${APP_NAME}.md"
 
+    if [ "$(sha256_digest "${SPARKLE_RELEASE_DIR}/${EXPECTED_DMG_NAME}")" != "$DMG_CHECKSUM" ]; then
+        echo "error: Sparkle release DMG does not match the validated DMG" >&2
+        exit 1
+    fi
+
     "$generate_appcast" \
         --account "$sparkle_key_account" \
-        --download-url-prefix "https://github.com/mats16/dahlia/releases/download/${TAG_NAME}/" \
+        --download-url-prefix "https://github.com/${RELEASE_REPOSITORY}/releases/download/${TAG_NAME}/" \
         --embed-release-notes \
         "$SPARKLE_RELEASE_DIR"
 
     if [ ! -s "${SPARKLE_RELEASE_DIR}/appcast.xml" ]; then
         echo "error: Sparkle appcast was not generated" >&2
+        exit 1
+    fi
+    if ! grep -q 'sparkle:edSignature="' "${SPARKLE_RELEASE_DIR}/appcast.xml"; then
+        echo "error: Sparkle appcast does not contain a signed update enclosure" >&2
         exit 1
     fi
 }
@@ -170,9 +233,9 @@ done
 
 cd "$PROJECT_DIR"
 
-require_commands codesign gh git hdiutil xcrun
+require_commands codesign gh git hdiutil shasum xcrun
 if [ -z "$NOTES_FILE" ]; then
-    require_commands codex shasum
+    require_commands codex
 fi
 
 MARKETING_VERSION="$(read_marketing_version "$INFO_PLIST")"
@@ -226,13 +289,11 @@ codesign --verify --verbose=2 "$DMG_PATH"
 xcrun stapler validate "$DMG_PATH"
 validate_dmg_version "$MARKETING_VERSION"
 
-DMG_CHECKSUM=""
-if [ -z "$NOTES_FILE" ]; then
-    DMG_CHECKSUM="$(shasum -a 256 "$DMG_PATH")"
-fi
+DMG_CHECKSUM="$(sha256_digest "$DMG_PATH")"
 
 gh auth status >/dev/null
 git remote get-url origin >/dev/null
+validate_sparkle_release_configuration
 
 HEAD_COMMIT="$(git rev-parse HEAD)"
 LOCAL_TAG_COMMIT="$(git rev-parse -q --verify "refs/tags/${TAG_NAME}^{}" || true)"
@@ -282,7 +343,7 @@ if [ -z "$NOTES_FILE" ]; then
         exit 1
     fi
 
-    if [ "$(shasum -a 256 "$DMG_PATH")" != "$DMG_CHECKSUM" ]; then
+    if [ "$(sha256_digest "$DMG_PATH")" != "$DMG_CHECKSUM" ]; then
         echo "error: release DMG changed while Codex generated release notes; refusing to publish" >&2
         exit 1
     fi
@@ -299,10 +360,15 @@ create_sparkle_appcast
 echo "=== Release notes ==="
 sed 's/^/  /' "$NOTES_FILE"
 
+if [ "$(sha256_digest "${SPARKLE_RELEASE_DIR}/${EXPECTED_DMG_NAME}")" != "$DMG_CHECKSUM" ]; then
+    echo "error: signed Sparkle release DMG changed before upload; refusing to publish" >&2
+    exit 1
+fi
+
 echo "=== Creating GitHub Release ${TAG_NAME} ==="
 gh release create \
     "$TAG_NAME" \
-    "$DMG_PATH" \
+    "${SPARKLE_RELEASE_DIR}/${EXPECTED_DMG_NAME}" \
     "${SPARKLE_RELEASE_DIR}/appcast.xml" \
     --title "${APP_NAME} ${MARKETING_VERSION}" \
     --notes-file "$NOTES_FILE" \

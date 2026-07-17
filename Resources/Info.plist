@@ -35,7 +35,7 @@
     <key>LSUIElement</key>
     <false/>
     <key>SUFeedURL</key>
-    <string>https://github.com/mats16/dahlia/releases/latest/download/appcast.xml</string>
+    <string>https://github.com/dahlia-mtg/dahlia/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>HR6N/+ImpB4ahCwyYLfF+CKJf2YG267B7pu5Q8CSB2E=</string>
     <key>SURequireSignedFeed</key>
