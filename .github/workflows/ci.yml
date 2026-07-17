@@ -68,7 +68,6 @@ jobs:
           path: |
             .build/repositories
             .build/checkouts
-            .build/workspace-state.json
             .build/*-apple-macosx/debug
           key: app-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
 
@@ -90,6 +89,5 @@ jobs:
           path: |
             .build/repositories
             .build/checkouts
-            .build/workspace-state.json
             .build/*-apple-macosx/debug
           key: ${{ steps.app-build-cache.outputs.cache-primary-key }}
