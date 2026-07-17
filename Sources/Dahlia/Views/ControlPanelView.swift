@@ -1,39 +1,10 @@
-import AppKit
 import SwiftUI
-
-private extension View {
-    @ViewBuilder
-    func actionCursor(isEnabled: Bool = true) -> some View {
-        if isEnabled {
-            self.pointerStyle(.link)
-        } else {
-            self
-        }
-    }
-}
 
 private enum NotesEditorLayout {
     static let editorPadding = EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 4)
     /// `TextEditor` keeps a small internal inset on macOS, so the placeholder needs
     /// a matching offset instead of using the same outer padding.
     static let placeholderPadding = EdgeInsets(top: 10, leading: 9, bottom: 0, trailing: 0)
-}
-
-private enum ObsidianLauncher {
-    private static let bundleIdentifier = "md.obsidian"
-
-    static let isInstalled: Bool =
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil
-
-    static func open(_ url: URL) {
-        var components = URLComponents()
-        components.scheme = "obsidian"
-        components.host = "open"
-        components.queryItems = [URLQueryItem(name: "path", value: url.path)]
-
-        guard let obsidianURL = components.url else { return }
-        NSWorkspace.shared.open(obsidianURL)
-    }
 }
 
 /// メイン領域のタブ種別。
@@ -52,35 +23,6 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .screenshots: L10n.screenshots
         case .transcript: L10n.transcript
         }
-    }
-}
-
-/// タイトルバー / ツールバーに表示する詳細タブ切り替え。
-private struct DetailTabBar: View {
-    @Binding var selection: DetailTab
-    @ObservedObject var viewModel: CaptionViewModel
-
-    /// フォルダ選択時（transcription 未選択）は全タブを無効化する。
-    /// 録音中は録音対象が存在するためタブを無効化しない。
-    private var isFolderOnly: Bool {
-        viewModel.currentMeetingId == nil && !viewModel.isListening && !viewModel.hasDraftMeeting
-    }
-
-    private var visibleTabs: [DetailTab] {
-        DetailTab.allCases
-    }
-
-    var body: some View {
-        Picker(L10n.transcript, selection: $selection) {
-            ForEach(visibleTabs) { tab in
-                Text(tab.label).tag(tab)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.regular)
-        .disabled(isFolderOnly)
-        .frame(minWidth: 280)
     }
 }
 
@@ -344,24 +286,11 @@ private struct MeetingNameHeader: View {
 private struct MeetingActionsMenu: View {
     @ObservedObject var viewModel: CaptionViewModel
     var sidebarViewModel: SidebarViewModel
+    let onRename: () -> Void
 
     var body: some View {
         Menu {
-            Button {
-                guard let summaryURL = viewModel.lastSummaryURL else { return }
-                ObsidianLauncher.open(summaryURL)
-            } label: {
-                Label(L10n.openInObsidian, systemImage: "book.closed")
-            }
-            .disabled(viewModel.lastSummaryURL == nil || !ObsidianLauncher.isInstalled)
-
-            Button {
-                guard let browserURL = viewModel.currentSummaryGoogleFileURL else { return }
-                NSWorkspace.shared.open(browserURL)
-            } label: {
-                Label(L10n.openInBrowser, systemImage: "globe")
-            }
-            .disabled(viewModel.currentSummaryGoogleFileURL == nil)
+            Button(L10n.rename, systemImage: "pencil", action: onRename)
 
             Divider()
 
@@ -451,9 +380,13 @@ private struct MeetingDetailHeader: View {
     }
 
     private var controls: some View {
-        MeetingActionsMenu(viewModel: viewModel, sidebarViewModel: sidebarViewModel)
-            .controlSize(.regular)
-            .fixedSize(horizontal: true, vertical: false)
+        MeetingActionsMenu(
+            viewModel: viewModel,
+            sidebarViewModel: sidebarViewModel,
+            onRename: onBeginEditing
+        )
+        .controlSize(.regular)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -524,6 +457,11 @@ struct ControlPanelView: View {
                     onEditorTap: markMeetingNameEditorTap
                 )
             }
+
+            MeetingDetailNavigationBar(
+                selection: $selectedTab,
+                viewModel: viewModel
+            )
 
             // タブコンテンツ
             Group {
@@ -651,13 +589,13 @@ struct ControlPanelView: View {
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            DetailTabBar(selection: $selectedTab, viewModel: viewModel)
-        }
+        ToolbarSpacer(.flexible, placement: .primaryAction)
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .primaryAction) {
+            GenerateSummaryToolbarButton(viewModel: viewModel)
+
             if showsToolbarRecordButton {
-                SummaryToolbarControlGroup(
+                RecordToolbarButton(
                     viewModel: viewModel,
                     sidebarViewModel: sidebarViewModel,
                     recordingCoordinator: recordingCoordinator
@@ -674,29 +612,6 @@ struct ControlPanelView: View {
            viewModel.hasCurrentMeetingSummary {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack(spacing: 12) {
-                        Button {
-                            guard let summaryURL = viewModel.lastSummaryURL else { return }
-                            ObsidianLauncher.open(summaryURL)
-                        } label: {
-                            Label(L10n.openInObsidian, systemImage: "book.closed")
-                        }
-                        .disabled(viewModel.lastSummaryURL == nil || !ObsidianLauncher.isInstalled)
-                        .actionCursor(isEnabled: viewModel.lastSummaryURL != nil && ObsidianLauncher.isInstalled)
-
-                        Button {
-                            guard let browserURL = viewModel.currentSummaryGoogleFileURL else { return }
-                            NSWorkspace.shared.open(browserURL)
-                        } label: {
-                            Label(L10n.openInBrowser, systemImage: "globe")
-                        }
-                        .disabled(viewModel.currentSummaryGoogleFileURL == nil)
-                        .actionCursor(isEnabled: viewModel.currentSummaryGoogleFileURL != nil)
-
-                        Spacer(minLength: 0)
-                    }
-                    .buttonStyle(.bordered)
-
                     SummaryDocumentView(
                         document: document,
                         imageDataProvider: { screenshotId in
@@ -911,7 +826,11 @@ struct ControlPanelView: View {
     }
 
     private var showsToolbarRecordButton: Bool {
-        !viewModel.isListening || viewModel.recordingMeetingId == viewModel.currentMeetingId
+        RecordingCommandState.showsDetailCommand(
+            isListening: viewModel.isListening,
+            recordingMeetingID: viewModel.recordingMeetingId,
+            currentMeetingID: viewModel.currentMeetingId
+        )
     }
 
     private var meetingMetadataText: String {

@@ -5,22 +5,24 @@ struct RecordToolbarButton: View {
     var sidebarViewModel: SidebarViewModel
     let recordingCoordinator: RecordingCoordinator
 
-    private var isEnabled: Bool {
-        viewModel.isListening || recordingCoordinator.canStartNewMeeting
+    private var state: RecordingCommandState {
+        RecordingCommandState(
+            isListening: viewModel.isListening,
+            canStartNewMeeting: recordingCoordinator.canStartNewMeeting
+        )
     }
 
     var body: some View {
         Button(action: toggle) {
-            Label {
-                Text(label)
-            } icon: {
-                Image(systemName: iconName)
-                    .foregroundStyle(iconColor)
-            }
+            Label(label, systemImage: iconName)
         }
-        .disabled(!isEnabled)
-        .keyboardShortcut(.space, modifiers: [])
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.borderedProminent)
+        .tint(.red)
+        .disabled(!state.isEnabled)
+        .keyboardShortcut("r", modifiers: [.command, .shift])
         .help(label)
+        .accessibilityHint(L10n.recordingCommandHint)
     }
 
     private func toggle() {
@@ -37,18 +39,11 @@ struct RecordToolbarButton: View {
     }
 
     private var iconName: String {
-        viewModel.isListening ? "stop.fill" : "record.circle"
+        state.action == .stop ? "stop.fill" : "record.circle"
     }
 
     private var label: String {
-        viewModel.isListening ? L10n.stopRecording : L10n.startRecording
-    }
-
-    private var iconColor: Color {
-        if viewModel.isListening {
-            return .secondary
-        }
-        return isEnabled ? .red : .secondary
+        state.action == .stop ? L10n.stopRecording : L10n.startRecording
     }
 }
 
@@ -63,14 +58,20 @@ struct GenerateSummaryToolbarButton: View {
     var body: some View {
         Button(action: presentConfirmation) {
             Label {
-                Text(L10n.generateSummary)
+                Text(isGeneratingCurrentMeeting ? L10n.generatingSummary : L10n.generateSummary)
             } icon: {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(summaryIconColor)
+                if isGeneratingCurrentMeeting {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "sparkles")
+                }
             }
         }
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.bordered)
         .disabled(isGeneratingCurrentMeeting || !viewModel.canGenerateSummary)
-        .help(L10n.generateSummary)
+        .help(isGeneratingCurrentMeeting ? L10n.generatingSummary : L10n.generateSummary)
         .sheet(isPresented: $isConfirmationPresented) {
             SummaryGenerationConfirmationView(onGenerate: generateSummary)
         }
@@ -82,29 +83,6 @@ struct GenerateSummaryToolbarButton: View {
 
     private func generateSummary(options: SummaryGenerationOptions) {
         viewModel.triggerManualSummary(options: options)
-    }
-
-    private var summaryIconColor: Color {
-        isGeneratingCurrentMeeting || !viewModel.canGenerateSummary ? .secondary : Color.accentColor
-    }
-}
-
-struct SummaryToolbarControlGroup: View {
-    @ObservedObject var viewModel: CaptionViewModel
-    var sidebarViewModel: SidebarViewModel
-    let recordingCoordinator: RecordingCoordinator
-
-    var body: some View {
-        ControlGroup {
-            ShareSummaryToolbarButton(viewModel: viewModel)
-            GenerateSummaryToolbarButton(viewModel: viewModel)
-            RecordToolbarButton(
-                viewModel: viewModel,
-                sidebarViewModel: sidebarViewModel,
-                recordingCoordinator: recordingCoordinator
-            )
-        }
-        .labelStyle(.iconOnly)
     }
 }
 
@@ -123,6 +101,7 @@ struct ShareSummaryToolbarButton: View {
                     .foregroundStyle(viewModel.canShareCurrentSummary ? Color.accentColor : .secondary)
             }
         }
+        .labelStyle(.titleAndIcon)
         .disabled(!viewModel.canShareCurrentSummary)
         .help(L10n.shareSummary)
         .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {

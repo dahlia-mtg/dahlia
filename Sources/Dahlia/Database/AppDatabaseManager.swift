@@ -1,11 +1,12 @@
 // Migration order and helpers remain colocated so the complete schema history can be audited sequentially.
 // swiftlint:disable file_length
 
+import DahliaRuntimeSupport
 import Foundation
 import GRDB
 
 /// アプリ全体で単一の SQLite データベースを管理する。
-/// `~/Library/Application Support/Dahlia/dahlia.sqlite` に配置する。
+/// 正アプリは `Application Support/Dahlia`、`run-dev.sh` は分離した開発プロファイルに配置する。
 // swiftlint:disable:next type_body_length
 final class AppDatabaseManager: Sendable {
     let dbQueue: DatabaseQueue
@@ -35,10 +36,8 @@ final class AppDatabaseManager: Sendable {
 
     /// DB ファイルの URL。
     nonisolated static var databaseURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Dahlia")
-            .appendingPathComponent("dahlia.sqlite")
+        DahliaApplicationSupport.currentDirectoryURL
+            .appending(path: "dahlia.sqlite")
     }
 
     private static let migrator: DatabaseMigrator = {
