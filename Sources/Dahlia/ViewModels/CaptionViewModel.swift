@@ -103,7 +103,7 @@ final class CaptionViewModel: ObservableObject {
     }
 
     let liveCaptionStore = LiveCaptionStore()
-    var finalizedLiveTranscriptHandler: (@MainActor (String) -> Void)?
+    var finalizedLiveTranscriptHandler: (@MainActor (String, Bool) -> Void)?
     var chatLiveModeFailureHandler: (@MainActor () -> Void)?
 
     @Published var isListening = false
@@ -390,6 +390,7 @@ final class CaptionViewModel: ObservableObject {
     private var failedPersistenceService: MeetingPersistenceService?
     private var failedTranscriptionEventPipeline: TranscriptionEventPipeline?
     private var transcriptionEventPipeline: TranscriptionEventPipeline?
+    private var liveTranscriptRelay: FinalizedLiveTranscriptRelay?
     private var isChatLiveModeEnabled = false
     private var batchTranscriptionCoordinator: BatchTranscriptionCoordinator?
     private let recordingSessionController = RecordingSessionController()
@@ -1471,6 +1472,7 @@ final class CaptionViewModel: ObservableObject {
     ) -> MeetingRepository.AppendRecordingContext? {
         persistenceService = nil
         transcriptionEventPipeline = nil
+        liveTranscriptRelay = nil
         stopAutomaticScreenshotCapture()
 
         guard let existingMeetingId else {
@@ -1621,18 +1623,21 @@ final class CaptionViewModel: ObservableObject {
 
     private func installTranscriptionEventPipeline(persistenceService: MeetingPersistenceService) {
         let recordingTranscriptStore = store
+        let liveTranscriptRelay = FinalizedLiveTranscriptRelay { [weak self] delivery in
+            self?.forwardFinalizedLiveTranscript(delivery)
+        }
+        self.liveTranscriptRelay = liveTranscriptRelay
         transcriptionEventPipeline = TranscriptionEventPipeline(
             uiSink: { [weak self] events in
                 for event in events {
                     self?.handleTranscriptionEvent(event)
                 }
             },
-            eventObserver: { [weak self] event in
+            eventObserver: { event in
                 guard case let .finalized(segment) = event,
-                      segment.isConfirmed else { return }
-                Task { @MainActor [weak self] in
-                    self?.forwardFinalizedLiveTranscript(segment)
-                }
+                      segment.isConfirmed,
+                      let sessionID = segment.sessionId else { return }
+                await liveTranscriptRelay.enqueue(sessionID: sessionID, text: segment.text)
             },
             uiReloadSink: { [weak recordingTranscriptStore] in
                 guard let recordingTranscriptStore else { return }
@@ -1675,7 +1680,9 @@ final class CaptionViewModel: ObservableObject {
                 ErrorReportingService.capture(error, context: ["source": "startTranscriptionPersistence"])
             }
         }
+        await liveTranscriptRelay?.finish()
         transcriptionEventPipeline = nil
+        liveTranscriptRelay = nil
         stopAutomaticScreenshotCapture()
         await persistenceService?.cancel()
         persistenceService = nil
@@ -1889,6 +1896,7 @@ final class CaptionViewModel: ObservableObject {
                 await task.value
             }
             let stoppingTranscriptionEventPipeline = transcriptionEventPipeline
+            let stoppingLiveTranscriptRelay = liveTranscriptRelay
             if let stoppingTranscriptionEventPipeline {
                 do {
                     try await stoppingTranscriptionEventPipeline.finish()
@@ -1896,7 +1904,9 @@ final class CaptionViewModel: ObservableObject {
                     ErrorReportingService.capture(error, context: ["source": "stopTranscriptionPersistence"])
                 }
             }
+            await stoppingLiveTranscriptRelay?.finish()
             transcriptionEventPipeline = nil
+            liveTranscriptRelay = nil
             let stoppingPersistenceService = persistenceService
             let persistenceResult = await stoppingPersistenceService?.stop()
                 ?? .failure(message: L10n.recordingSessionNotActive)
@@ -2900,11 +2910,11 @@ final class CaptionViewModel: ObservableObject {
         }
     }
 
-    private func forwardFinalizedLiveTranscript(_ segment: TranscriptSegment) {
+    private func forwardFinalizedLiveTranscript(_ delivery: FinalizedLiveTranscriptRelay.Delivery) {
         guard let plan = activeTranscriptionPlan,
               plan.liveChatEnabled,
-              segment.sessionId == activeRecordingSessionId else { return }
-        finalizedLiveTranscriptHandler?(segment.text)
+              delivery.sessionID == activeRecordingSessionId else { return }
+        finalizedLiveTranscriptHandler?(delivery.text, delivery.wasTruncated)
     }
 
     private func controllerSourceConfiguration(

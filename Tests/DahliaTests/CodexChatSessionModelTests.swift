@@ -49,6 +49,8 @@ import Foundation
                 """,
                 "A visible question",
             ])
+            #expect(session.title == "A visible question")
+            #expect(await service.threadNames == [L10n.chatLiveMode, "A visible question"])
         }
 
         @Test
@@ -260,10 +262,11 @@ import Foundation
             )
             session.draft = "Question"
             session.sendDraft()
-            await waitUntil { session.activeTurnID != nil }
+            await waitUntil { session.messages.last?.text == "Partial" }
 
             session.stop()
             await waitUntil { !session.isGenerating }
+            await waitUntilAsync { await service.interruptCount == 1 }
 
             #expect(session.messages.last?.text == "Partial")
             #expect(session.messages.last?.isStreaming == false)
@@ -632,11 +635,126 @@ import Foundation
             session.receiveFinalizedLiveTranscript("Do not send this")
             await waitUntil { contextProvider.requestCount == 1 }
             session.disableLiveMode()
-            contextProvider.resume()
             await waitUntil { !session.isGenerating }
 
             #expect(await service.sentTextBlocks.isEmpty)
             #expect(session.failedLiveTranscript == nil)
+            contextProvider.resume()
+        }
+
+        @Test
+        func manualSendAfterLiveFailureRequeuesTheFailedTranscript() async {
+            let service = TestCodexChatService(mode: .failThenComplete)
+            let settings = AppSettings()
+            settings.currentVault = Self.testVault()
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings
+            )
+
+            session.toggleLiveMode()
+            session.receiveFinalizedLiveTranscript("Failed live speech")
+            await waitUntil { !session.isGenerating }
+            #expect(session.failedLiveTranscript == "Failed live speech")
+
+            session.draft = "Manual recovery"
+            session.sendDraft()
+            await waitUntilAsync { await service.sentTextBlocks.count == 3 }
+            await waitUntil { !session.isGenerating }
+
+            let sentTextBlocks = await service.sentTextBlocks
+            #expect(sentTextBlocks[1].last == "Manual recovery")
+            #expect(sentTextBlocks[2].last == "<live_transcript>Failed live speech</live_transcript>")
+            #expect(session.failedLiveTranscript == nil)
+        }
+
+        @Test
+        func pendingLiveTranscriptResumesWhenDraftAndReferencesAreCleared() async {
+            let service = TestCodexChatService(mode: .complete)
+            let settings = AppSettings()
+            let vault = Self.testVault()
+            settings.currentVault = vault
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings
+            )
+
+            session.toggleLiveMode()
+            session.draft = "Still editing"
+            session.receiveFinalizedLiveTranscript("queued for draft")
+            #expect(await service.sentTextBlocks.isEmpty)
+
+            session.draft = ""
+            await waitUntilAsync { await service.sentTextBlocks.count == 1 }
+            await waitUntil { !session.isGenerating }
+
+            let meeting = Self.meetingReference(vaultID: vault.id, name: "Blocking reference", offset: 0)
+            session.updateAvailableMeetings([meeting], catalogVaultID: vault.id)
+            session.addMeetingReference(CodexChatMeetingReference(meeting: meeting))
+            session.receiveFinalizedLiveTranscript("queued for reference")
+            #expect(await service.sentTextBlocks.count == 1)
+
+            session.removeMeetingReference(id: meeting.meetingId)
+            await waitUntilAsync { await service.sentTextBlocks.count == 2 }
+            await waitUntil { !session.isGenerating }
+
+            #expect(await service.sentTextBlocks[1].last == "<live_transcript>queued for reference</live_transcript>")
+        }
+
+        @Test
+        func retryUsesTheMostRecentlyFailedManualSubmission() async {
+            let service = TestCodexChatService(mode: .alwaysFail)
+            let settings = AppSettings()
+            settings.currentVault = Self.testVault()
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings
+            )
+
+            session.toggleLiveMode()
+            session.receiveFinalizedLiveTranscript("Earlier live failure")
+            await waitUntil { !session.isGenerating }
+
+            session.draft = "Latest manual failure"
+            session.sendDraft()
+            await waitUntil { !session.isGenerating }
+            session.retry()
+            await waitUntilAsync { await service.sentTextBlocks.count == 3 }
+            await waitUntil { !session.isGenerating }
+
+            let sentTextBlocks = await service.sentTextBlocks
+            #expect(sentTextBlocks[1].last == "Latest manual failure")
+            #expect(sentTextBlocks[2].last == "Latest manual failure")
+        }
+
+        @Test
+        func truncatedLiveTranscriptUsesNoticeWithoutRetryError() async {
+            let service = TestCodexChatService(mode: .block)
+            let settings = AppSettings()
+            settings.currentVault = Self.testVault()
+            let session = CodexChatSessionModel(
+                modelID: "default-model",
+                effort: "medium",
+                service: service,
+                settings: settings
+            )
+
+            session.toggleLiveMode()
+            session.receiveFinalizedLiveTranscript("Truncated speech", wasTruncated: true)
+            await waitUntilAsync { await service.sentTextBlocks.count == 1 }
+
+            #expect(session.isGenerating)
+            #expect(session.noticeMessage == L10n.chatLiveTranscriptBacklogTruncated)
+            #expect(session.errorMessage == nil)
+
+            session.disableLiveMode()
+            await waitUntil { !session.isGenerating }
         }
     }
 
@@ -649,6 +767,7 @@ import Foundation
             case finishesWithoutTerminal
             case interruptedThenBlock
             case failThenComplete
+            case alwaysFail
             case staleRollout
             case rolloutWithoutReasoning
             case multipleMessages
@@ -680,7 +799,7 @@ import Foundation
         func loadThread(id: String) async throws -> CodexChatThread {
             let assistantMessages: [CodexChatMessage] = switch mode {
             case .complete, .block, .burstThenBlock, .bufferedBurstThenInterrupt,
-                 .finishesWithoutTerminal, .interruptedThenBlock, .failThenComplete:
+                 .finishesWithoutTerminal, .interruptedThenBlock, .failThenComplete, .alwaysFail:
                 [CodexChatMessage(role: .assistant, text: "Final answer", reasoning: "Considered the question")]
             case .rolloutWithoutReasoning:
                 [CodexChatMessage(role: .assistant, text: "Final answer")]
@@ -733,10 +852,13 @@ import Foundation
             if mode == .failThenComplete, sentTextBlocks.count == 1 {
                 throw CodexAppServerError.invalidProtocolResponse
             }
+            if mode == .alwaysFail {
+                throw CodexAppServerError.invalidProtocolResponse
+            }
             let (stream, continuation) = AsyncThrowingStream<CodexChatTurnEvent, any Error>.makeStream()
             continuation.yield(.started(turnID: "turn-1"))
             switch mode {
-            case .complete, .staleRollout, .rolloutWithoutReasoning, .failThenComplete:
+            case .complete, .staleRollout, .rolloutWithoutReasoning, .failThenComplete, .alwaysFail:
                 continuation.yield(.reasoningDelta(
                     itemID: "reasoning-1",
                     summaryIndex: 0,

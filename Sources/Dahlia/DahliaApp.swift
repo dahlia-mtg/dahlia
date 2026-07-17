@@ -47,8 +47,8 @@ struct DahliaApp: App {
         chatCoordinator.liveModeStatusDidChange = { [weak viewModel] isEnabled in
             viewModel?.setChatLiveModeEnabled(isEnabled)
         }
-        viewModel.finalizedLiveTranscriptHandler = { [weak chatCoordinator] text in
-            chatCoordinator?.receiveFinalizedLiveTranscript(text)
+        viewModel.finalizedLiveTranscriptHandler = { [weak chatCoordinator] text, wasTruncated in
+            chatCoordinator?.receiveFinalizedLiveTranscript(text, wasTruncated: wasTruncated)
         }
         viewModel.chatLiveModeFailureHandler = { [weak chatCoordinator] in
             chatCoordinator?.disableLiveMode()

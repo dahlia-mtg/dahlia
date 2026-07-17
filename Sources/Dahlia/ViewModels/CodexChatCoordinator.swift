@@ -177,9 +177,9 @@ final class CodexChatCoordinator {
         )
     }
 
-    func receiveFinalizedLiveTranscript(_ text: String) {
+    func receiveFinalizedLiveTranscript(_ text: String, wasTruncated: Bool = false) {
         for session in sessions.values where session.isLiveModeEnabled {
-            session.receiveFinalizedLiveTranscript(text)
+            session.receiveFinalizedLiveTranscript(text, wasTruncated: wasTruncated)
         }
     }
 

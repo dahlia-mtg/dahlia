@@ -68,6 +68,15 @@ struct CodexChatView: View {
                 )
             }
 
+            if let noticeMessage = session.noticeMessage {
+                Label(noticeMessage, systemImage: "info.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CodexChatDesign.contentHorizontalPadding)
+                    .padding(.vertical, 6)
+            }
+
             CodexChatComposer(session: session)
                 .padding(.horizontal, CodexChatDesign.composerHorizontalPadding)
                 .padding(.bottom, CodexChatDesign.composerBottomPadding)
