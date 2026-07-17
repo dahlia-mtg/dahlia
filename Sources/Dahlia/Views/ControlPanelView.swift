@@ -86,6 +86,10 @@ private struct DetailTabBar: View {
 
 /// スクリーンショット拡大表示オーバーレイ。
 private struct ScreenshotOverlayView: View {
+    /// Retina の全画面キャプチャを元解像度でレイヤー化すると、RenderBox の
+    /// surface allocation が枯渇し得る。画面表示には十分なサイズへ制限する。
+    private static let maximumDisplayPixelSize = 2400
+
     let screenshot: MeetingScreenshotRecord
     let onDismiss: () -> Void
     @StateObject private var imageLoader = ScreenshotImageLoadModel()
@@ -105,7 +109,6 @@ private struct ScreenshotOverlayView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .shadow(radius: 20)
                     .padding(24)
             } else if case .failed = imageLoader.state {
                 Text(L10n.summaryImageUnavailable)
@@ -129,7 +132,7 @@ private struct ScreenshotOverlayView: View {
             await imageLoader.load(
                 screenshotID: screenshot.id,
                 data: screenshot.imageData,
-                targetSize: .original
+                maxPixelSize: Self.maximumDisplayPixelSize
             )
         }
     }
@@ -219,8 +222,11 @@ private struct ScreenshotThumbnailView: View {
             await imageLoader.load(
                 screenshotID: screenshot.id,
                 data: screenshot.imageData,
-                targetSize: .maxPixelSize(600)
+                maxPixelSize: ScreenshotGridSizing.maximumThumbnailPixelSize
             )
+        }
+        .onDisappear {
+            imageLoader.unload()
         }
     }
 

@@ -5,6 +5,7 @@ import Foundation
 #if canImport(Testing)
 import Testing
 
+@MainActor
 struct ScreenshotImageLoaderTests {
     @Test
     func downsampledImageRespectsPixelLimit() async throws {
@@ -43,16 +44,27 @@ struct ScreenshotImageLoaderTests {
     }
 
     @Test
-    func originalImageKeepsSourceResolution() async throws {
-        let image = try #require(makeImage(width: 320, height: 180))
+    func unloadingReleasesLoadedImageState() async throws {
+        let image = try #require(makeImage(width: 32, height: 32))
         let data = try #require(ImageEncoder.encode(image, quality: 0.8))
-        let loader = ScreenshotImageLoader(cacheCostLimit: 1_024 * 1_024)
+        let model = ScreenshotImageLoadModel()
 
-        let decoded = await loader.originalImage(data: data)
+        await model.load(
+            screenshotID: UUID.v7(),
+            data: data,
+            maxPixelSize: 32
+        )
+        guard case .loaded = model.state else {
+            Issue.record("Expected the image to finish loading")
+            return
+        }
 
-        let result = try #require(decoded)
-        #expect(result.width == 320)
-        #expect(result.height == 180)
+        model.unload()
+
+        guard case .idle = model.state else {
+            Issue.record("Expected unload to release the loaded image")
+            return
+        }
     }
 
     private func makeImage(width: Int, height: Int) -> CGImage? {
