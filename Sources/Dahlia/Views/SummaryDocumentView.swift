@@ -271,7 +271,7 @@ private struct SummaryScreenshotImageView: View {
             await imageLoader.load(
                 screenshotID: screenshotID,
                 data: data,
-                targetSize: .maxPixelSize(1200)
+                maxPixelSize: 1200
             )
         }
     }

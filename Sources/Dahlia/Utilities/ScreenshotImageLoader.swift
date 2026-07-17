@@ -47,12 +47,6 @@ actor ScreenshotImageLoader {
         return image
     }
 
-    /// 拡大表示用。巨大な画像をキャッシュへ残さず、元のピクセル解像度でデコードする。
-    func originalImage(data: Data) -> CGImage? {
-        guard !Task.isCancelled else { return nil }
-        return CGImageDecoder.decode(data)
-    }
-
     func remove(screenshotID: UUID) {
         let keys = cache.keys.filter { $0.screenshotID == screenshotID }
         for key in keys {
@@ -82,26 +76,25 @@ final class ScreenshotImageLoadModel: ObservableObject {
         case failed
     }
 
-    enum TargetSize: Equatable {
-        case original
-        case maxPixelSize(Int)
+    @Published private(set) var state: State = .idle
+    private var loadGeneration: UInt64 = 0
+
+    func load(screenshotID: UUID, data: Data, maxPixelSize: Int) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        state = .loading
+        let image = await ScreenshotImageLoader.shared.image(
+            screenshotID: screenshotID,
+            data: data,
+            maxPixelSize: maxPixelSize
+        )
+        guard !Task.isCancelled, loadGeneration == generation else { return }
+        state = image.map(State.loaded) ?? .failed
     }
 
-    @Published private(set) var state: State = .idle
-
-    func load(screenshotID: UUID, data: Data, targetSize: TargetSize) async {
-        state = .loading
-        let image = switch targetSize {
-        case .original:
-            await ScreenshotImageLoader.shared.originalImage(data: data)
-        case let .maxPixelSize(size):
-            await ScreenshotImageLoader.shared.image(
-                screenshotID: screenshotID,
-                data: data,
-                maxPixelSize: size
-            )
-        }
-        guard !Task.isCancelled else { return }
-        state = image.map(State.loaded) ?? .failed
+    /// Lazy grid が保持している画面外 View からデコード済み画像を解放する。
+    func unload() {
+        loadGeneration &+= 1
+        state = .idle
     }
 }
