@@ -2082,6 +2082,7 @@ final class CaptionViewModel: ObservableObject {
         let recordingSessions = store.recordingSessions
         requestShowSummaryTab = true
         Task {
+            guard await retryFailedPersistenceIfNeeded() else { return }
             do {
                 let summaryInput = try await Task.detached(priority: .userInitiated) {
                     try FullTranscriptLoader.summaryInput(
@@ -2814,6 +2815,8 @@ final class CaptionViewModel: ObservableObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in
+                guard let self,
+                      await self.retryFailedPersistenceIfNeeded() else { return }
                 do {
                     try await Task.detached(priority: .userInitiated) {
                         let text = try FullTranscriptLoader.plainText(
@@ -2825,7 +2828,7 @@ final class CaptionViewModel: ObservableObject {
                         try text.write(to: url, atomically: true, encoding: .utf8)
                     }.value
                 } catch {
-                    self?.errorMessage = error.localizedDescription
+                    self.errorMessage = error.localizedDescription
                 }
             }
         }

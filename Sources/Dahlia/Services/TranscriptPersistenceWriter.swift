@@ -13,6 +13,7 @@ actor TranscriptPersistenceWriter {
     private var pendingTranslations: [UUID: String] = [:]
     private var pendingEvents: [TranscriptionEvent] = []
     private var nextAutomaticRetry: ContinuousClock.Instant?
+    private var automaticRetryTask: Task<Void, Never>?
     private var automaticRetryDelayMilliseconds = 250
     private let maximumAutomaticRetryDelayMilliseconds = 30000
 
@@ -85,6 +86,8 @@ actor TranscriptPersistenceWriter {
         pendingEvents.removeFirst(events.count)
         nextAutomaticRetry = nil
         automaticRetryDelayMilliseconds = 250
+        automaticRetryTask?.cancel()
+        automaticRetryTask = nil
     }
 
     func resetTracking() async throws {
@@ -95,11 +98,30 @@ actor TranscriptPersistenceWriter {
     }
 
     private func scheduleAutomaticRetry() {
-        nextAutomaticRetry = ContinuousClock.now + .milliseconds(automaticRetryDelayMilliseconds)
+        let delay = Duration.milliseconds(automaticRetryDelayMilliseconds)
+        nextAutomaticRetry = ContinuousClock.now + delay
         automaticRetryDelayMilliseconds = min(
             automaticRetryDelayMilliseconds * 2,
             maximumAutomaticRetryDelayMilliseconds
         )
+        automaticRetryTask?.cancel()
+        automaticRetryTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            await self?.runAutomaticRetry()
+        }
+    }
+
+    private func runAutomaticRetry() async {
+        automaticRetryTask = nil
+        do {
+            try await flushPending()
+        } catch {
+            // flushPending() schedules the next backoff before propagating the failure.
+        }
     }
 }
 
