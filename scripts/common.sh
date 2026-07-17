@@ -56,6 +56,31 @@ configure_sentry_plist() {
     fi
 }
 
+embed_sparkle_framework() {
+    local project_dir="$1"
+    local contents_dir="$2"
+    local artifact_dir="${project_dir}/.build/artifacts/sparkle/Sparkle"
+    local framework_source
+    local framework_destination="${contents_dir}/Frameworks/Sparkle.framework"
+    local license_source="${artifact_dir}/LICENSE"
+    local license_destination="${contents_dir}/Resources/Licenses/Sparkle/LICENSE"
+
+    framework_source="$(find "${artifact_dir}/Sparkle.xcframework" \
+        -mindepth 2 -maxdepth 2 -type d -path '*/macos-*/Sparkle.framework' -print -quit)"
+    if [ -z "$framework_source" ]; then
+        echo "error: Sparkle.framework was not found in SwiftPM artifacts" >&2
+        return 1
+    fi
+    if [ ! -f "$license_source" ]; then
+        echo "error: Sparkle license was not found in SwiftPM artifacts" >&2
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$framework_destination")" "$(dirname "$license_destination")"
+    ditto "$framework_source" "$framework_destination"
+    cp "$license_source" "$license_destination"
+}
+
 has_entitlements() {
     local entitlements_path="$1"
 
@@ -85,4 +110,15 @@ codesign_path() {
     shift
 
     codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$@" "$path"
+}
+
+codesign_sparkle_framework() {
+    local framework_path="$1"
+    local version_path="${framework_path}/Versions/B"
+
+    codesign_path "${version_path}/XPCServices/Installer.xpc"
+    codesign_path "${version_path}/XPCServices/Downloader.xpc" --preserve-metadata=entitlements
+    codesign_path "${version_path}/Autoupdate"
+    codesign_path "${version_path}/Updater.app"
+    codesign_path "$framework_path"
 }

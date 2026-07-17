@@ -11,6 +11,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 GENERATED_NOTES_FILE=""
 DMG_MOUNT_DIR=""
+SPARKLE_RELEASE_DIR=""
 
 cleanup() {
     if [ -n "$DMG_MOUNT_DIR" ]; then
@@ -19,6 +20,9 @@ cleanup() {
     fi
     if [ -n "$GENERATED_NOTES_FILE" ]; then
         rm -f "$GENERATED_NOTES_FILE"
+    fi
+    if [ -n "$SPARKLE_RELEASE_DIR" ]; then
+        rm -rf "$SPARKLE_RELEASE_DIR"
     fi
 }
 
@@ -83,6 +87,36 @@ has_release_notes() {
     local notes_file="$1"
 
     [ -s "$notes_file" ] && grep -q '[^[:space:]]' "$notes_file"
+}
+
+create_sparkle_appcast() {
+    local generate_appcast="${PROJECT_DIR}/.build/artifacts/sparkle/Sparkle/bin/generate_appcast"
+    local sparkle_key_account="${SPARKLE_KEY_ACCOUNT:-com.dahlia.app}"
+
+    if [ ! -x "$generate_appcast" ]; then
+        cat >&2 <<EOF
+error: Sparkle's generate_appcast tool was not found.
+
+Resolve package artifacts first with:
+  swift package resolve
+EOF
+        exit 1
+    fi
+
+    SPARKLE_RELEASE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dahlia-sparkle-release.XXXXXX")"
+    cp "$DMG_PATH" "${SPARKLE_RELEASE_DIR}/${EXPECTED_DMG_NAME}"
+    cp "$NOTES_FILE" "${SPARKLE_RELEASE_DIR}/${APP_NAME}.md"
+
+    "$generate_appcast" \
+        --account "$sparkle_key_account" \
+        --download-url-prefix "https://github.com/mats16/dahlia/releases/download/${TAG_NAME}/" \
+        --embed-release-notes \
+        "$SPARKLE_RELEASE_DIR"
+
+    if [ ! -s "${SPARKLE_RELEASE_DIR}/appcast.xml" ]; then
+        echo "error: Sparkle appcast was not generated" >&2
+        exit 1
+    fi
 }
 
 NOTES_FILE=""
@@ -259,6 +293,9 @@ if [ -z "$NOTES_FILE" ]; then
     fi
 fi
 
+echo "=== Generating signed Sparkle appcast ==="
+create_sparkle_appcast
+
 echo "=== Release notes ==="
 sed 's/^/  /' "$NOTES_FILE"
 
@@ -266,6 +303,7 @@ echo "=== Creating GitHub Release ${TAG_NAME} ==="
 gh release create \
     "$TAG_NAME" \
     "$DMG_PATH" \
+    "${SPARKLE_RELEASE_DIR}/appcast.xml" \
     --title "${APP_NAME} ${MARKETING_VERSION}" \
     --notes-file "$NOTES_FILE" \
     "${RELEASE_TARGET_ARGS[@]}"

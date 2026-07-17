@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 enum WindowID {
@@ -17,6 +18,7 @@ private enum MainWindowMetrics {
 
 @main
 struct DahliaApp: App {
+    private let updaterController: SPUStandardUpdaterController
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var viewModel: CaptionViewModel
     @State private var sidebarViewModel: SidebarViewModel
@@ -31,6 +33,13 @@ struct DahliaApp: App {
 
     @MainActor
     init() {
+        let isDevelopmentProfile = ProcessInfo.processInfo.environment["DAHLIA_RUNTIME_PROFILE"] == "development"
+        let shouldStartUpdater = !isDevelopmentProfile && Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: shouldStartUpdater,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
         let viewModel = CaptionViewModel()
         let sidebarViewModel = SidebarViewModel()
         let liveSubtitleOverlayService = LiveSubtitleOverlayService()
@@ -88,6 +97,11 @@ struct DahliaApp: App {
         .windowResizability(.contentMinSize)
         .defaultSize(width: MainWindowMetrics.defaultWidth, height: MainWindowMetrics.defaultHeight)
         .defaultLaunchBehavior(.presented)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
+        }
 
         WindowGroup(L10n.chat, id: WindowID.codexChat, for: CodexChatSessionID.self) { $sessionID in
             if let sessionID {
