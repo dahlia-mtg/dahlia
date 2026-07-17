@@ -17,8 +17,13 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "DahliaRuntimeSupport",
+            path: "Sources/DahliaRuntimeSupport"
+        ),
+        .target(
             name: "DahliaMeetingAccess",
             dependencies: [
+                "DahliaRuntimeSupport",
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Sources/DahliaMeetingAccess"
@@ -31,6 +36,7 @@ let package = Package(
         .executableTarget(
             name: "Dahlia",
             dependencies: [
+                "DahliaRuntimeSupport",
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Sentry", package: "sentry-cocoa"),
             ],
@@ -45,7 +51,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DahliaTests",
-            dependencies: ["Dahlia", "DahliaMeetingAccess"],
+            dependencies: ["Dahlia", "DahliaMeetingAccess", "DahliaRuntimeSupport"],
             path: "Tests/DahliaTests",
             exclude: [
                 "AGENTS.md",

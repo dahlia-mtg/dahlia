@@ -162,6 +162,8 @@
 "Action items extracted from summaries will appear here." = "Action items extracted from summaries will appear here.";
 "We couldn't detect any conversation in this meeting." = "We couldn't detect any conversation in this meeting.";
 "Recording now" = "Recording now";
+"Recording Settings" = "Recording Settings";
+"Starts or stops recording for the selected meeting." = "Starts or stops recording for the selected meeting.";
 "Transcribing now" = "Live transcription";
 "Return to recording meeting" = "Return to recording meeting";
 "Return to transcribing meeting" = "Return to transcribing meeting";
@@ -228,6 +230,7 @@
 "Notes" = "Notes";
 "NotesPlaceholder" = "Add your private notes...";
 "Screenshots" = "Screenshots";
+"Meeting Content" = "Meeting Content";
 "Transcript" = "Transcript";
 "Assignee" = "Assignee";
 "Assign to me" = "Assign to me";

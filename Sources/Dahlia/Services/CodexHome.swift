@@ -1,3 +1,4 @@
+import DahliaRuntimeSupport
 import Foundation
 
 protocol CodexHomeLocating: Sendable {
@@ -12,9 +13,10 @@ struct ApplicationSupportCodexHomeLocator: CodexHomeLocating {
     }
 
     func homeURL() throws -> URL {
-        let baseURL = applicationSupportURL ?? URL.applicationSupportDirectory
-        let homeURL = baseURL
-            .appending(path: "Dahlia", directoryHint: .isDirectory)
+        let dahliaApplicationSupportURL = applicationSupportURL.map {
+            $0.appending(path: "Dahlia", directoryHint: .isDirectory)
+        } ?? DahliaApplicationSupport.currentDirectoryURL
+        let homeURL = dahliaApplicationSupportURL
             .appending(path: "Codex", directoryHint: .isDirectory)
 
         do {

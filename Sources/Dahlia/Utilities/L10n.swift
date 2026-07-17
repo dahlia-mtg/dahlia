@@ -1251,6 +1251,12 @@ enum L10n {
     static var systemAudioCaptureStopped: String { String(localized: "System audio capture stopped", bundle: bundle) }
     static var microphoneCaptureStopped: String { String(localized: "Microphone capture stopped", bundle: bundle) }
     static var recording: String { String(localized: "Recording", bundle: bundle) }
+    static var recordingSettings: String { String(localized: "Recording Settings", bundle: bundle) }
+    static var recordingCommandHint: String { String(
+        localized: "Starts or stops recording for the selected meeting.",
+        bundle: bundle
+    ) }
+    static var meetingContent: String { String(localized: "Meeting Content", bundle: bundle) }
 
     // MARK: - Sidebar Footer
 

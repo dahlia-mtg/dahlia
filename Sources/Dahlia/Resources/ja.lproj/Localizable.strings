@@ -63,7 +63,7 @@
 "Create a project at the top level of the vault." = "Vaultのトップ階層にプロジェクトを作成します。";
 "Could Not Create Project" = "プロジェクトを作成できませんでした";
 "The project folder could not be created." = "プロジェクトフォルダを作成できませんでした。";
-"New meeting" = "New meeting";
+"New meeting" = "新規ミーティング";
 "Meeting draft: %@" = "下書き: %@";
 "Context changed to %@" = "コンテキストが %@ に切り替わりました";
 "The selected meeting is no longer available." = "選択中のミーティングを読み込めませんでした。";
@@ -162,6 +162,8 @@
 "Action items extracted from summaries will appear here." = "要約から抽出された Action Items がここに表示されます。";
 "We couldn't detect any conversation in this meeting." = "この meeting では会話を検出できませんでした。";
 "Recording now" = "録音中";
+"Recording Settings" = "録音設定";
+"Starts or stops recording for the selected meeting." = "選択中のミーティングの録音を開始または停止します。";
 "Transcribing now" = "ライブ文字起こし中";
 "Return to recording meeting" = "録音中のミーティングに戻る";
 "Return to transcribing meeting" = "文字起こし中のミーティングに戻る";
@@ -228,6 +230,7 @@
 "Notes" = "ノート";
 "NotesPlaceholder" = "メモを入力...";
 "Screenshots" = "スクリーンショット";
+"Meeting Content" = "ミーティング内容";
 "Transcript" = "文字起こし";
 "Assignee" = "担当者";
 "Assign to me" = "自分に割り当てる";

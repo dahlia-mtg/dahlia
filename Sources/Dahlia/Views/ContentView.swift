@@ -25,19 +25,16 @@ struct ContentView: View {
         .toolbar(removing: .title)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                Button {
+                Button(L10n.newMeeting, systemImage: "square.and.pencil") {
                     recordingCoordinator.createEmptyMeeting()
-                } label: {
-                    Label(L10n.newMeeting, systemImage: "square.and.pencil")
                 }
                 .labelStyle(.iconOnly)
+                .keyboardShortcut("n", modifiers: .command)
                 .help(L10n.newMeeting)
 
-                Button(action: returnToCalendarSchedule) {
-                    Label(L10n.showUpcomingSchedule, systemImage: "calendar")
-                }
-                .labelStyle(.iconOnly)
-                .help(L10n.showUpcomingSchedule)
+                Button(L10n.showUpcomingSchedule, systemImage: "calendar", action: returnToCalendarSchedule)
+                    .labelStyle(.iconOnly)
+                    .help(L10n.showUpcomingSchedule)
 
                 Button {
                     openWindow(id: WindowID.projectManager)
@@ -64,6 +61,7 @@ struct ContentView: View {
                 }
                 .labelStyle(.iconOnly)
                 .help(L10n.chat)
+                .accessibilityLabel(L10n.chat)
             }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)

@@ -112,10 +112,10 @@ if [ "$(lipo -archs "${MACOS}/${APP_NAME}")" != "arm64" ]; then
 fi
 codesign --verify --deep --strict --verbose=2 "${APP_BUNDLE}"
 
-echo "=== Running ${APP_NAME} ==="
+echo "=== Running ${APP_NAME} (development profile) ==="
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 if [ -x "$LSREGISTER" ]; then
     "$LSREGISTER" -f "${APP_BUNDLE}" >/dev/null 2>&1 || true
 fi
 
-exec "${MACOS}/${APP_NAME}"
+exec env DAHLIA_RUNTIME_PROFILE=development "${MACOS}/${APP_NAME}"

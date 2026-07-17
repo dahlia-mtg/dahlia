@@ -1,3 +1,4 @@
+import DahliaRuntimeSupport
 import Foundation
 
 protocol CodexChatWorkspaceLocating: Sendable {
@@ -12,9 +13,10 @@ struct ApplicationSupportCodexChatWorkspaceLocator: CodexChatWorkspaceLocating {
     }
 
     func workspaceURL(vaultID: UUID) throws -> URL {
-        let baseURL = applicationSupportURL ?? URL.applicationSupportDirectory
-        let workspaceURL = baseURL
-            .appending(path: "Dahlia", directoryHint: .isDirectory)
+        let dahliaApplicationSupportURL = applicationSupportURL.map {
+            $0.appending(path: "Dahlia", directoryHint: .isDirectory)
+        } ?? DahliaApplicationSupport.currentDirectoryURL
+        let workspaceURL = dahliaApplicationSupportURL
             .appending(path: "CodexChatWorkspace", directoryHint: .isDirectory)
             .appending(path: vaultID.uuidString.lowercased(), directoryHint: .isDirectory)
 

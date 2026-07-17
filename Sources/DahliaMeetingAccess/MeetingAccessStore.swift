@@ -1,12 +1,11 @@
+import DahliaRuntimeSupport
 import Foundation
 import GRDB
 
 public final class MeetingAccessStore: Sendable {
     public static var defaultDatabaseURL: URL {
-        FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Dahlia")
-            .appendingPathComponent("dahlia.sqlite")
+        DahliaApplicationSupport.currentDirectoryURL
+            .appending(path: "dahlia.sqlite")
     }
 
     private let database: DatabaseQueue
