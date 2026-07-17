@@ -59,13 +59,22 @@ struct CodexChatView: View {
             if let errorMessage = session.errorMessage {
                 CodexChatErrorView(
                     message: errorMessage,
-                    onRetry: session.lastSubmittedText == nil ? retryConnection : session.retry
+                    onRetry: session.hasRetryableSubmission ? session.retry : retryConnection
                 )
             } else if let historyError = coordinator.historyError {
                 CodexChatErrorView(
                     message: historyError,
                     onRetry: retryHistory
                 )
+            }
+
+            if let noticeMessage = session.noticeMessage {
+                Label(noticeMessage, systemImage: "info.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CodexChatDesign.contentHorizontalPadding)
+                    .padding(.vertical, 6)
             }
 
             CodexChatComposer(session: session)
