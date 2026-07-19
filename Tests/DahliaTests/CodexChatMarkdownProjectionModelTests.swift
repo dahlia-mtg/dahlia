@@ -1,4 +1,5 @@
 #if canImport(Testing)
+    import Foundation
     import Testing
     @testable import Dahlia
 
@@ -35,9 +36,54 @@
             model.submit(input("rendered tail"))
 
             #expect(model.canDisplayProjection)
+            #expect(model.canDisplayPendingSuffix)
             #expect(model.pendingSuffix == " tail")
             model.cancel()
             await renderer.complete("rendered tail")
+        }
+
+        @Test func fallsBackToRawTextWhenSuffixCrossesALineBoundary() async {
+            let renderer = ControlledCodexChatMarkdownRenderer()
+            let model = CodexChatMarkdownProjectionModel(renderer: renderer)
+
+            model.submit(input("paragraph"))
+            await waitForRequest("paragraph", renderer: renderer)
+            await renderer.complete("paragraph")
+            await waitForProjection("paragraph", model: model)
+
+            model.submit(input("paragraph\n\n# Heading"))
+
+            #expect(model.canDisplayProjection)
+            #expect(!model.canDisplayPendingSuffix)
+            model.cancel()
+            await renderer.complete("paragraph\n\n# Heading")
+        }
+
+        @Test func publishesCompletedPrefixRenderAfterInputAdvances() async {
+            let renderer = ControlledCodexChatMarkdownRenderer()
+            let model = CodexChatMarkdownProjectionModel(renderer: renderer)
+
+            model.submit(input("Hello"))
+            await waitForRequest("Hello", renderer: renderer)
+            model.submit(input("Hello world"))
+            await renderer.complete("Hello")
+            await waitForProjection("Hello", model: model)
+
+            #expect(model.canDisplayProjection)
+            #expect(model.pendingSuffix == " world")
+            model.cancel()
+            await renderer.complete("Hello world")
+        }
+
+        @Test func appendsPendingSuffixToTheLastRenderedBlock() {
+            let block = CodexChatMarkdownRenderedBlock.paragraph(AttributedString("Hello"))
+
+            guard case let .paragraph(text) = block.appendingPendingSuffix(" world") else {
+                Issue.record("Expected a paragraph with an appended suffix")
+                return
+            }
+
+            #expect(String(text.characters) == "Hello world")
         }
 
         @Test func completionCachesExistingProjectionWithoutRenderingAgain() async {

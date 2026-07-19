@@ -26,7 +26,7 @@ Codex チャットは自由形式 Markdown の delta を逐次受信するが、
 - view ごとの coordinator は実行中の描画を 1 件、待機中の入力を置換可能な最新 1 件だけ保持する。古い delta の projection を FIFO で再生せず、別のメッセージやウインドウの描画も同じ actor で待たせない。
 - パーサーは block と行の処理中に cancellation を確認し、不要になった長文解析を有限時間で終了できるようにする。
 - ストリーミング途中の全文は共有キャッシュへ保存しない。`item/completed` と整合した完了済み Markdown だけを、件数と raw UTF-8 byte 数の両方に上限を持つキャッシュへ保存する。
-- 解析中は直前の projection と未描画の raw suffix を同時に表示する。非 prefix の置換または初回 projection では raw text 全体を fallback として表示する。
+- 解析中に完成した入力が現在の raw Markdown の prefix なら、その projection を採用する。同一行に続く未描画の raw suffix は最終 block の末尾要素へプレーンテキストとして結合し、別の行へ積まない。改行を跨ぐ suffix、suffix を結合できない block、非 prefix の置換、初回 projection では raw text 全体を fallback として表示する。
 - 直前の parse 結果と一致する先頭 block の `AttributedString` は再利用し、更新中の末尾 block だけを再変換する。
 
 ## Invariants

@@ -15,14 +15,12 @@ struct CodexChatMarkdownView: View {
     var body: some View {
         Group {
             if let projection = projectionModel.projection,
-               projectionModel.canDisplayProjection {
-                VStack(alignment: .leading, spacing: 0) {
-                    CodexChatMarkdownProjectionView(blocks: projection.blocks)
-                    if let pendingSuffix = projectionModel.pendingSuffix {
-                        Text(pendingSuffix)
-                            .textSelection(.enabled)
-                    }
-                }
+               projectionModel.canDisplayProjection,
+               projectionModel.canDisplayPendingSuffix {
+                CodexChatMarkdownProjectionView(
+                    blocks: projection.blocks,
+                    pendingSuffix: projectionModel.pendingSuffix
+                )
             } else {
                 Text(markdown)
                     .textSelection(.enabled)

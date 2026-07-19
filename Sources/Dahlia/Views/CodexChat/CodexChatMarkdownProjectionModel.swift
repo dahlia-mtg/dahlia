@@ -8,6 +8,14 @@ final class CodexChatMarkdownProjectionModel {
     private(set) var pendingSuffix: String?
     private(set) var canDisplayProjection = false
 
+    var canDisplayPendingSuffix: Bool {
+        guard let pendingSuffix else { return true }
+        guard projection?.markdown.last?.isNewline != true,
+              !pendingSuffix.contains(where: \.isNewline)
+        else { return false }
+        return projection?.blocks.last?.acceptsPendingSuffix == true
+    }
+
     @ObservationIgnored private let renderer: any CodexChatMarkdownRendering
     @ObservationIgnored private var currentInput: CodexChatMarkdownInput?
     @ObservationIgnored private var pendingInput: CodexChatMarkdownInput?
@@ -66,10 +74,11 @@ final class CodexChatMarkdownProjectionModel {
         renderTask = nil
         if let blocks,
            let currentInput,
-           currentInput.markdown == input.markdown {
+           currentInput.markdown.hasPrefix(input.markdown) {
             projection = CodexChatMarkdownProjection(markdown: input.markdown, blocks: blocks)
             updateDisplay(for: currentInput)
-            if !currentInput.isStreaming {
+            if !currentInput.isStreaming,
+               currentInput.markdown == input.markdown {
                 let renderer = renderer
                 Task {
                     await renderer.cache(blocks, for: input.markdown)
