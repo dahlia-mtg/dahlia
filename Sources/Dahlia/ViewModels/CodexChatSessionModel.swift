@@ -7,8 +7,7 @@ private enum CodexChatFailedSubmission {
 }
 
 private struct CodexChatLiveModeSubmissionState {
-    let isEnabled: Bool
-    let includesContext: Bool
+    let isEnabled: Bool, includesContext: Bool
     let generation: UInt
 }
 
@@ -810,7 +809,7 @@ private extension CodexChatSessionModel {
         } catch is CancellationError {
             requeue(input, liveModeGenerationSnapshot: liveModeGenerationSnapshot)
         } catch {
-            handleSteerFailure(
+            await handleSteerFailure(
                 error,
                 input: input,
                 turnID: turnID,
@@ -830,22 +829,31 @@ private extension CodexChatSessionModel {
         input: CodexChatPendingInput,
         turnID: String,
         liveModeGenerationSnapshot: UInt
-    ) {
+    ) async {
         if let serverError = error as? CodexAppServerError,
            serverError.isNoActiveTurnToSteer,
            isGenerating,
            activeTurnID == turnID {
-            activeTurnID = nil
             requeue(input, liveModeGenerationSnapshot: liveModeGenerationSnapshot)
-            turnTask?.cancel()
-            finalizeActiveResponseForCancellation()
-            finishGeneration(submissionID: activeSubmissionID)
+            await reloadCompletedTurnAndRestart(turnID: turnID)
         } else if !isGenerating || activeTurnID != turnID {
             requeue(input, liveModeGenerationSnapshot: liveModeGenerationSnapshot)
         } else {
             errorMessage = error.localizedDescription
             recordSteerFailure(input)
         }
+    }
+
+    func reloadCompletedTurnAndRestart(turnID: String) async {
+        guard let backendThreadID,
+              let thread = try? await service.loadThread(id: backendThreadID),
+              isGenerating,
+              activeTurnID == turnID else { return }
+        apply(thread)
+        activeTurnID = nil
+        turnTask?.cancel()
+        finalizeActiveResponseForCancellation()
+        finishGeneration(submissionID: activeSubmissionID)
     }
 
     func applySuccessfulSteer(_ input: CodexChatPendingInput, context: CodexChatContext?) async {

@@ -95,6 +95,7 @@ import Foundation
             #expect(await service.sentTextBlocks[1] == [
                 "<live_transcript source=\"dahlia\">send on the next turn</live_transcript>",
             ])
+            #expect(session.messages.contains { $0.role == .assistant && $0.text == "Final answer" })
             #expect(session.isGenerating)
             #expect(session.errorMessage == nil)
 
