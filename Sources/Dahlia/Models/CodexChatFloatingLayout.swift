@@ -46,8 +46,10 @@ struct CodexChatFloatingLayout: Equatable {
 
         size = CGSize(width: right - left, height: initialFrame.maxY - top)
         if edge.resizesLeft || edge.resizesRight {
+            let horizontalEdgeMoved = left != initialFrame.minX || right != initialFrame.maxX
             let preservesDock = wasDocked && (
-                dockSide == .left && edge.resizesRight ||
+                !horizontalEdgeMoved ||
+                    dockSide == .left && edge.resizesRight ||
                     dockSide == .right && edge.resizesLeft
             )
             undockedOriginX = preservesDock ? nil : left

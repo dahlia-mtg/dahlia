@@ -118,6 +118,28 @@ import CoreGraphics
         }
 
         @Test
+        func stationaryOuterEdgePreservesDockAcrossAvailableWidthChanges() {
+            var rightDockedLayout = CodexChatFloatingLayout(dockSide: .right)
+            var leftDockedLayout = CodexChatFloatingLayout(dockSide: .left)
+            let initialAvailableSize = CGSize(width: 1000, height: 800)
+
+            rightDockedLayout.resize(
+                from: .topRight,
+                translation: CGSize(width: 0, height: 100),
+                availableSize: initialAvailableSize
+            )
+            leftDockedLayout.resize(
+                from: .left,
+                translation: CGSize(width: -100, height: 0),
+                availableSize: initialAvailableSize
+            )
+
+            let widerAvailableSize = CGSize(width: 1200, height: 800)
+            #expect(rightDockedLayout.origin(in: widerAvailableSize).x == 664)
+            #expect(leftDockedLayout.origin(in: widerAvailableSize).x == CodexChatFloatingLayout.margin)
+        }
+
+        @Test
         func cornerResizeMovesBothRequestedEdges() {
             var topLeftLayout = CodexChatFloatingLayout(dockSide: .right)
             var topRightLayout = CodexChatFloatingLayout(dockSide: .left)
