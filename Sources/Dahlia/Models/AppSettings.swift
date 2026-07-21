@@ -83,6 +83,8 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     nonisolated static let exportBatchSummaryToVaultUserDefaultsKey = "exportBatchSummaryToVault"
     nonisolated static let exportBatchSummaryToGoogleDocsUserDefaultsKey = "exportBatchSummaryToGoogleDocs"
     nonisolated static let summaryPreviousMeetingCountUserDefaultsKey = "summaryPreviousMeetingCount"
+    nonisolated static let batchPrimaryLocaleIdentifierUserDefaultsKey = "batchPrimaryLocaleIdentifier"
+    nonisolated static let batchSecondaryLocaleIdentifierUserDefaultsKey = "batchSecondaryLocaleIdentifier"
     nonisolated static let summaryPreviousMeetingCountOptions = [0, 1, 2, 3, 4, 5]
     nonisolated static let defaultSummaryPreviousMeetingCount = 3
     nonisolated static let defaultGoogleDriveExportFolderName = "Meeting Notes"
@@ -145,6 +147,8 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
     @AppStorage("transcriptionLocale") var transcriptionLocale: String = Locale.current.identifier
     @AppStorage(TranscriptionMode.userDefaultsKey) var transcriptionModeRawValue = TranscriptionMode.defaultMode.rawValue
     @AppStorage("retainAudioAfterBatchTranscription") var retainAudioAfterBatchTranscription = false
+    @AppStorage(AppSettings.batchPrimaryLocaleIdentifierUserDefaultsKey) var batchPrimaryLocaleIdentifier = ""
+    @AppStorage(AppSettings.batchSecondaryLocaleIdentifierUserDefaultsKey) var batchSecondaryLocaleIdentifier = ""
     @AppStorage(AppSettings.generateSummaryAfterBatchTranscriptionUserDefaultsKey) var generateSummaryAfterBatchTranscription = false
     @AppStorage(AppSettings.exportBatchSummaryToVaultUserDefaultsKey) var exportBatchSummaryToVault = true
     @AppStorage(AppSettings.exportBatchSummaryToGoogleDocsUserDefaultsKey) var exportBatchSummaryToGoogleDocs = false
@@ -179,6 +183,24 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
                 exportsToGoogleDocs: exportBatchSummaryToGoogleDocs
             )
         )
+    }
+
+    func preferredBatchLanguageSelection(fallbackPrimaryLocaleIdentifier: String) -> BatchTranscriptionLanguageSelection {
+        let primary = batchPrimaryLocaleIdentifier.nilIfBlank ?? fallbackPrimaryLocaleIdentifier
+        let selection = BatchTranscriptionLanguageSelection(
+            primaryLocaleIdentifier: primary,
+            secondaryLocaleIdentifier: batchSecondaryLocaleIdentifier
+        )
+        guard selection.isValid else {
+            return BatchTranscriptionLanguageSelection(primaryLocaleIdentifier: fallbackPrimaryLocaleIdentifier)
+        }
+        return selection
+    }
+
+    func rememberBatchLanguageSelection(_ selection: BatchTranscriptionLanguageSelection) {
+        guard selection.isValid else { return }
+        batchPrimaryLocaleIdentifier = selection.primaryLocaleIdentifier
+        batchSecondaryLocaleIdentifier = selection.secondaryLocaleIdentifier ?? ""
     }
 
     var summaryPreviousMeetingCount: Int {

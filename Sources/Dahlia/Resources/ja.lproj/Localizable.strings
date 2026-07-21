@@ -605,7 +605,10 @@
 "Batch transcription failed: %@" = "バッチ文字起こしに失敗しました: %@";
 "Retry Batch Transcription" = "バッチ文字起こしを再試行";
 "Start batch transcription?" = "バッチ文字起こしを開始しますか？";
-"The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds." = "単一言語の録音には選択した言語を使用します。録音中に切り替えた言語区間は保持されます。文字起こしが成功するまで音声データは保持されます。";
+"Choose one language, or add a second language for meetings where speakers switch languages. The audio is kept until transcription succeeds." = "1つの言語を選ぶか、話者が言語を切り替えるミーティングでは2つ目の言語を追加してください。文字起こしが成功するまで音声データは保持されます。";
+"Primary Language" = "第1言語";
+"Additional Language" = "第2言語";
+"Using two languages requires both speech models and analyzes the recording twice, so transcription takes longer." = "2言語を選ぶと2つの音声モデルを使用し、録音を2回解析するため、文字起こしに時間がかかります。";
 "Delete Recording Files After Transcription" = "文字起こし後に録音ファイルを削除";
 "Delete the recording files after batch transcription succeeds. They are kept if transcription fails." = "バッチ文字起こしが成功したら録音ファイルを削除します。失敗した場合は再試行のため保持されます。";
 "Generate Summary After Transcription" = "文字起こし後に要約を生成";

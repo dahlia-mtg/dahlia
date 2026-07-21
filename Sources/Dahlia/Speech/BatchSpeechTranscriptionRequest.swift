@@ -5,6 +5,7 @@ struct BatchSpeechTranscriptionRequest {
     let startFrame: Int64
     let frameCount: Int64
     let locale: Locale
+    let secondaryLocale: Locale?
     let source: RecordingAudioSource
     let recordingSessionId: UUID
     let recordingStartTime: Date

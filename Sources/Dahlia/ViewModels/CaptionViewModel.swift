@@ -519,9 +519,9 @@ final class CaptionViewModel: ObservableObject {
         }
     }
 
-    func batchTranscriptionLocaleOptions(preferredIdentifier: String) -> [Locale] {
+    func batchTranscriptionLocaleOptions(preferredIdentifiers: [String]) -> [Locale] {
         var locales = filteredLocales.isEmpty ? supportedLocales : filteredLocales
-        if !locales.contains(where: { $0.identifier == preferredIdentifier }) {
+        for preferredIdentifier in preferredIdentifiers where !locales.contains(where: { $0.identifier == preferredIdentifier }) {
             locales.append(Locale(identifier: preferredIdentifier))
         }
         return locales.sortedByLocalizedName()
@@ -533,7 +533,9 @@ final class CaptionViewModel: ObservableObject {
         presentBatchTranscriptionConfirmation(
             sessionId: sessionId,
             meetingId: meetingId,
-            suggestedLocaleIdentifier: selectedLocale,
+            suggestedLanguageSelection: AppSettings.shared.preferredBatchLanguageSelection(
+                fallbackPrimaryLocaleIdentifier: selectedLocale
+            ),
             dbQueue: currentDbQueue
         )
     }
@@ -546,7 +548,9 @@ final class CaptionViewModel: ObservableObject {
         presentBatchTranscriptionConfirmation(
             sessionId: sessionId,
             meetingId: meetingId,
-            suggestedLocaleIdentifier: selectedLocale,
+            suggestedLanguageSelection: AppSettings.shared.preferredBatchLanguageSelection(
+                fallbackPrimaryLocaleIdentifier: selectedLocale
+            ),
             dbQueue: dbQueue
         )
     }
@@ -566,7 +570,7 @@ final class CaptionViewModel: ObservableObject {
     }
 
     func confirmBatchTranscription(
-        localeIdentifier: String,
+        languageSelection: BatchTranscriptionLanguageSelection,
         retainAudioAfterBatch: Bool
     ) {
         guard let confirmation = pendingBatchTranscriptionConfirmation,
@@ -574,7 +578,7 @@ final class CaptionViewModel: ObservableObject {
         let retryConfirmation = BatchTranscriptionConfirmation(
             sessionId: confirmation.sessionId,
             meetingId: confirmation.meetingId,
-            suggestedLocaleIdentifier: localeIdentifier,
+            suggestedLanguageSelection: languageSelection,
             retainAudioAfterBatch: retainAudioAfterBatch
         )
         let settings = AppSettings.shared
@@ -595,9 +599,10 @@ final class CaptionViewModel: ObservableObject {
             do {
                 try await coordinator.confirmAndEnqueue(
                     sessionId: confirmation.sessionId,
-                    localeIdentifier: localeIdentifier,
+                    languageSelection: languageSelection,
                     retainAudioAfterBatch: retainAudioAfterBatch
                 )
+                settings.rememberBatchLanguageSelection(languageSelection)
             } catch {
                 if currentMeetingId == confirmation.meetingId {
                     batchTranscriptionState = .awaitingConfirmation(sessionId: confirmation.sessionId)
@@ -2036,7 +2041,9 @@ final class CaptionViewModel: ObservableObject {
             presentBatchTranscriptionConfirmation(
                 sessionId: recordingSessionId,
                 meetingId: meetingId,
-                suggestedLocaleIdentifier: selectedLocale,
+                suggestedLanguageSelection: AppSettings.shared.preferredBatchLanguageSelection(
+                    fallbackPrimaryLocaleIdentifier: selectedLocale
+                ),
                 dbQueue: dbQueue
             )
         }
@@ -2050,13 +2057,13 @@ final class CaptionViewModel: ObservableObject {
     private func presentBatchTranscriptionConfirmation(
         sessionId: UUID,
         meetingId: UUID,
-        suggestedLocaleIdentifier: String,
+        suggestedLanguageSelection: BatchTranscriptionLanguageSelection,
         dbQueue: DatabaseQueue?
     ) {
         pendingBatchTranscriptionConfirmation = BatchTranscriptionConfirmation(
             sessionId: sessionId,
             meetingId: meetingId,
-            suggestedLocaleIdentifier: suggestedLocaleIdentifier,
+            suggestedLanguageSelection: suggestedLanguageSelection,
             retainAudioAfterBatch: batchAudioRetentionPreference(
                 sessionId: sessionId,
                 dbQueue: dbQueue

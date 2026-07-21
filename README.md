@@ -2,12 +2,12 @@
 
 [Japanese / 日本語](README_ja.md)
 
-A macOS native real-time transcription app. Captures microphone and system audio simultaneously, transcribes speech on-device, and optionally generates LLM-powered summaries.
+A macOS native transcription app. Captures microphone and system audio simultaneously, transcribes speech on-device in real time or after recording, and optionally generates LLM-powered summaries.
 
 ## Features
 
 - **Dual Audio Capture** — Record microphone (AVAudioEngine) and system audio (ScreenCaptureKit) at the same time
-- **On-Device Transcription** — Real-time speech-to-text using Apple Speech framework
+- **On-Device Transcription** — Real-time single-language speech-to-text and post-recording batch transcription for meetings mixing up to two languages, using Apple Speech framework
 - **Codex Summaries** — Generate structured summaries through the bundled Codex app-server (optional)
 - **AI Meeting Access** — Explore summaries, confirmed original transcripts, and resized screenshots through a vault-scoped, read-only local MCP server
 - **Project Management** — Organize transcripts into vault/project hierarchy synced with filesystem folders

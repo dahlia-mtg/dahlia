@@ -126,6 +126,10 @@ final class AppDatabaseManager: Sendable {
             try addTranscriptPagingIndexIfNeeded(in: db)
         }
 
+        migrator.registerMigration("v23_batchSecondaryLocale") { db in
+            try addBatchSecondaryLocaleColumnIfNeeded(in: db)
+        }
+
         return migrator
     }()
 
@@ -1078,6 +1082,15 @@ final class AppDatabaseManager: Sendable {
             table: "recording_sessions",
             column: "batchDiscardedAt",
             type: .datetime
+        )
+    }
+
+    private static func addBatchSecondaryLocaleColumnIfNeeded(in db: Database) throws {
+        try addColumnIfNeeded(
+            in: db,
+            table: "recording_sessions",
+            column: "batchSecondaryLocaleIdentifier",
+            type: .text
         )
     }
 

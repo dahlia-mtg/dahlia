@@ -2,23 +2,25 @@ import SwiftUI
 
 struct BatchTranscriptionConfirmationView: View {
     let locales: [Locale]
-    let onStart: (String, Bool) -> Void
+    let onStart: (BatchTranscriptionLanguageSelection, Bool) -> Void
     let onPostpone: () -> Void
 
-    @State private var selectedLocaleIdentifier: String
+    @State private var selectedPrimaryLocaleIdentifier: String
+    @State private var selectedSecondaryLocaleIdentifier: String
     @State private var deleteAudioAfterTranscription: Bool
 
     init(
         locales: [Locale],
-        initialLocaleIdentifier: String,
+        initialLanguageSelection: BatchTranscriptionLanguageSelection,
         initiallyRetainsAudioAfterBatch: Bool,
-        onStart: @escaping (String, Bool) -> Void,
+        onStart: @escaping (BatchTranscriptionLanguageSelection, Bool) -> Void,
         onPostpone: @escaping () -> Void
     ) {
         self.locales = locales
         self.onStart = onStart
         self.onPostpone = onPostpone
-        _selectedLocaleIdentifier = State(initialValue: initialLocaleIdentifier)
+        _selectedPrimaryLocaleIdentifier = State(initialValue: initialLanguageSelection.primaryLocaleIdentifier)
+        _selectedSecondaryLocaleIdentifier = State(initialValue: initialLanguageSelection.secondaryLocaleIdentifier ?? "")
         _deleteAudioAfterTranscription = State(initialValue: !initiallyRetainsAudioAfterBatch)
     }
 
@@ -38,7 +40,8 @@ struct BatchTranscriptionConfirmationView: View {
 
             BatchTranscriptionOptionsForm(
                 locales: locales,
-                selectedLocaleIdentifier: $selectedLocaleIdentifier,
+                selectedPrimaryLocaleIdentifier: $selectedPrimaryLocaleIdentifier,
+                selectedSecondaryLocaleIdentifier: $selectedSecondaryLocaleIdentifier,
                 deleteAudioAfterTranscription: $deleteAudioAfterTranscription
             )
 
@@ -50,6 +53,7 @@ struct BatchTranscriptionConfirmationView: View {
                     .keyboardShortcut(.cancelAction)
                 Button(L10n.startTranscription, action: startTranscription)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!languageSelection.isValid)
             }
             .padding(20)
         }
@@ -58,8 +62,15 @@ struct BatchTranscriptionConfirmationView: View {
 
     private func startTranscription() {
         onStart(
-            selectedLocaleIdentifier,
+            languageSelection,
             !deleteAudioAfterTranscription
+        )
+    }
+
+    private var languageSelection: BatchTranscriptionLanguageSelection {
+        BatchTranscriptionLanguageSelection(
+            primaryLocaleIdentifier: selectedPrimaryLocaleIdentifier,
+            secondaryLocaleIdentifier: selectedSecondaryLocaleIdentifier
         )
     }
 }

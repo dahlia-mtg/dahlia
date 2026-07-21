@@ -174,11 +174,11 @@ import GRDB
             viewModel.pendingBatchTranscriptionConfirmation = BatchTranscriptionConfirmation(
                 sessionId: batch.session.id,
                 meetingId: batch.meeting.id,
-                suggestedLocaleIdentifier: "ja_JP",
+                suggestedLanguageSelection: BatchTranscriptionLanguageSelection(primaryLocaleIdentifier: "ja_JP"),
                 retainAudioAfterBatch: false
             )
             viewModel.confirmBatchTranscription(
-                localeIdentifier: "ja_JP",
+                languageSelection: BatchTranscriptionLanguageSelection(primaryLocaleIdentifier: "ja_JP"),
                 retainAudioAfterBatch: false
             )
             #expect(await waitUntil {

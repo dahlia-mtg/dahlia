@@ -524,7 +524,13 @@ enum L10n {
     static var batchTranscriptionConfirmationTitle: String { String(localized: "Start batch transcription?", bundle: bundle) }
     static var batchTranscriptionConfirmationDescription: String { String(
         // swiftlint:disable:next line_length
-        localized: "The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds.",
+        localized: "Choose one language, or add a second language for meetings where speakers switch languages. The audio is kept until transcription succeeds.",
+        bundle: bundle
+    ) }
+    static var primaryLanguage: String { String(localized: "Primary Language", bundle: bundle) }
+    static var secondaryLanguage: String { String(localized: "Additional Language", bundle: bundle) }
+    static var secondaryLanguageDescription: String { String(
+        localized: "Using two languages requires both speech models and analyzes the recording twice, so transcription takes longer.",
         bundle: bundle
     ) }
     static var deleteBatchAudioAfterTranscription: String { String(

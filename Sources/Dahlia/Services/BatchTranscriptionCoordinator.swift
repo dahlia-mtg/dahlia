@@ -79,12 +79,12 @@ actor BatchTranscriptionCoordinator {
 
     func confirmAndEnqueue(
         sessionId: UUID,
-        localeIdentifier: String,
+        languageSelection: BatchTranscriptionLanguageSelection,
         retainAudioAfterBatch: Bool
     ) async throws {
         let result = try await BatchTranscriptionConfirmationService.confirm(
             sessionId: sessionId,
-            localeIdentifier: localeIdentifier,
+            languageSelection: languageSelection,
             retainAudioAfterBatch: retainAudioAfterBatch,
             dbQueue: dbQueue
         )
@@ -268,32 +268,34 @@ actor BatchTranscriptionCoordinator {
         guard let frameCount = range.frameCount else {
             throw BatchSpeechTranscriberError.invalidAudioRange
         }
-        var segments = try await BatchSpeechTranscriberService.transcribe(
+        var recognizedSegments = try await BatchSpeechTranscriberService.transcribe(
             BatchSpeechTranscriptionRequest(
                 audioURL: audioURL,
                 startFrame: range.startFrame,
                 frameCount: frameCount,
                 locale: Locale(identifier: range.localeIdentifier),
+                secondaryLocale: session.batchSecondaryLocaleIdentifier.map { Locale(identifier: $0) },
                 source: segment.source,
                 recordingSessionId: session.id,
                 recordingStartTime: session.startedAt,
                 sessionOffsetSeconds: range.sessionOffsetSeconds
             )
         )
-        guard translationConfiguration.isEnabled,
-              TranscriptTranslationLanguage.shouldTranslate(
-                  transcriptionLocaleIdentifier: range.localeIdentifier,
-                  targetLanguageIdentifier: translationConfiguration.targetLanguage
-              ) else { return segments }
+        guard translationConfiguration.isEnabled else {
+            return recognizedSegments.map(\.segment)
+        }
 
-        for index in segments.indices {
-            segments[index].translatedText = await translationService.translate(
-                segments[index].text,
-                from: range.localeIdentifier,
+        for index in recognizedSegments.indices where TranscriptTranslationLanguage.shouldTranslate(
+            transcriptionLocaleIdentifier: recognizedSegments[index].localeIdentifier,
+            targetLanguageIdentifier: translationConfiguration.targetLanguage
+        ) {
+            recognizedSegments[index].segment.translatedText = await translationService.translate(
+                recognizedSegments[index].segment.text,
+                from: recognizedSegments[index].localeIdentifier,
                 to: translationConfiguration.targetLanguage
             )
         }
-        return segments
+        return recognizedSegments.map(\.segment)
     }
 
     private func fetchJob(sessionId: UUID) throws -> Job {

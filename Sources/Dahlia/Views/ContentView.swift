@@ -79,9 +79,9 @@ struct ContentView: View {
         .sheet(item: $viewModel.pendingBatchTranscriptionConfirmation) { confirmation in
             BatchTranscriptionConfirmationView(
                 locales: viewModel.batchTranscriptionLocaleOptions(
-                    preferredIdentifier: confirmation.suggestedLocaleIdentifier
+                    preferredIdentifiers: confirmation.suggestedLanguageSelection.localeIdentifiers
                 ),
-                initialLocaleIdentifier: confirmation.suggestedLocaleIdentifier,
+                initialLanguageSelection: confirmation.suggestedLanguageSelection,
                 initiallyRetainsAudioAfterBatch: confirmation.retainAudioAfterBatch,
                 onStart: viewModel.confirmBatchTranscription,
                 onPostpone: viewModel.postponeBatchTranscription

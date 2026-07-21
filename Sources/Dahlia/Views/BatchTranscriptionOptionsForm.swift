@@ -2,7 +2,8 @@ import SwiftUI
 
 struct BatchTranscriptionOptionsForm: View {
     let locales: [Locale]
-    @Binding var selectedLocaleIdentifier: String
+    @Binding var selectedPrimaryLocaleIdentifier: String
+    @Binding var selectedSecondaryLocaleIdentifier: String
     @Binding var deleteAudioAfterTranscription: Bool
 
     @AppStorage(AppSettings.generateSummaryAfterBatchTranscriptionUserDefaultsKey)
@@ -17,12 +18,23 @@ struct BatchTranscriptionOptionsForm: View {
     var body: some View {
         Form {
             Section(L10n.transcription) {
-                Picker(L10n.language, selection: $selectedLocaleIdentifier) {
+                Picker(L10n.primaryLanguage, selection: $selectedPrimaryLocaleIdentifier) {
                     ForEach(locales, id: \.identifier) { locale in
                         Text(displayName(for: locale)).tag(locale.identifier)
                     }
                 }
                 .pickerStyle(.menu)
+
+                Picker(L10n.secondaryLanguage, selection: $selectedSecondaryLocaleIdentifier) {
+                    Text(L10n.none).tag("")
+                    ForEach(secondaryLocales, id: \.identifier) { locale in
+                        Text(displayName(for: locale)).tag(locale.identifier)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text(L10n.secondaryLanguageDescription)
+                    .foregroundStyle(.secondary)
 
                 Toggle(isOn: $deleteAudioAfterTranscription) {
                     Text(L10n.deleteBatchAudioAfterTranscription)
@@ -47,12 +59,26 @@ struct BatchTranscriptionOptionsForm: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: selectedPrimaryLocaleIdentifier, resetInvalidSecondaryLocale)
     }
 
     private func displayName(for locale: Locale) -> String {
         locale.localizedString(forIdentifier: locale.identifier)
             ?? Locale.current.localizedString(forIdentifier: locale.identifier)
             ?? locale.identifier
+    }
+
+    private var secondaryLocales: [Locale] {
+        let primaryLanguageCode = BatchTranscriptionLanguageSelection.languageCode(for: selectedPrimaryLocaleIdentifier)
+        return locales.filter { locale in
+            BatchTranscriptionLanguageSelection.languageCode(for: locale.identifier) != primaryLanguageCode
+        }
+    }
+
+    private func resetInvalidSecondaryLocale() {
+        guard !selectedSecondaryLocaleIdentifier.isEmpty,
+              !secondaryLocales.contains(where: { $0.identifier == selectedSecondaryLocaleIdentifier }) else { return }
+        selectedSecondaryLocaleIdentifier = ""
     }
 
     private var normalizedPreviousMeetingCount: Binding<Int> {

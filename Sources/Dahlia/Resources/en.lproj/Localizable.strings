@@ -605,7 +605,10 @@
 "Batch transcription failed: %@" = "Batch transcription failed: %@";
 "Retry Batch Transcription" = "Retry Batch Transcription";
 "Start batch transcription?" = "Start batch transcription?";
-"The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds." = "The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds.";
+"Choose one language, or add a second language for meetings where speakers switch languages. The audio is kept until transcription succeeds." = "Choose one language, or add a second language for meetings where speakers switch languages. The audio is kept until transcription succeeds.";
+"Primary Language" = "Primary Language";
+"Additional Language" = "Additional Language";
+"Using two languages requires both speech models and analyzes the recording twice, so transcription takes longer." = "Using two languages requires both speech models and analyzes the recording twice, so transcription takes longer.";
 "Delete Recording Files After Transcription" = "Delete Recording Files After Transcription";
 "Delete the recording files after batch transcription succeeds. They are kept if transcription fails." = "Delete the recording files after batch transcription succeeds. They are kept if transcription fails.";
 "Generate Summary After Transcription" = "Generate Summary After Transcription";

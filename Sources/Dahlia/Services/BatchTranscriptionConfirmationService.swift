@@ -10,12 +10,11 @@ enum BatchTranscriptionConfirmationService {
 
     static func confirm(
         sessionId: UUID,
-        localeIdentifier: String,
+        languageSelection: BatchTranscriptionLanguageSelection,
         retainAudioAfterBatch: Bool,
         dbQueue: DatabaseQueue
     ) async throws -> Result {
-        let normalizedLocaleIdentifier = localeIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedLocaleIdentifier.isEmpty else {
+        guard languageSelection.isValid else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
 
@@ -25,14 +24,15 @@ enum BatchTranscriptionConfirmationService {
             let confirmedAt = Date.now
             for unconfirmedSession in sessions {
                 try requireAudioRanges(sessionId: unconfirmedSession.id, db: db)
-                try updateSingleRecordedLocale(
+                try updateRecordedLocales(
                     sessionId: unconfirmedSession.id,
-                    localeIdentifier: normalizedLocaleIdentifier,
+                    languageSelection: languageSelection,
                     updatedAt: confirmedAt,
                     db: db
                 )
                 try markConfirmed(
                     sessionId: unconfirmedSession.id,
+                    secondaryLocaleIdentifier: languageSelection.secondaryLocaleIdentifier,
                     retainAudioAfterBatch: retainAudioAfterBatch,
                     confirmedAt: confirmedAt,
                     db: db
@@ -93,9 +93,9 @@ enum BatchTranscriptionConfirmationService {
         }
     }
 
-    private static func updateSingleRecordedLocale(
+    private static func updateRecordedLocales(
         sessionId: UUID,
-        localeIdentifier: String,
+        languageSelection: BatchTranscriptionLanguageSelection,
         updatedAt: Date,
         db: Database
     ) throws {
@@ -110,8 +110,8 @@ enum BatchTranscriptionConfirmationService {
             """,
             arguments: [sessionId]
         )
-        // 録音中に明示的に言語を切り替えた複数localeのrangeは保持する。
-        guard recordedLocales.count <= 1 else { return }
+        // 単一言語では録音中に明示的に切り替えた複数localeのrangeを保持する。
+        guard languageSelection.secondaryLocaleIdentifier != nil || recordedLocales.count <= 1 else { return }
         try db.execute(
             sql: """
             UPDATE recording_audio_segment_ranges
@@ -120,12 +120,13 @@ enum BatchTranscriptionConfirmationService {
                 SELECT id FROM recording_audio_segments WHERE recordingSessionId = ?
             )
             """,
-            arguments: [localeIdentifier, updatedAt, sessionId]
+            arguments: [languageSelection.primaryLocaleIdentifier, updatedAt, sessionId]
         )
     }
 
     private static func markConfirmed(
         sessionId: UUID,
+        secondaryLocaleIdentifier: String?,
         retainAudioAfterBatch: Bool,
         confirmedAt: Date,
         db: Database
@@ -135,7 +136,7 @@ enum BatchTranscriptionConfirmationService {
             sql: """
             UPDATE recording_sessions
             SET retainAudioAfterBatch = ?, audioRetentionPolicy = ?,
-                batchLastAttemptAt = ?, updatedAt = ?
+                batchSecondaryLocaleIdentifier = ?, batchLastAttemptAt = ?, updatedAt = ?
             WHERE id = ?
             """,
             arguments: [
@@ -143,6 +144,7 @@ enum BatchTranscriptionConfirmationService {
                 retainAudioAfterBatch
                     ? RecordingAudioRetentionPolicy.keepInApp.rawValue
                     : RecordingAudioRetentionPolicy.deleteAfterTranscription.rawValue,
+                secondaryLocaleIdentifier,
                 confirmedAt,
                 confirmedAt,
                 sessionId,
