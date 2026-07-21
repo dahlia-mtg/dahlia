@@ -81,7 +81,11 @@ struct ContentView: View {
                 locales: viewModel.batchTranscriptionLocaleOptions(
                     preferredIdentifier: confirmation.suggestedLocaleIdentifier
                 ),
-                initialLocaleIdentifier: confirmation.suggestedLocaleIdentifier,
+                automaticLanguageLocales: viewModel.batchTranscriptionAutomaticLanguageCandidates(
+                    snapshot: confirmation.automaticLanguageCandidateSnapshot
+                ).locales,
+                displayLocale: AppSettings.shared.appLanguage.locale,
+                initialLanguageSelection: confirmation.initialLanguageSelection,
                 initiallyRetainsAudioAfterBatch: confirmation.retainAudioAfterBatch,
                 onStart: viewModel.confirmBatchTranscription,
                 onPostpone: viewModel.postponeBatchTranscription

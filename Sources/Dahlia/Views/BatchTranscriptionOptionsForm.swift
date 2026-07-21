@@ -2,7 +2,9 @@ import SwiftUI
 
 struct BatchTranscriptionOptionsForm: View {
     let locales: [Locale]
-    @Binding var selectedLocaleIdentifier: String
+    let automaticLanguageLocales: [Locale]
+    let displayLocale: Locale
+    @Binding var languageSelection: BatchTranscriptionLanguageSelection
     @Binding var deleteAudioAfterTranscription: Bool
 
     @AppStorage(AppSettings.generateSummaryAfterBatchTranscriptionUserDefaultsKey)
@@ -17,12 +19,24 @@ struct BatchTranscriptionOptionsForm: View {
     var body: some View {
         Form {
             Section(L10n.transcription) {
-                Picker(L10n.language, selection: $selectedLocaleIdentifier) {
+                Picker(L10n.language, selection: $languageSelection) {
+                    Text(L10n.auto)
+                        .tag(BatchTranscriptionLanguageSelection.automatic)
+                        .disabled(automaticLanguageLocales.isEmpty)
+
                     ForEach(locales, id: \.identifier) { locale in
-                        Text(displayName(for: locale)).tag(locale.identifier)
+                        Text(displayName(for: locale))
+                            .tag(BatchTranscriptionLanguageSelection.manual(localeIdentifier: locale.identifier))
                     }
                 }
                 .pickerStyle(.menu)
+
+                if languageSelection == .automatic {
+                    BatchAutomaticLanguageDetectionNotice(
+                        locales: automaticLanguageLocales,
+                        displayLocale: displayLocale
+                    )
+                }
 
                 Toggle(isOn: $deleteAudioAfterTranscription) {
                     Text(L10n.deleteBatchAudioAfterTranscription)
@@ -36,7 +50,7 @@ struct BatchTranscriptionOptionsForm: View {
                     Text(L10n.generateSummaryAfterBatchTranscription)
                     Text(L10n.generateSummaryAfterBatchTranscriptionDescription)
                 }
-                .toggleStyle(.checkbox)
+                .toggleStyle(.switch)
 
                 SummaryGenerationOptionsControls(
                     previousMeetingCount: normalizedPreviousMeetingCount,
@@ -50,7 +64,7 @@ struct BatchTranscriptionOptionsForm: View {
     }
 
     private func displayName(for locale: Locale) -> String {
-        locale.localizedString(forIdentifier: locale.identifier)
+        displayLocale.localizedString(forIdentifier: locale.identifier)
             ?? Locale.current.localizedString(forIdentifier: locale.identifier)
             ?? locale.identifier
     }

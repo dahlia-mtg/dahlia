@@ -210,6 +210,7 @@
 "No meetings yet" = "まだ meeting がありません";
 "No meetings match the current filter." = "現在のフィルターに一致する meeting はありません。";
 "%lld meetings" = "%lld 件の meeting";
+"%lld" = "%lld件";
 "%lld subprojects included" = "%lld件のサブプロジェクトを含む";
 "Missing on Disk" = "ディスク上に見つかりません";
 "Search meetings..." = "ミーティングを検索...";
@@ -351,7 +352,7 @@
 "Set the display language for the app." = "アプリの表示言語を設定します。";
 "Follow System" = "システムに従う";
 "Choose one or both conditions. Calendar notifications use events from enabled calendar sources." = "1つまたは両方の条件を選択できます。カレンダー通知には、有効なカレンダーソースの予定が使用されます。";
-"Choose which languages appear when starting transcription." = "文字起こし開始時に表示する言語を選びます。";
+"Choose which languages are available for transcription and automatic detection." = "文字起こしと自動判定で利用する言語を選びます。";
 "Transcript Translation" = "文字起こし翻訳";
 "Show translated transcript lines in the selected target language when available." = "選択したターゲット言語で翻訳済みの文字起こし行を表示します。";
 "Target Language" = "翻訳先の言語";
@@ -469,11 +470,13 @@
 "Loading supported languages..." = "対応言語を読み込み中...";
 "Search languages..." = "言語を検索...";
 "No matching languages" = "該当する言語がありません";
-"All languages shown" = "すべての言語を表示中";
 "%lld languages selected" = "%lld 言語を選択中";
-"Show all" = "すべて表示に戻す";
-"Display Languages" = "表示する言語";
-"Only selected languages will appear in the language picker. All languages are shown if none are selected." = "選択した言語のみが言語ピッカーに表示されます。未選択の場合はすべての言語が表示されます。";
+"Transcription Languages" = "文字起こし言語";
+"Language Range" = "言語の範囲";
+"All Supported Languages" = "対応するすべての言語";
+"Selected Languages" = "選択した言語";
+"All Apple Speech languages appear in pickers. Automatic detection uses the languages also supported by WhisperKit." = "Apple Speechが対応するすべての言語をピッカーに表示します。自動判定には、そのうちWhisperKitも対応する言語を使用します。";
+"Selected languages appear in pickers, and WhisperKit-supported selections become automatic detection candidates." = "選択した言語のみをピッカーに表示し、そのうちWhisperKit対応言語を自動判定の候補にします。";
 
 /* Settings - LLM */
 "Empty response from server" = "サーバーから空のレスポンスが返されました";
@@ -604,7 +607,7 @@
 "Some transcript could not be loaded: %1$@" = "文字起こしの一部を読み込めませんでした: %1$@";
 "New transcript available" = "新しい文字起こしがあります";
 "Recording audio for transcription after recording stops…" = "録音終了後の文字起こし用に音声を保存しています…";
-"Audio is ready. Confirm the language to start transcription." = "音声の準備ができました。言語を確認して文字起こしを開始してください。";
+"Audio is ready. Confirm the transcription language to start." = "音声の準備ができました。文字起こし言語を確認して開始してください。";
 "Review and Start" = "確認して開始";
 "Waiting to transcribe the recording…" = "録音の文字起こしを待機しています…";
 "Creating a high-accuracy transcript…" = "高精度な文字起こしを作成しています…";
@@ -612,7 +615,17 @@
 "Batch transcription failed: %@" = "バッチ文字起こしに失敗しました: %@";
 "Retry Batch Transcription" = "バッチ文字起こしを再試行";
 "Start batch transcription?" = "バッチ文字起こしを開始しますか？";
-"The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds." = "単一言語の録音には選択した言語を使用します。録音中に切り替えた言語区間は保持されます。文字起こしが成功するまで音声データは保持されます。";
+"Choose a transcription language. Audio is kept until transcription succeeds." = "文字起こし言語を選択してください。文字起こしが成功するまで音声データは保持されます。";
+"Multilingual meetings" = "複数言語に対応";
+"Detects the language of each recording, allowing transcription when multiple languages are used." = "録音ごとに言語を判定し、複数の言語が混在するミーティングを文字起こしできます。";
+"Languages to detect" = "判定する言語";
+"Select at least one WhisperKit-supported language in Settings before using Auto." = "自動を使用するには、設定でWhisperKit対応言語を1つ以上選択してください。";
+"Processing time" = "処理時間について";
+"Language detection makes transcription take longer. If the language cannot be determined, the recording is transcribed as English." = "言語判定を行うため、通常より文字起こしに時間がかかります。言語を判定できなかった録音は英語として文字起こしします。";
+"Could not read the recording for language detection. Try again." = "言語判定用の録音データを読み取れませんでした。再試行してください。";
+"Could not prepare the language detection model. Check your network connection and try again." = "言語判定モデルを準備できませんでした。ネットワーク接続を確認して再試行してください。";
+"Could not detect the recording language. Try again." = "録音の言語を判定できませんでした。再試行してください。";
+"The detected language is not supported for transcription: %@" = "判定された言語は文字起こしに対応していません: %@";
 "Delete Recording Files After Transcription" = "文字起こし後に録音ファイルを削除";
 "Delete the recording files after batch transcription succeeds. They are kept if transcription fails." = "バッチ文字起こしが成功したら録音ファイルを削除します。失敗した場合は再試行のため保持されます。";
 "Generate Summary After Transcription" = "文字起こし後に要約を生成";

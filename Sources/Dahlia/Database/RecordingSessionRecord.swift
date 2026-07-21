@@ -23,4 +23,7 @@ struct RecordingSessionRecord: Codable, FetchableRecord, PersistableRecord, Equa
     var audioRetentionPolicy: RecordingAudioRetentionPolicy?
     var retentionExpiresAt: Date?
     var batchFailureKind: BatchFailureKind?
+    var batchLanguageDetectionMode: BatchLanguageDetectionMode = .manual
+    var batchSelectedLocaleIdentifier: String?
+    var batchAutomaticLanguageCandidatesJSON: String?
 }

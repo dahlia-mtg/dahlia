@@ -210,6 +210,7 @@
 "No meetings yet" = "No meetings yet";
 "No meetings match the current filter." = "No meetings match the current filter.";
 "%lld meetings" = "%lld meetings";
+"%lld" = "%lld";
 "%lld subprojects included" = "%lld subprojects included";
 "Missing on Disk" = "Missing on Disk";
 "Search meetings..." = "Search meetings...";
@@ -351,7 +352,7 @@
 "Set the display language for the app." = "Set the display language for the app.";
 "Follow System" = "Follow System";
 "Choose one or both conditions. Calendar notifications use events from enabled calendar sources." = "Choose one or both conditions. Calendar notifications use events from enabled calendar sources.";
-"Choose which languages appear when starting transcription." = "Choose which languages appear when starting transcription.";
+"Choose which languages are available for transcription and automatic detection." = "Choose which languages are available for transcription and automatic detection.";
 "Transcript Translation" = "Transcript Translation";
 "Show translated transcript lines in the selected target language when available." = "Show translated transcript lines in the selected target language when available.";
 "Target Language" = "Target Language";
@@ -469,11 +470,13 @@
 "Loading supported languages..." = "Loading supported languages...";
 "Search languages..." = "Search languages...";
 "No matching languages" = "No matching languages";
-"All languages shown" = "All languages shown";
 "%lld languages selected" = "%lld languages selected";
-"Show all" = "Show all";
-"Display Languages" = "Display Languages";
-"Only selected languages will appear in the language picker. All languages are shown if none are selected." = "Only selected languages will appear in the language picker. All languages are shown if none are selected.";
+"Transcription Languages" = "Transcription Languages";
+"Language Range" = "Language Range";
+"All Supported Languages" = "All Supported Languages";
+"Selected Languages" = "Selected Languages";
+"All Apple Speech languages appear in pickers. Automatic detection uses the languages also supported by WhisperKit." = "All Apple Speech languages appear in pickers. Automatic detection uses the languages also supported by WhisperKit.";
+"Selected languages appear in pickers, and WhisperKit-supported selections become automatic detection candidates." = "Selected languages appear in pickers, and WhisperKit-supported selections become automatic detection candidates.";
 
 /* Settings - LLM */
 "Empty response from server" = "Empty response from server";
@@ -604,7 +607,7 @@
 "Some transcript could not be loaded: %1$@" = "Some transcript could not be loaded: %1$@";
 "New transcript available" = "New transcript available";
 "Recording audio for transcription after recording stops…" = "Recording audio for transcription after recording stops…";
-"Audio is ready. Confirm the language to start transcription." = "Audio is ready. Confirm the language to start transcription.";
+"Audio is ready. Confirm the transcription language to start." = "Audio is ready. Confirm the transcription language to start.";
 "Review and Start" = "Review and Start";
 "Waiting to transcribe the recording…" = "Waiting to transcribe the recording…";
 "Creating a high-accuracy transcript…" = "Creating a high-accuracy transcript…";
@@ -612,7 +615,17 @@
 "Batch transcription failed: %@" = "Batch transcription failed: %@";
 "Retry Batch Transcription" = "Retry Batch Transcription";
 "Start batch transcription?" = "Start batch transcription?";
-"The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds." = "The selected language is used for single-language recordings. Language changes made during recording are preserved. The audio is kept until transcription succeeds.";
+"Choose a transcription language. Audio is kept until transcription succeeds." = "Choose a transcription language. Audio is kept until transcription succeeds.";
+"Multilingual meetings" = "Multilingual meetings";
+"Detects the language of each recording, allowing transcription when multiple languages are used." = "Detects the language of each recording, allowing transcription when multiple languages are used.";
+"Languages to detect" = "Languages to detect";
+"Select at least one WhisperKit-supported language in Settings before using Auto." = "Select at least one WhisperKit-supported language in Settings before using Auto.";
+"Processing time" = "Processing time";
+"Language detection makes transcription take longer. If the language cannot be determined, the recording is transcribed as English." = "Language detection makes transcription take longer. If the language cannot be determined, the recording is transcribed as English.";
+"Could not read the recording for language detection. Try again." = "Could not read the recording for language detection. Try again.";
+"Could not prepare the language detection model. Check your network connection and try again." = "Could not prepare the language detection model. Check your network connection and try again.";
+"Could not detect the recording language. Try again." = "Could not detect the recording language. Try again.";
+"The detected language is not supported for transcription: %@" = "The detected language is not supported for transcription: %@";
 "Delete Recording Files After Transcription" = "Delete Recording Files After Transcription";
 "Delete the recording files after batch transcription succeeds. They are kept if transcription fails." = "Delete the recording files after batch transcription succeeds. They are kept if transcription fails.";
 "Generate Summary After Transcription" = "Generate Summary After Transcription";
