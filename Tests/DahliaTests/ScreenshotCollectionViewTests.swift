@@ -220,7 +220,7 @@ struct ScreenshotCollectionViewTests {
     }
 
     @Test
-    func failedDecodeCanRetryForTheSameScreenshot() async throws {
+    func failedDecodeDoesNotRetryUntilTheCellIsRedisplayed() async throws {
         let item = ScreenshotCollectionViewItem()
         let screenshot = makeScreenshot()
         let image = try #require(makeImage(width: 30, height: 15))
@@ -233,6 +233,16 @@ struct ScreenshotCollectionViewTests {
         await waitUntilAsync { await provider.callCount == 1 }
         await waitUntil { !item.isLoadingThumbnail }
 
+        configure(
+            item,
+            screenshot: screenshot,
+            state: .init(isSelecting: true),
+            provider: provideThumbnail
+        )
+        await Task.yield()
+        #expect(await provider.callCount == 1)
+
+        item.didEndDisplaying()
         configure(item, screenshot: screenshot, provider: provideThumbnail)
         await waitUntilAsync { await provider.callCount == 2 }
         await waitUntil { item.loadedThumbnailSize == NSSize(width: 30, height: 15) }

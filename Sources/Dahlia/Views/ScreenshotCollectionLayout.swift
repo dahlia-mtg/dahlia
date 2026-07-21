@@ -41,7 +41,7 @@ final class ScreenshotCollectionLayout: NSCollectionViewFlowLayout {
             return
         }
 
-        let viewportWidth = collectionView.enclosingScrollView?.contentSize.width ?? collectionView.bounds.width
+        let viewportWidth = collectionView.bounds.width
         let metrics = Self.metrics(containerWidth: viewportWidth, minimumItemWidth: minimumItemWidth)
         if itemSize != metrics.itemSize {
             itemSize = metrics.itemSize

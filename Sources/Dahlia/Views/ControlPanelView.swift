@@ -575,7 +575,7 @@ struct ControlPanelView: View {
                 Divider()
 
                 ScreenshotCollectionView(
-                    meetingID: viewModel.screenshots[0].meetingId,
+                    meetingID: viewModel.currentMeetingId,
                     screenshots: viewModel.screenshots,
                     recordingSessions: viewModel.store.recordingSessions,
                     fallbackTimeBase: screenshotTimeBase,

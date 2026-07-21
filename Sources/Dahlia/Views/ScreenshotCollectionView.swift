@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 struct ScreenshotCollectionView: NSViewRepresentable {
-    let meetingID: UUID
+    let meetingID: UUID?
     let screenshots: [MeetingScreenshotRecord]
     let recordingSessions: [RecordingSessionTimeline]
     let fallbackTimeBase: Date
@@ -66,6 +66,7 @@ extension ScreenshotCollectionView {
         private var parent: ScreenshotCollectionView
         private var dataSource: NSCollectionViewDiffableDataSource<Int, UUID>?
         private var currentScreenshotIDs: [UUID] = []
+        private var screenshotIndexByID: [UUID: Int] = [:]
         private var currentScreenshotMetadata: [ScreenshotMetadata] = []
         private var timestampByID: [UUID: String] = [:]
         private var timestampContext: TimestampContext?
@@ -116,6 +117,11 @@ extension ScreenshotCollectionView {
                 currentIDs: currentScreenshotIDs,
                 newIDs: ids
             )
+            if identifiersChanged {
+                screenshotIndexByID = Dictionary(
+                    uniqueKeysWithValues: ids.enumerated().map { ($0.element, $0.offset) }
+                )
+            }
             let metadataChanged = currentScreenshotMetadata != screenshotMetadata
             currentMeetingID = parent.meetingID
             currentScreenshotIDs = ids
@@ -162,6 +168,7 @@ extension ScreenshotCollectionView {
             collectionView.dataSource = nil
             dataSource = nil
             currentScreenshotIDs.removeAll()
+            screenshotIndexByID.removeAll()
             currentScreenshotMetadata.removeAll()
             timestampByID.removeAll()
         }
@@ -271,7 +278,10 @@ extension ScreenshotCollectionView {
         }
 
         private func screenshot(for id: UUID) -> MeetingScreenshotRecord? {
-            parent.screenshots.first { $0.id == id }
+            guard let index = screenshotIndexByID[id],
+                  parent.screenshots.indices.contains(index),
+                  parent.screenshots[index].id == id else { return nil }
+            return parent.screenshots[index]
         }
 
         private func timestamp(for screenshot: MeetingScreenshotRecord) -> String {

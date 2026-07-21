@@ -26,6 +26,13 @@ private final class ScreenshotThumbnailButton: NSButton {
 final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     typealias ThumbnailProvider = @Sendable (UUID, Data, Int) async -> CGImage?
 
+    private enum ThumbnailLoadState {
+        case idle
+        case loading
+        case loaded
+        case failed
+    }
+
     struct Configuration {
         let screenshot: MeetingScreenshotRecord
         let timestamp: String
@@ -58,6 +65,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private let downloadButton = NSButton()
     private let deleteButton = NSButton()
     private var thumbnailTask: Task<Void, Never>?
+    private var thumbnailLoadState = ThumbnailLoadState.idle
     private var loadGeneration: UInt64 = 0
     private var activationHandler: (() -> Void)?
     private var downloadHandler: (() -> Void)?
@@ -149,7 +157,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         let screenshot = configuration.screenshot
         let shouldStartThumbnailLoad = representedScreenshotID != screenshot.id
             || representedImageData != screenshot.imageData
-            || (thumbnailButton.image == nil && thumbnailTask == nil)
+            || thumbnailLoadState == .idle
         representedScreenshotID = screenshot.id
         representedImageData = screenshot.imageData
         timestampLabel.stringValue = configuration.timestamp
@@ -206,6 +214,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private func releaseThumbnail() {
         thumbnailTask?.cancel()
         thumbnailTask = nil
+        thumbnailLoadState = .idle
         loadGeneration &+= 1
         thumbnailButton.image = nil
     }
@@ -249,6 +258,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
 
     private func startThumbnailLoad(for screenshot: MeetingScreenshotRecord, provider: @escaping ThumbnailProvider) {
         releaseThumbnail()
+        thumbnailLoadState = .loading
         let generation = loadGeneration
         let screenshotID = screenshot.id
         thumbnailTask = Task { [weak self] in
@@ -261,7 +271,12 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
                   self.loadGeneration == generation,
                   self.representedScreenshotID == screenshotID else { return }
             self.thumbnailTask = nil
-            guard !Task.isCancelled, let image else { return }
+            guard !Task.isCancelled else { return }
+            guard let image else {
+                self.thumbnailLoadState = .failed
+                return
+            }
+            self.thumbnailLoadState = .loaded
             self.thumbnailButton.image = NSImage(
                 cgImage: image,
                 size: NSSize(width: image.width, height: image.height)

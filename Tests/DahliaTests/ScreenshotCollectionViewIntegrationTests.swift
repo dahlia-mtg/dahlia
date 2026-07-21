@@ -9,6 +9,30 @@ import Testing
 @MainActor
 extension ScreenshotCollectionViewTests {
     @Test
+    func layoutPreparationAndInvalidationUseCollectionBoundsWidth() {
+        let layout = ScreenshotCollectionLayout()
+        let collectionView = NSCollectionView(frame: NSRect(x: 0, y: 0, width: 700, height: 360))
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
+        collectionView.collectionViewLayout = layout
+        scrollView.documentView = collectionView
+        collectionView.frame.size.width = 700
+
+        layout.prepare()
+
+        #expect(layout.itemSize == ScreenshotCollectionLayout.metrics(
+            containerWidth: collectionView.bounds.width,
+            minimumItemWidth: layout.minimumItemWidth
+        ).itemSize)
+        #expect(!layout.shouldInvalidateLayout(forBoundsChange: collectionView.bounds))
+        #expect(layout.shouldInvalidateLayout(forBoundsChange: NSRect(
+            x: 0,
+            y: 0,
+            width: collectionView.bounds.width + 1,
+            height: collectionView.bounds.height
+        )))
+    }
+
+    @Test
     func coordinatorAppliesSnapshotsPreservesUpdatesAndResetsMeetingScroll() async {
         let firstMeetingID = UUID.v7()
         let secondMeetingID = UUID.v7()
