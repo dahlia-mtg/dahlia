@@ -34,6 +34,37 @@ import Foundation
         }
 
         @Test
+        func detectedLanguageResolvesWithinCandidateLocales() async throws {
+            let detector = BatchLanguageDetectorStub(behavior: .detection("en"))
+
+            let resolution = try await BatchLanguageDetectionService.resolveLocale(
+                audioURL: URL(fileURLWithPath: "/tmp/audio.caf"),
+                recordedLocaleIdentifiers: ["ja_JP"],
+                supportedLocales: [Locale(identifier: "en_US"), Locale(identifier: "en_GB")],
+                detectionCandidateLocales: [Locale(identifier: "en_GB")],
+                languageDetector: detector
+            )
+
+            #expect(resolution.locale.identifier == "en_GB")
+        }
+
+        @Test
+        func inferenceFailureCanUseEnglishOutsideCandidateLocales() async throws {
+            let detector = BatchLanguageDetectorStub(behavior: .failure)
+
+            let resolution = try await BatchLanguageDetectionService.resolveLocale(
+                audioURL: URL(fileURLWithPath: "/tmp/audio.caf"),
+                recordedLocaleIdentifiers: ["ja_JP"],
+                supportedLocales: [Locale(identifier: "ja_JP"), Locale(identifier: "en_US")],
+                detectionCandidateLocales: [Locale(identifier: "ja_JP")],
+                languageDetector: detector
+            )
+
+            #expect(resolution.locale.identifier == "en_US")
+            #expect(resolution.fallback == .inferenceFailure)
+        }
+
+        @Test
         func usesIdentifierOrderWhenLanguageHasNoKnownFallback() async throws {
             let detector = BatchLanguageDetectorStub(behavior: .detection("fr"))
 

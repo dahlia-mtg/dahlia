@@ -199,6 +199,34 @@ import GRDB
         }
 
         @Test
+        func sourceEndDoesNotTrustStatusChangesAfterFinalization() async throws {
+            let fixture = try BatchAudioTestFixture(name: "SourceEndPreservesIntegrityCheckpoint")
+            defer { fixture.removeFiles() }
+            let ready = try await makeReadySegment(fixture: fixture)
+            let verifiedAt = try #require(ready.integrityVerifiedAt)
+            let finalURL = fixture.managedRootURL.appending(path: ready.finalRelativePath)
+            var bytes = try Data(contentsOf: finalURL)
+            let index = try #require(bytes.indices.dropLast(8).last)
+            bytes[index] ^= 0x01
+            try bytes.write(to: finalURL)
+            try FileManager.default.setAttributes(
+                [.modificationDate: verifiedAt.addingTimeInterval(-1)],
+                ofItemAtPath: finalURL.path
+            )
+
+            let store = try makeStore(fixture)
+            try await store.markSourceEnded(sessionId: fixture.session.id, source: .microphone)
+            let checkpointAfterSourceEnd = try await fixture.database.dbQueue.read { db in
+                try RecordingAudioSegmentRecord.fetchOne(db, key: ready.id)?.integrityVerifiedAt
+            }
+            #expect(checkpointAfterSourceEnd == verifiedAt)
+
+            await #expect(throws: (any Error).self) {
+                try await store.withVerifiedTranscribableSegments(sessionId: fixture.session.id) { _ in true }
+            }
+        }
+
+        @Test
         func unchangedReadySegmentReusesRecordingIntegrityCheckpoint() async throws {
             let fixture = try BatchAudioTestFixture(name: "ReuseIntegrityCheckpoint")
             defer { fixture.removeFiles() }

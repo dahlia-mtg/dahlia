@@ -128,6 +128,49 @@ import GRDB
         }
 
         @Test
+        func automaticDetectionUsesPersistedRegionalLocale() async throws {
+            let fixture = try BatchAudioTestFixture(
+                name: "AutomaticRegionalLocale",
+                endedAt: Date(timeIntervalSince1970: 1_776_384_001),
+                duration: 0.0125,
+                retainAudioAfterBatch: true
+            )
+            defer { fixture.removeFiles() }
+            try await createSegmentedRecording(
+                fixture: fixture,
+                automaticLanguageCandidates: BatchLanguageDetectionCandidateSnapshot(
+                    scope: .selected,
+                    languageIdentifiers: ["en"],
+                    localeIdentifiers: ["en_GB"]
+                )
+            )
+            let detector = SequenceCoordinatorLanguageDetector(detections: ["en", "en"])
+            let recognizer = CoordinatorSpeechRecognizer()
+            let coordinator = BatchTranscriptionCoordinator(
+                dbQueue: fixture.database.dbQueue,
+                managedRootURL: fixture.managedRootURL,
+                languageDetector: detector,
+                speechRecognizer: recognizer,
+                supportedLocalesProvider: {
+                    [Locale(identifier: "en_US"), Locale(identifier: "en_GB"), Locale(identifier: "ja_JP")]
+                },
+                onStateChange: { _ in }
+            )
+
+            await coordinator.enqueue(sessionId: fixture.session.id)
+            try await waitUntil {
+                (try? fixture.database.dbQueue.read { db in
+                    try RecordingSessionRecord.fetchOne(db, key: fixture.session.id)?.batchCompletedAt != nil
+                }) == true
+            }
+
+            let localeIdentifiers = await recognizer.localeIdentifiers
+            #expect(Set(localeIdentifiers) == ["en_GB"])
+            let allowedLanguageIdentifierSets = await detector.allowedLanguageIdentifierSets
+            #expect(allowedLanguageIdentifierSets.allSatisfy { $0 == ["en"] })
+        }
+
+        @Test
         func fallbackDiagnosticsAreReportedWhenSubsequentRecognitionFails() async throws {
             let fixture = try BatchAudioTestFixture(
                 name: "AutomaticLanguageFallbackFailure",
@@ -238,7 +281,12 @@ import GRDB
 
         private func createSegmentedRecording(
             fixture: BatchAudioTestFixture,
-            recordedLocale: Locale = Locale(identifier: "ja_JP")
+            recordedLocale: Locale = Locale(identifier: "ja_JP"),
+            automaticLanguageCandidates: BatchLanguageDetectionCandidateSnapshot = .init(
+                scope: .selected,
+                languageIdentifiers: ["en", "ja"],
+                localeIdentifiers: ["en_US", "ja_JP"]
+            )
         ) async throws {
             let configuration = RecordingAudioStore.Configuration(
                 targetSegmentDuration: .milliseconds(5),
@@ -272,10 +320,7 @@ import GRDB
                 }
                 session.batchLanguageDetectionMode = .automatic
                 session.batchSelectedLocaleIdentifier = nil
-                session.batchAutomaticLanguageCandidatesJSON = try BatchLanguageDetectionCandidateSnapshot(
-                    scope: .selected,
-                    languageIdentifiers: ["en", "ja"]
-                ).encoded()
+                session.batchAutomaticLanguageCandidatesJSON = try automaticLanguageCandidates.encoded()
                 try session.update(db)
             }
         }

@@ -37,7 +37,7 @@ enum BatchTranscriptionConfirmationService {
         return try await dbQueue.write { db in
             let session = try validSession(id: sessionId, db: db)
             let sessions: [RecordingSessionRecord]
-            if session.batchLastError?.nilIfBlank != nil, session.batchAttemptCount > 0 {
+            if session.batchLastError?.nilIfBlank != nil {
                 sessions = [session]
             } else {
                 guard session.batchLastError == nil,

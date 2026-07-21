@@ -450,20 +450,6 @@ actor RecordingAudioStore {
     }
 
     func markSourceEnded(sessionId: UUID, source: RecordingAudioSource, at now: Date = .now) async throws {
-        let readyRecords = try await dbQueue.read { db in
-            try RecordingAudioSegmentRecord
-                .filter(Column("recordingSessionId") == sessionId)
-                .filter(Column("source") == source.rawValue)
-                .filter(Column("state") == RecordingAudioSegmentState.ready.rawValue)
-                .fetchAll(db)
-        }
-        let integrityCheckpoints = try readyRecords.map { record in
-            let url = try safeURL(relativePath: record.finalRelativePath)
-            return try (
-                record.id,
-                Self.persistedStatusCheckpoint(Self.statusChangeDate(of: url))
-            )
-        }
         try await dbQueue.write { db in
             guard var progress = try RecordingAudioSourceProgressRecord.fetchOne(
                 db,
@@ -472,16 +458,6 @@ actor RecordingAudioStore {
             progress.captureState = .ended
             progress.updatedAt = now
             try progress.update(db)
-            for (segmentId, checkpoint) in integrityCheckpoints {
-                try db.execute(
-                    sql: """
-                    UPDATE recording_audio_segments
-                    SET integrityVerifiedAt = ?, updatedAt = ?
-                    WHERE id = ? AND state = ?
-                    """,
-                    arguments: [checkpoint, now, segmentId, RecordingAudioSegmentState.ready.rawValue]
-                )
-            }
         }
     }
 

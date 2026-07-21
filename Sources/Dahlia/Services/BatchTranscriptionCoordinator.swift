@@ -299,7 +299,9 @@ actor BatchTranscriptionCoordinator {
         } else {
             nil
         }
-        let allowedLanguageIdentifiers = automaticLanguageCandidates?.identifierSet
+        let automaticLanguageCandidateLocales = automaticLanguageCandidates.map {
+            BatchLanguageDetectionCandidateResolver.candidates(snapshot: $0, supportedLocales: supportedLocales).locales
+        }
         var workItems: [TranscriptionWorkItem] = []
         for verified in verifiedSegments {
             let ranges = try BatchTranscriptionAudioRangePlanner.ranges(
@@ -317,7 +319,8 @@ actor BatchTranscriptionCoordinator {
                             recordedLocaleIdentifiers: range.recordedLocaleIdentifiers,
                             languageDetectionMode: job.session.batchLanguageDetectionMode,
                             supportedLocales: supportedLocales,
-                            allowedLanguageIdentifiers: allowedLanguageIdentifiers,
+                            automaticLanguageCandidateLocales: automaticLanguageCandidateLocales,
+                            allowedLanguageIdentifiers: automaticLanguageCandidates?.identifierSet,
                             source: verified.segment.source,
                             recordingSessionId: job.session.id,
                             recordingStartTime: job.session.startedAt,

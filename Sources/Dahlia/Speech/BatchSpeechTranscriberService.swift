@@ -96,6 +96,7 @@ enum BatchSpeechTranscriberService {
             audioURL: audioURL,
             recordedLocaleIdentifiers: request.recordedLocaleIdentifiers,
             supportedLocales: request.supportedLocales,
+            detectionCandidateLocales: request.automaticLanguageCandidateLocales,
             languageDetector: languageDetector,
             allowedLanguageIdentifiers: request.allowedLanguageIdentifiers
         )

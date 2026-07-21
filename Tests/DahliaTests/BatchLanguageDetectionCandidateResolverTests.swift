@@ -18,14 +18,16 @@ import Foundation
         }
 
         @Test
-        func selectedScopeNormalizesEnabledRegions() {
+        func selectedScopePreservesEnabledRegions() {
             let candidates = BatchLanguageDetectionCandidateResolver.candidates(
                 scope: .selected,
-                enabledLocaleIdentifiers: ["en_US", "en_GB", "ja_JP"],
-                supportedLocales: locales("en_US", "fr_CA", "ja_JP")
+                enabledLocaleIdentifiers: ["en_GB", "ja_JP"],
+                supportedLocales: locales("en_US", "en_GB", "fr_CA", "ja_JP")
             )
 
             #expect(candidates.snapshot.identifierSet == ["en", "ja"])
+            #expect(candidates.snapshot.localeIdentifiers == ["en_GB", "ja_JP"])
+            #expect(candidates.locales.map(\.identifier) == ["en_GB", "ja_JP"])
         }
 
         @Test
@@ -67,13 +69,41 @@ import Foundation
         func candidateSnapshotRoundTripsScopeAndSortedIdentifiers() throws {
             let snapshot = BatchLanguageDetectionCandidateSnapshot(
                 scope: .all,
-                languageIdentifiers: ["ja", "en"]
+                languageIdentifiers: ["ja", "en"],
+                localeIdentifiers: ["ja_JP", "en_GB"]
             )
 
             let decoded = try BatchLanguageDetectionCandidateSnapshot.decode(snapshot.encoded())
 
             #expect(decoded == snapshot)
             #expect(decoded.languageIdentifiers == ["en", "ja"])
+            #expect(decoded.localeIdentifiers == ["ja_JP", "en_GB"])
+        }
+
+        @Test
+        func persistedSnapshotPrefersExactRegionalLocales() {
+            let snapshot = BatchLanguageDetectionCandidateSnapshot(
+                scope: .selected,
+                languageIdentifiers: ["en"],
+                localeIdentifiers: ["en_GB"]
+            )
+
+            let candidates = BatchLanguageDetectionCandidateResolver.candidates(
+                snapshot: snapshot,
+                supportedLocales: locales("en_US", "en_GB")
+            )
+
+            #expect(candidates.locales.map(\.identifier) == ["en_GB"])
+        }
+
+        @Test
+        func decodesLegacySnapshotWithoutRegionalLocales() throws {
+            let snapshot = try BatchLanguageDetectionCandidateSnapshot.decode(
+                #"{"scope":"selected","languageIdentifiers":["en","ja"]}"#
+            )
+
+            #expect(snapshot.identifierSet == ["en", "ja"])
+            #expect(snapshot.localeIdentifiers.isEmpty)
         }
 
         private func locales(_ identifiers: String...) -> [Locale] {

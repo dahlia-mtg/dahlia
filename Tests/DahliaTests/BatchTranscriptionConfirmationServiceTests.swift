@@ -95,10 +95,15 @@ import GRDB
             #expect(result.1.map(\.localeIdentifier) == ["en_US"])
         }
 
-        @Test
-        func automaticConfirmationPreservesLocaleAndFailedRetryBecomesRecoverableManual() async throws {
+        @Test(arguments: [
+            0,
+            BatchTranscriptionCoordinator.maximumAutomaticAttemptCount,
+        ])
+        func automaticConfirmationPreservesLocaleAndFailedRetryBecomesRecoverableManual(
+            failedAttemptCount: Int
+        ) async throws {
             let fixture = try BatchAudioTestFixture(
-                name: "AutomaticConfirmation",
+                name: "AutomaticConfirmation-(failedAttemptCount)",
                 endedAt: Date(timeIntervalSince1970: 1_776_384_030),
                 duration: 30
             )
@@ -142,7 +147,7 @@ import GRDB
 
             try await verifyAutomaticConfirmation(fixture)
 
-            try await markBatchFailed(fixture)
+            try await markBatchFailed(fixture, attemptCount: failedAttemptCount)
 
             _ = try await BatchTranscriptionConfirmationService.confirm(
                 sessionId: fixture.session.id,
@@ -165,21 +170,24 @@ import GRDB
             #expect(!retrySession.retainAudioAfterBatch)
             #expect(retrySession.batchLastError == nil)
             #expect(retrySession.batchFailureKind == nil)
-            #expect(retrySession.batchAttemptCount == BatchTranscriptionCoordinator.maximumAutomaticAttemptCount)
+            #expect(retrySession.batchAttemptCount == failedAttemptCount)
             #expect(retrySession.batchLastAttemptAt != nil)
             #expect(BatchTranscriptionCoordinator.shouldAutomaticallyRetry(retrySession))
             #expect(retryResult.1.map(\.localeIdentifier) == ["en_US"])
         }
 
-        private func markBatchFailed(_ fixture: BatchAudioTestFixture) async throws {
+        private func markBatchFailed(
+            _ fixture: BatchAudioTestFixture,
+            attemptCount: Int
+        ) async throws {
             try await fixture.database.dbQueue.write { db in
                 guard var session = try RecordingSessionRecord.fetchOne(db, key: fixture.session.id) else {
                     throw CocoaError(.fileNoSuchFile)
                 }
                 session.batchLastError = L10n.batchLanguageDetectionFailed
-                session.batchFailureKind = .transcription
+                session.batchFailureKind = attemptCount == 0 ? .recordingStorage : .transcription
                 session.batchLastAttemptAt = fixture.now
-                session.batchAttemptCount = BatchTranscriptionCoordinator.maximumAutomaticAttemptCount
+                session.batchAttemptCount = attemptCount
                 try session.update(db)
             }
         }

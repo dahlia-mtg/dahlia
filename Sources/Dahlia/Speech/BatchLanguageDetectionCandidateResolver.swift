@@ -3,12 +3,25 @@ import Foundation
 struct BatchLanguageDetectionCandidateSnapshot: Codable, Equatable, Sendable {
     let scope: TranscriptionLanguageScope
     let languageIdentifiers: [String]
+    let localeIdentifiers: [String]
 
-    init(scope: TranscriptionLanguageScope, languageIdentifiers: Set<String>) {
+    init(
+        scope: TranscriptionLanguageScope,
+        languageIdentifiers: Set<String>,
+        localeIdentifiers: [String] = []
+    ) {
         self.scope = scope
-        self.languageIdentifiers = Set(
+        let normalizedLanguageIdentifiers = Set(
             languageIdentifiers.compactMap(WhisperLanguageIdentifier.supportedCanonicalIdentifier)
-        ).sorted()
+        )
+        self.languageIdentifiers = normalizedLanguageIdentifiers.sorted()
+        var includedLanguageIdentifiers: Set<String> = []
+        self.localeIdentifiers = localeIdentifiers.filter { localeIdentifier in
+            guard let languageIdentifier = WhisperLanguageIdentifier.supportedCanonicalIdentifier(
+                from: localeIdentifier
+            ), normalizedLanguageIdentifiers.contains(languageIdentifier) else { return false }
+            return includedLanguageIdentifiers.insert(languageIdentifier).inserted
+        }
     }
 
     var identifierSet: Set<String> { Set(languageIdentifiers) }
@@ -25,8 +38,22 @@ struct BatchLanguageDetectionCandidateSnapshot: Codable, Equatable, Sendable {
         guard let data = encoded.data(using: .utf8) else {
             throw CocoaError(.fileReadInapplicableStringEncoding)
         }
-        let decoded = try JSONDecoder().decode(Self.self, from: data)
-        return Self(scope: decoded.scope, languageIdentifiers: Set(decoded.languageIdentifiers))
+        return try JSONDecoder().decode(Self.self, from: data)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case scope
+        case languageIdentifiers
+        case localeIdentifiers
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            scope: container.decode(TranscriptionLanguageScope.self, forKey: .scope),
+            languageIdentifiers: Set(container.decode([String].self, forKey: .languageIdentifiers)),
+            localeIdentifiers: container.decodeIfPresent([String].self, forKey: .localeIdentifiers) ?? []
+        )
     }
 }
 
@@ -54,7 +81,8 @@ enum BatchLanguageDetectionCandidateResolver {
         return BatchLanguageDetectionCandidates(
             snapshot: BatchLanguageDetectionCandidateSnapshot(
                 scope: scope,
-                languageIdentifiers: languageIdentifiers
+                languageIdentifiers: languageIdentifiers,
+                localeIdentifiers: candidateLocales.map(\.identifier)
             ),
             locales: candidateLocales
         )
@@ -65,12 +93,20 @@ enum BatchLanguageDetectionCandidateResolver {
         supportedLocales: [Locale]
     ) -> BatchLanguageDetectionCandidates {
         var remainingIdentifiers = snapshot.identifierSet
-        let candidateLocales = supportedLocales.filter { locale in
+        var candidateLocales: [Locale] = []
+        for localeIdentifier in snapshot.localeIdentifiers {
+            guard let locale = supportedLocales.first(where: { $0.identifier == localeIdentifier }),
+                  let languageIdentifier = WhisperLanguageIdentifier.supportedCanonicalIdentifier(
+                      from: locale.identifier
+                  ), remainingIdentifiers.remove(languageIdentifier) != nil else { continue }
+            candidateLocales.append(locale)
+        }
+        candidateLocales.append(contentsOf: supportedLocales.filter { locale in
             guard let languageIdentifier = WhisperLanguageIdentifier.supportedCanonicalIdentifier(
                 from: locale.identifier
             ) else { return false }
             return remainingIdentifiers.remove(languageIdentifier) != nil
-        }
+        })
         return BatchLanguageDetectionCandidates(snapshot: snapshot, locales: candidateLocales)
     }
 }

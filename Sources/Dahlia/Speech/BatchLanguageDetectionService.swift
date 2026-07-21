@@ -12,6 +12,7 @@ enum BatchLanguageDetectionService {
         audioURL: URL,
         recordedLocaleIdentifiers: [String],
         supportedLocales: [Locale],
+        detectionCandidateLocales: [Locale]? = nil,
         languageDetector: any BatchLanguageDetecting,
         allowedLanguageIdentifiers: Set<String>? = nil
     ) async throws -> BatchLanguageResolution {
@@ -40,7 +41,7 @@ enum BatchLanguageDetectionService {
             if let locale = TranscriptionLocaleResolver.locale(
                 forDetectedLanguageIdentifier: trimmedIdentifier,
                 recordedLocaleIdentifiers: recordedLocaleIdentifiers,
-                supportedLocales: supportedLocales
+                supportedLocales: detectionCandidateLocales ?? supportedLocales
             ) {
                 return BatchLanguageResolution(locale: locale, fallback: nil)
             }
