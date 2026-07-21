@@ -28,6 +28,7 @@ struct CodexChatConfigurationButton: View {
                         showsModels: $showsModels,
                         onDismiss: dismissConfiguration
                     )
+                    .codexChatDismissOnOutsideClick(perform: dismissConfiguration)
                     .offset(
                         x: CodexChatDesign.controlSize,
                         y: -(CodexChatDesign.controlSize + 8)
