@@ -8,13 +8,15 @@ struct CodexChatImageAttachment: Identifiable, Equatable, Sendable {
     let id: UUID
     let data: Data
     let mimeType: String
-    let dataURI: String
+
+    var dataURI: String {
+        "data:\(mimeType);base64,\(data.base64EncodedString())"
+    }
 
     init(id: UUID = UUID.v7(), data: Data, mimeType: String) {
         self.id = id
         self.data = data
         self.mimeType = mimeType
-        dataURI = "data:\(mimeType);base64,\(data.base64EncodedString())"
     }
 
     init?(id: UUID = UUID.v7(), dataURI: String) {
@@ -30,7 +32,6 @@ struct CodexChatImageAttachment: Identifiable, Equatable, Sendable {
               let detectedMIMEType = ImageEncoder.mimeType(for: data) else { return nil }
         self.id = id
         self.data = data
-        self.dataURI = dataURI
         mimeType = detectedMIMEType
     }
 }

@@ -65,6 +65,7 @@ final class CodexChatSessionModel: Identifiable {
     @ObservationIgnored private var didSendLiveModeContext = false
     @ObservationIgnored private var liveModeGeneration: UInt = 0
     @ObservationIgnored private var activeSteerIsLiveTranscript = false
+    @ObservationIgnored private var activeSteeringManualSubmission: CodexChatManualSubmission?
     @ObservationIgnored private var activeTurnSupportsImages: Bool?
     @ObservationIgnored private var activeSubmissionID: UUID?
     @ObservationIgnored private var activeResponseID: String?
@@ -174,7 +175,9 @@ final class CodexChatSessionModel: Identifiable {
             composerSnapshot: composerSnapshot
         )
         if isGenerating {
-            guard !pendingManualInputs.contains(where: { $0.composerSnapshot == composerSnapshot }) else { return }
+            let isDuplicate = activeSteeringManualSubmission?.composerSnapshot == composerSnapshot
+                || pendingManualInputs.contains(where: { $0.composerSnapshot == composerSnapshot })
+            guard !isDuplicate else { return }
             enqueueManualInput(submission)
             return
         }
@@ -844,6 +847,7 @@ private extension CodexChatSessionModel {
         } else if !pendingManualInputs.isEmpty {
             guard pendingManualInputs[0].images.isEmpty || selectedModelSupportsImages else {
                 noticeMessage = L10n.chatModelDoesNotSupportImages
+                sendNextLiveTranscriptIfPossible()
                 return
             }
             let submission = pendingManualInputs.removeFirst()
@@ -858,16 +862,12 @@ private extension CodexChatSessionModel {
     }
 
     func startSteeringPendingInputIfPossible() {
-        if let submission = pendingManualInputs.first,
-           !submission.images.isEmpty,
-           activeTurnSupportsImages != true {
-            return
-        }
         guard let backendThreadID,
               let activeTurnID,
-              let input = dequeuePendingSteerInput() else { return }
+              let input = nextPendingSteerInput() else { return }
         let liveModeGenerationSnapshot = liveModeGeneration
         activeSteerIsLiveTranscript = input.isLiveTranscript
+        activeSteeringManualSubmission = input.manualSubmission
         steerTask = Task { [weak self] in
             await self?.steer(
                 input,
@@ -878,10 +878,23 @@ private extension CodexChatSessionModel {
         }
     }
 
+    func nextPendingSteerInput() -> CodexChatPendingInput? {
+        if let submission = pendingManualInputs.first,
+           !submission.images.isEmpty,
+           activeTurnSupportsImages != true {
+            return dequeuePendingLiveTranscript()
+        }
+        return dequeuePendingSteerInput()
+    }
+
     func dequeuePendingSteerInput() -> CodexChatPendingInput? {
         if !pendingManualInputs.isEmpty {
             return .manual(pendingManualInputs.removeFirst())
         }
+        return dequeuePendingLiveTranscript()
+    }
+
+    func dequeuePendingLiveTranscript() -> CodexChatPendingInput? {
         guard isLiveModeEnabled,
               failedLiveTranscript == nil,
               let transcript = pendingLiveTranscript else { return nil }
@@ -900,6 +913,7 @@ private extension CodexChatSessionModel {
         defer {
             steerTask = nil
             activeSteerIsLiveTranscript = false
+            activeSteeringManualSubmission = nil
             processPendingInputIfPossible()
         }
         do {

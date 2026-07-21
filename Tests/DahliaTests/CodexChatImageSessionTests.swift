@@ -83,6 +83,67 @@ import Foundation
         }
 
         @Test
+        func repeatedSendDoesNotDuplicateManualSubmissionWhileSteering() async throws {
+            let service = ImageChatService(supportsImages: true, sendBehavior: .blockSteer)
+            let session = makeSession(service: service)
+            let png = try testPNGData()
+
+            await session.prepare()
+            session.draft = "Start"
+            session.sendDraft()
+            await waitUntil { session.activeTurnID != nil }
+
+            session.draft = "Follow up"
+            await session.addImageData([png])
+            session.sendDraft()
+            await waitUntilAsync { await service.isSteerWaiting }
+
+            session.sendDraft()
+            await service.resumeDelayedSteer()
+            await waitUntilAsync { await service.steeredInputs.count == 1 }
+            for _ in 0 ..< 10 {
+                await Task.yield()
+            }
+
+            #expect(await service.steeredInputs.count == 1)
+            await service.completeBlockedTurn()
+            await waitUntil { !session.isGenerating }
+        }
+
+        @Test
+        func incompatiblePendingImageDoesNotBlockLiveTranscript() async throws {
+            let service = ImageChatService(supportsImages: true, sendBehavior: .delayFirstWithoutTurn)
+            let session = makeSession(service: service)
+            let png = try testPNGData()
+
+            await session.prepare()
+            session.toggleLiveMode()
+            session.draft = "Start"
+            session.sendDraft()
+            await waitUntilAsync { await service.isSendWaiting }
+
+            session.draft = "Image pending"
+            await session.addImageData([png])
+            session.sendDraft()
+            session.selectModel("text-only-model")
+            session.receiveFinalizedLiveTranscript("Live speech")
+            await service.resumeDelayedSend()
+
+            await waitUntilAsync { await service.sentInputs.count == 2 }
+            await waitUntil { !session.isGenerating }
+            let liveInputs = await service.sentInputs[1]
+            #expect(liveInputs.contains { input in
+                input.textValue?.contains("Live speech") == true
+            })
+            #expect(!liveInputs.contains { $0.isImage })
+
+            session.selectModel("default-model")
+            await waitUntilAsync { await service.sentInputs.count == 3 }
+            await waitUntil { !session.isGenerating }
+            #expect(await service.sentInputs[2].contains { $0.isImage })
+        }
+
+        @Test
         func meetingReferenceTextPrecedesMultipleImages() async throws {
             let service = ImageChatService(supportsImages: true)
             let session = makeSession(service: service)
@@ -187,7 +248,9 @@ import Foundation
             case complete
             case failFirst
             case delayFirst
+            case delayFirstWithoutTurn
             case block
+            case blockSteer
         }
 
         let supportsImages: Bool
@@ -196,9 +259,11 @@ import Foundation
         private(set) var steeredInputs: [[CodexAppServerInput]] = []
         private(set) var threadNames: [String] = []
         private var delayedSendContinuation: CheckedContinuation<Void, Never>?
+        private var delayedSteerContinuation: CheckedContinuation<Void, Never>?
         private var blockedTurnContinuation: AsyncThrowingStream<CodexChatTurnEvent, any Error>.Continuation?
 
         var isSendWaiting: Bool { delayedSendContinuation != nil }
+        var isSteerWaiting: Bool { delayedSteerContinuation != nil }
 
         init(supportsImages: Bool, sendBehavior: SendBehavior = .complete) {
             self.supportsImages = supportsImages
@@ -270,14 +335,16 @@ import Foundation
             if sendBehavior == .failFirst, sentInputs.count == 1 {
                 throw CodexAppServerError.invalidProtocolResponse
             }
-            if sendBehavior == .delayFirst, sentInputs.count == 1 {
+            if (sendBehavior == .delayFirst || sendBehavior == .delayFirstWithoutTurn), sentInputs.count == 1 {
                 await withCheckedContinuation { continuation in
                     delayedSendContinuation = continuation
                 }
             }
             let (stream, continuation) = AsyncThrowingStream<CodexChatTurnEvent, any Error>.makeStream()
-            continuation.yield(.started(turnID: "turn-image"))
-            if sendBehavior == .block {
+            if sendBehavior != .delayFirstWithoutTurn || sentInputs.count != 1 {
+                continuation.yield(.started(turnID: "turn-image"))
+            }
+            if sendBehavior == .block || sendBehavior == .blockSteer {
                 blockedTurnContinuation = continuation
             } else {
                 continuation.yield(.completed(itemID: nil, text: nil))
@@ -288,6 +355,11 @@ import Foundation
 
         func steer(threadID _: String, turnID _: String, inputs: [CodexAppServerInput]) async throws {
             steeredInputs.append(inputs)
+            if sendBehavior == .blockSteer {
+                await withCheckedContinuation { continuation in
+                    delayedSteerContinuation = continuation
+                }
+            }
         }
         func interrupt(threadID _: String, turnID _: String) async {}
         func unsubscribe(threadID _: String) async {}
@@ -295,6 +367,11 @@ import Foundation
         func resumeDelayedSend() {
             delayedSendContinuation?.resume()
             delayedSendContinuation = nil
+        }
+
+        func resumeDelayedSteer() {
+            delayedSteerContinuation?.resume()
+            delayedSteerContinuation = nil
         }
 
         func completeBlockedTurn() {
