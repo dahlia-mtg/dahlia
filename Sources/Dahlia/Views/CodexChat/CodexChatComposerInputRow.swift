@@ -36,6 +36,7 @@ struct CodexChatComposerInputRow: View {
                             onAddMeetingReference: onShowMeetingPicker,
                             onSelectMeeting: onSelectMeeting
                         )
+                        .codexChatDismissOnOutsideClick(perform: onExitCommand)
                         .offset(y: -(CodexChatDesign.controlSize + 8))
                         .zIndex(1)
                     }
