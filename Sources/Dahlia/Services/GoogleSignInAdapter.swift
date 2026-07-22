@@ -79,6 +79,7 @@ enum GoogleSignInError: LocalizedError {
     case missingPresentingWindow
     case noPreviousSignIn
     case invalidAuthorizationResponse
+    case authorizationTimedOut
     case invalidTokenResponse
     case stateMismatch
     case authorizationFailed(String)
@@ -91,6 +92,8 @@ enum GoogleSignInError: LocalizedError {
             L10n.googleAccountMissingPresentingWindow
         case .noPreviousSignIn:
             L10n.googleAccountNoPreviousSession
+        case .authorizationTimedOut:
+            L10n.googleAccountAuthorizationTimedOut
         case .invalidAuthorizationResponse, .invalidTokenResponse, .stateMismatch:
             L10n.googleAccountUnexpectedResponse
         case let .authorizationFailed(message):
@@ -301,6 +304,8 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
     }
 
     private func clearDisconnectPending() {
+        // Explicit sign-in re-enables only the service the user just authorized.
+        // The other service remains blocked until it receives its own consent.
         UserDefaults.standard.removeObject(forKey: Self.disconnectPendingUserDefaultsKey(for: sessionKind))
     }
 
@@ -498,13 +503,16 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.formEncoded(["token": token]).data(using: .utf8)
-        let (_, response) = try await urlSession.data(for: request)
-        try Self.validateRevocationResponse(response)
+        let (data, response) = try await urlSession.data(for: request)
+        try Self.validateRevocationResponse(response, data: data)
     }
 
-    static func validateRevocationResponse(_ response: URLResponse) throws {
+    static func validateRevocationResponse(_ response: URLResponse, data: Data = Data()) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GoogleSignInError.invalidAuthorizationResponse
+        }
+        if httpResponse.statusCode == 400, responseDetail(from: data) == "invalid_token" {
+            return
         }
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
             throw GoogleSignInError.authorizationFailed(
@@ -674,8 +682,27 @@ private extension CharacterSet {
     }()
 }
 
+enum GoogleOAuthLoopbackRequest: Equatable {
+    case callback(URL)
+    case unrelated
+    case invalid
+}
+
+enum GoogleOAuthLoopbackRequestParser {
+    static func parse(_ request: String) -> GoogleOAuthLoopbackRequest {
+        guard let firstLine = request.split(separator: "\r\n").first else { return .invalid }
+        let components = firstLine.split(separator: " ")
+        guard components.count >= 2, components[0] == "GET" else { return .invalid }
+        guard let url = URL(string: "http://127.0.0.1\(components[1])") else { return .invalid }
+        guard url.path == "/oauth2redirect" else { return .unrelated }
+        return .callback(url)
+    }
+}
+
 private final class LoopbackRedirectServer: @unchecked Sendable {
     private static let callbackTimeout: TimeInterval = 300
+    private static let maximumRequestLength = 16384
+    private static let headerTerminator = Data("\r\n\r\n".utf8)
 
     private(set) var redirectURL: URL
 
@@ -684,6 +711,7 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
     private var callbackContinuation: CheckedContinuation<URL, Error>?
     private var pendingCallbackResult: Result<URL, Error>?
     private var callbackCompleted = false
+    private var callbackTimeoutWorkItem: DispatchWorkItem?
     private var readinessContinuation: CheckedContinuation<Void, Error>?
 
     init() async throws {
@@ -743,9 +771,11 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
                         continuation.resume(throwing: GoogleSignInError.invalidAuthorizationResponse)
                     } else {
                         callbackContinuation = continuation
-                        queue.asyncAfter(deadline: .now() + Self.callbackTimeout) { [weak self] in
-                            self?.completeCallback(with: .failure(GoogleSignInError.invalidAuthorizationResponse))
+                        let timeoutWorkItem = DispatchWorkItem { [weak self] in
+                            self?.completeCallback(with: .failure(GoogleSignInError.authorizationTimedOut))
                         }
+                        callbackTimeoutWorkItem = timeoutWorkItem
+                        queue.asyncAfter(deadline: .now() + Self.callbackTimeout, execute: timeoutWorkItem)
                     }
                 }
             }
@@ -758,28 +788,52 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
 
     private func handle(connection: NWConnection) {
         connection.start(queue: queue)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, _, error in
+        receiveRequest(on: connection, accumulatedData: Data())
+    }
+
+    private func receiveRequest(on connection: NWConnection, accumulatedData: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: Self.maximumRequestLength) { [weak self] data, _, isComplete, error in
             guard let self else { return }
-            if error != nil {
+            if let error {
                 connection.cancel()
+                completeCallback(with: .failure(error))
                 return
             }
 
-            guard let data,
-                  let request = String(data: data, encoding: .utf8),
-                  let url = parseRequestURL(from: request)
-            else {
+            var requestData = accumulatedData
+            if let data { requestData.append(data) }
+            guard requestData.count <= Self.maximumRequestLength else {
+                reply(to: connection, status: "413 Payload Too Large", body: "OAuth redirect request is too large.")
+                completeCallback(with: .failure(GoogleSignInError.invalidAuthorizationResponse))
+                return
+            }
+            guard requestData.contains(Self.headerTerminator) || isComplete else {
+                receiveRequest(on: connection, accumulatedData: requestData)
+                return
+            }
+            guard let request = String(data: requestData, encoding: .utf8) else {
                 reply(to: connection, status: "400 Bad Request", body: "Invalid OAuth redirect.")
+                completeCallback(with: .failure(GoogleSignInError.invalidAuthorizationResponse))
                 return
             }
 
-            reply(to: connection, status: "200 OK", body: "Dahlia authorization completed. You can close this window.")
-            completeCallback(with: .success(url))
+            switch GoogleOAuthLoopbackRequestParser.parse(request) {
+            case let .callback(url):
+                reply(to: connection, status: "200 OK", body: "Dahlia authorization completed. You can close this window.")
+                completeCallback(with: .success(url))
+            case .unrelated:
+                reply(to: connection, status: "404 Not Found", body: "Not found.")
+            case .invalid:
+                reply(to: connection, status: "400 Bad Request", body: "Invalid OAuth redirect.")
+                completeCallback(with: .failure(GoogleSignInError.invalidAuthorizationResponse))
+            }
         }
     }
 
     private func completeCallback(with result: Result<URL, Error>) {
         guard !callbackCompleted, pendingCallbackResult == nil else { return }
+        callbackTimeoutWorkItem?.cancel()
+        callbackTimeoutWorkItem = nil
         if let continuation = callbackContinuation {
             callbackContinuation = nil
             callbackCompleted = true
@@ -788,16 +842,6 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
             pendingCallbackResult = result
         }
         shutdown()
-    }
-
-    private func parseRequestURL(from request: String) -> URL? {
-        guard let firstLine = request.split(separator: "\r\n").first else { return nil }
-        let components = firstLine.split(separator: " ")
-        guard components.count >= 2, components[0] == "GET" else { return nil }
-        let path = String(components[1])
-        guard let url = URL(string: "http://127.0.0.1\(path)"),
-              url.path == "/oauth2redirect" else { return nil }
-        return url
     }
 
     private func reply(to connection: NWConnection, status: String, body: String) {

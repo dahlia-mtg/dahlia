@@ -90,10 +90,12 @@ struct GoogleCalendarConfigurationTests {
 
     @Test
     func disconnectSuppressionIsScopedPerGoogleService() {
-        #expect(
-            GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .calendar)
-                != GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .drive)
-        )
+        let calendarKey = GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .calendar)
+        let driveKey = GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .drive)
+
+        #expect(calendarKey != driveKey)
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: true))
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: true, hasStoredSession: true) == false)
     }
 
     @Test
@@ -101,10 +103,18 @@ struct GoogleCalendarConfigurationTests {
         let url = try #require(URL(string: "https://oauth2.googleapis.com/revoke"))
         let success = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
         let failure = try #require(HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil))
+        let serverFailure = try #require(HTTPURLResponse(url: url, statusCode: 503, httpVersion: nil, headerFields: nil))
 
         try GoogleSignInAdapter.validateRevocationResponse(success)
+        try GoogleSignInAdapter.validateRevocationResponse(
+            failure,
+            data: Data(#"{"error":"invalid_token"}"#.utf8)
+        )
         #expect(throws: GoogleSignInError.self) {
             try GoogleSignInAdapter.validateRevocationResponse(failure)
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(serverFailure)
         }
         #expect(throws: GoogleSignInError.self) {
             try GoogleSignInAdapter.validateRevocationResponse(URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil))
@@ -129,16 +139,18 @@ struct GoogleCalendarConfigurationTests {
             protectedStatus: errSecItemNotFound,
             legacyStatus: errSecItemNotFound
         )
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecMissingEntitlement,
+            legacyStatus: errSecSuccess
+        )
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecInternalComponent,
+            legacyStatus: errSecItemNotFound
+        )
     }
 
     @Test
     func keychainDeletionRejectsUnexpectedFailures() {
-        #expect(throws: KeychainService.KeychainError.self) {
-            try KeychainService.validateDeletionStatuses(
-                protectedStatus: errSecMissingEntitlement,
-                legacyStatus: errSecSuccess
-            )
-        }
         #expect(throws: KeychainService.KeychainError.self) {
             try KeychainService.validateDeletionStatuses(
                 protectedStatus: errSecAuthFailed,
@@ -151,6 +163,23 @@ struct GoogleCalendarConfigurationTests {
                 legacyStatus: errSecAuthFailed
             )
         }
+    }
+
+    @Test
+    func loopbackRequestParserDistinguishesCallbacksFromUnrelatedRequests() throws {
+        let callback = GoogleOAuthLoopbackRequestParser.parse(
+            "GET /oauth2redirect?code=abc&state=expected HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        )
+        let expectedURL = try #require(URL(string: "http://127.0.0.1/oauth2redirect?code=abc&state=expected"))
+
+        #expect(callback == .callback(expectedURL))
+        #expect(GoogleOAuthLoopbackRequestParser.parse("GET /favicon.ico HTTP/1.1\r\n\r\n") == .unrelated)
+        #expect(GoogleOAuthLoopbackRequestParser.parse("POST /oauth2redirect HTTP/1.1\r\n\r\n") == .invalid)
+    }
+
+    @Test
+    func callbackTimeoutHasAnActionableLocalizedMessage() {
+        #expect(GoogleSignInError.authorizationTimedOut.errorDescription == L10n.googleAccountAuthorizationTimedOut)
     }
 
     @Test

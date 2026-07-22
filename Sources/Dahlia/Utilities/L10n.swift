@@ -1166,6 +1166,10 @@ enum L10n {
     ) }
     static var googleCalendarNoPreviousSession: String { String(localized: "No previous Google Calendar session was found.", bundle: bundle) }
     static var googleAccountNoPreviousSession: String { String(localized: "No previous Google session was found.", bundle: bundle) }
+    static var googleAccountAuthorizationTimedOut: String { String(
+        localized: "Google sign-in timed out. Please try again.",
+        bundle: bundle
+    ) }
     static var googleCalendarClientSecretMissingMessage: String { String(
         localized: "This Google OAuth client requires a client secret. Enter the value from Google Cloud Console in Developer Settings and relaunch Dahlia.",
         bundle: bundle

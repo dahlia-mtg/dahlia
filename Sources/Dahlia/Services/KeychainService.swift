@@ -94,6 +94,7 @@ enum KeychainService {
     static func validateDeletionStatuses(protectedStatus: OSStatus, legacyStatus: OSStatus) throws {
         let protectedSucceeded = protectedStatus == errSecSuccess
             || protectedStatus == errSecItemNotFound
+            || fallbackErrors.contains(protectedStatus)
         guard protectedSucceeded else {
             throw KeychainError.unexpectedStatus(protectedStatus)
         }

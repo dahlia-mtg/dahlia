@@ -609,6 +609,7 @@
 "Could not configure the Google Drive export folder." = "Could not configure the Google Drive export folder.";
 "Open Cloud Storage Settings" = "Open Cloud Storage Settings";
 "No previous Google session was found." = "No previous Google session was found.";
+"Google sign-in timed out. Please try again." = "Google sign-in timed out. Please try again.";
 "Set a Google OAuth client ID in Developer Settings before connecting Google services." = "Set a Google OAuth client ID in Developer Settings before connecting Google services.";
 "Unexpected response from Google" = "Unexpected response from Google";
 "Google HTTP %lld: %@" = "Google HTTP %lld: %@";
