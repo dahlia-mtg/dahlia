@@ -16,16 +16,16 @@ actor RecordingSessionController {
     struct SourceConfiguration: Equatable {
         let source: RecordingAudioSource
         let captureDeviceID: AudioDeviceID?
-        let captureBufferSize: AVAudioFrameCount
+        let forcesEchoCancellationForExternalMicrophone: Bool
 
         init(
             source: RecordingAudioSource,
             captureDeviceID: AudioDeviceID? = nil,
-            captureBufferSize: AVAudioFrameCount = 4096
+            forcesEchoCancellationForExternalMicrophone: Bool = false
         ) {
             self.source = source
             self.captureDeviceID = captureDeviceID
-            self.captureBufferSize = captureBufferSize
+            self.forcesEchoCancellationForExternalMicrophone = forcesEchoCancellationForExternalMicrophone
         }
     }
 

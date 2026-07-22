@@ -11,12 +11,14 @@ struct DefaultAudioCaptureSessionFactory: AudioCaptureSessionFactory {
 
     func makeSession(
         for pipeline: AudioSourcePipeline,
+        onWarning: @escaping AudioCaptureWarningHandler,
         onUnexpectedStop: @escaping AudioCaptureUnexpectedStopHandler
     ) -> any AudioCaptureSession {
         switch pipeline.source {
         case .microphone:
             MicrophoneAudioCaptureSession(
                 pipeline: pipeline,
+                onWarning: onWarning,
                 onUnexpectedStop: onUnexpectedStop
             )
         case .system:
