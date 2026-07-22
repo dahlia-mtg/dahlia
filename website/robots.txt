@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dahlia-org.github.io/sitemap.xml
+Sitemap: https://dahlia-ai.org/sitemap.xml

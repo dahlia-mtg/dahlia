@@ -68,8 +68,10 @@ final class GoogleCalendarStore: ObservableObject {
         self.selectedCalendarIDs = Self.loadSelectedCalendarIDs(from: userDefaults)
         self.state = signInProvider.isConfigured ? .signedOut : .unconfigured
         authChangeTask = Task { [weak self] in
-            for await _ in NotificationCenter.default.notifications(named: sessionDidChangeNotification) {
-                await self?.handleAuthSessionChanged()
+            for await notification in NotificationCenter.default.notifications(named: sessionDidChangeNotification) {
+                await self?.handleAuthSessionChanged(
+                    forceSignOut: notification.object as? GoogleAuthSessionChangeReason == .disconnected
+                )
             }
         }
     }
@@ -261,7 +263,7 @@ final class GoogleCalendarStore: ObservableObject {
     private func handle(_ error: Error) {
         lastErrorMessage = GoogleAuthErrorFormatter.message(for: error, defaultMessage: L10n.googleCalendarUnexpectedResponse)
         state = .failed
-        ErrorReportingService.capture(error, context: ["source": "googleCalendar"])
+        ErrorReportingService.captureSanitized(.googleCalendar)
     }
 
     private func recomputeState() {
@@ -303,14 +305,14 @@ final class GoogleCalendarStore: ObservableObject {
         }
     }
 
-    private func handleAuthSessionChanged() async {
+    private func handleAuthSessionChanged(forceSignOut: Bool) async {
         didAttemptRestore = false
-        if signInProvider.hasPreviousSignIn {
-            await restoreSessionIfNeeded()
-        } else {
-            clearRuntimeState(clearSelection: false)
+        guard !forceSignOut, signInProvider.hasPreviousSignIn else {
+            clearRuntimeState(clearSelection: forceSignOut)
             recomputeState()
+            return
         }
+        await restoreSessionIfNeeded()
     }
 
     private func updateSelectedCalendarIDs(_ ids: Set<String>, pruneUnavailable: Bool = false) {

@@ -2300,6 +2300,123 @@ html[lang="ja"] :where(.section-heading h2, .ai-heading h2, .workflow-heading h2
   line-height: 1.7;
 }
 
+/* Legal pages */
+.legal-page {
+  background: #f7f5f1;
+  color: #25222c;
+}
+
+.legal-page .site-header {
+  position: sticky;
+  top: 0;
+}
+
+.legal-nav {
+  display: flex;
+}
+
+.legal-main {
+  padding: 150px 0 110px;
+}
+
+.legal-document {
+  max-width: 900px;
+}
+
+.legal-heading {
+  margin-bottom: 48px;
+}
+
+.legal-heading h1 {
+  margin: 12px 0 10px;
+  font-size: clamp(2.8rem, 7vw, 5.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.legal-heading > p:last-child {
+  max-width: 760px;
+  margin-top: 28px;
+  color: #5f5968;
+  font-size: 1.08rem;
+  line-height: 1.8;
+}
+
+.legal-effective-date {
+  color: #746d7c;
+  font-size: 0.9rem;
+}
+
+.legal-summary {
+  margin: 0 0 56px;
+  padding: 28px 30px;
+  border: 1px solid rgba(99, 76, 135, 0.18);
+  border-radius: 20px;
+  background: rgba(239, 232, 250, 0.72);
+}
+
+.legal-summary strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.12rem;
+}
+
+.legal-summary p {
+  margin: 0;
+}
+
+.legal-document section {
+  padding: 34px 0;
+  border-top: 1px solid rgba(51, 45, 60, 0.13);
+}
+
+.legal-document h2 {
+  margin: 0 0 20px;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.025em;
+}
+
+.legal-document h3 {
+  margin: 28px 0 8px;
+  font-size: 1.06rem;
+}
+
+.legal-document p,
+.legal-document li {
+  color: #514b59;
+  line-height: 1.78;
+}
+
+.legal-document ul,
+.legal-document ol {
+  padding-left: 1.4rem;
+}
+
+.legal-document li + li {
+  margin-top: 10px;
+}
+
+.legal-document a {
+  color: #65439a;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .legal-main {
+    padding: 118px 0 75px;
+  }
+
+  .legal-nav a:first-child {
+    display: none;
+  }
+
+  .legal-summary {
+    padding: 22px;
+  }
+}
+
 .final-cta {
   position: relative;
   overflow: hidden;
@@ -2465,6 +2582,26 @@ html[lang="ja"] :where(.section-heading h2, .ai-heading h2, .workflow-heading h2
   .site-nav > a:not(.nav-cta) { color: white; font-size: 25px; }
   .site-nav .nav-cta { border-color: rgba(255,255,255,.5); }
   .nav-toggle[aria-expanded="true"] span { background: white; }
+  .legal-page .legal-nav {
+    position: static;
+    inset: auto;
+    width: auto;
+    padding: 0;
+    border: 0;
+    color: #25222c;
+    background: transparent;
+    box-shadow: none;
+    visibility: visible;
+    opacity: 1;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 22px;
+    transition: none;
+  }
+  .legal-page .legal-nav > a:not(.nav-cta) {
+    color: #25222c;
+    font-size: 14px;
+  }
   .hero { padding: 115px 0 36px; }
   .hero h1 { font-size: clamp(49px, 13vw, 70px); }
   html[lang="ja"] .hero h1 { font-size: clamp(49px, 13vw, 70px); }

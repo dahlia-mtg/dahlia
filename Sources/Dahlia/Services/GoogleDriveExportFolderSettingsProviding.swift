@@ -8,4 +8,6 @@ protocol GoogleDriveExportFolderSettingsProviding: AnyObject {
     )
 
     func clearGoogleDriveExportFolderID(forAccountID accountID: String)
+
+    func clearGoogleDriveExportFolder()
 }

@@ -85,6 +85,23 @@ import Foundation
         }
 
         @Test
+        func disconnectClearsStoredExportFolderIdentifier() async {
+            let settings = MockGoogleDriveExportFolderSettings()
+            settings.setGoogleDriveExportFolder(id: "folder-1", accountID: driveSession.account.id)
+            let store = GoogleDriveStore(
+                signInProvider: MockGoogleSignInProvider(signInResult: .success(driveSession)),
+                exportFolderConfiguration: MockGoogleDriveExportFolderConfiguration(),
+                settings: settings,
+                presentingWindowProvider: { NSWindow() }
+            )
+
+            await store.signIn()
+            await store.disconnect()
+
+            #expect(settings.googleDriveExportFolderID(forAccountID: driveSession.account.id) == nil)
+        }
+
+        @Test
         func folderConfigurationFailureKeepsAuthorizedSessionAndReportsError() async {
             let folderConfiguration = MockGoogleDriveExportFolderConfiguration(
                 result: .failure(GoogleDriveAPIError.httpError(statusCode: 503, detail: "Unavailable"))
@@ -121,6 +138,36 @@ import Foundation
 
             #expect(store.state == .signedOut)
             #expect(signInProvider.restoreCallCount == 0)
+        }
+
+        @Test
+        func disconnectNotificationDoesNotRestoreResidualCredentials() async {
+            let watchedNotification = Notification.Name("GoogleDriveStoreTests.disconnect.\(UUID().uuidString)")
+            let signInProvider = MockGoogleSignInProvider(
+                hasPreviousSignIn: true,
+                sessionDidChangeNotification: watchedNotification,
+                signInResult: .success(driveSession)
+            )
+            let settings = MockGoogleDriveExportFolderSettings()
+            settings.setGoogleDriveExportFolder(id: "folder-1", accountID: driveSession.account.id)
+            let store = GoogleDriveStore(
+                signInProvider: signInProvider,
+                exportFolderConfiguration: MockGoogleDriveExportFolderConfiguration(),
+                settings: settings,
+                presentingWindowProvider: { NSWindow() }
+            )
+            await store.signIn()
+            await Task.yield()
+
+            NotificationCenter.default.post(
+                name: watchedNotification,
+                object: GoogleAuthSessionChangeReason.disconnected
+            )
+            await Task.yield()
+
+            #expect(signInProvider.restoreCallCount == 0)
+            #expect(store.state == .signedOut)
+            #expect(settings.googleDriveExportFolderID(forAccountID: driveSession.account.id) == nil)
         }
     }
 
@@ -192,6 +239,27 @@ import Foundation
         func configureIfNeeded(session _: GoogleSession) async throws {
             configureIfNeededCallCount += 1
             try result.get()
+        }
+    }
+
+    @MainActor
+    private final class MockGoogleDriveExportFolderSettings: GoogleDriveExportFolderSettingsProviding {
+        private var folderIDs: [String: String] = [:]
+
+        func googleDriveExportFolderID(forAccountID accountID: String) -> String? {
+            folderIDs[accountID]
+        }
+
+        func setGoogleDriveExportFolder(id: String, accountID: String) {
+            folderIDs[accountID] = id
+        }
+
+        func clearGoogleDriveExportFolderID(forAccountID accountID: String) {
+            folderIDs.removeValue(forKey: accountID)
+        }
+
+        func clearGoogleDriveExportFolder() {
+            folderIDs.removeAll()
         }
     }
 

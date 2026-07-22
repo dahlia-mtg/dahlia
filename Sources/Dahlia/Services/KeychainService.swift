@@ -84,6 +84,26 @@ enum KeychainService {
         deleteFromBothKeychains(key: key)
     }
 
+    static func deleteOrThrow(key: String) throws {
+        try validateDeletionStatuses(
+            protectedStatus: deleteProtected(key: key),
+            legacyStatus: deleteLegacy(key: key)
+        )
+    }
+
+    static func validateDeletionStatuses(protectedStatus: OSStatus, legacyStatus: OSStatus) throws {
+        let protectedSucceeded = protectedStatus == errSecSuccess
+            || protectedStatus == errSecItemNotFound
+            || fallbackErrors.contains(protectedStatus)
+        guard protectedSucceeded else {
+            throw KeychainError.unexpectedStatus(protectedStatus)
+        }
+
+        guard legacyStatus == errSecSuccess || legacyStatus == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(legacyStatus)
+        }
+    }
+
     // MARK: - Query Builders
 
     private static func baseQuery(key: String) -> [String: Any] {

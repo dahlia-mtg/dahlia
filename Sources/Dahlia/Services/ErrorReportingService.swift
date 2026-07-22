@@ -3,6 +3,13 @@ import Foundation
 
 /// Sentry を用いたエラー報告サービス。
 enum ErrorReportingService {
+    enum SanitizedCategory: String {
+        case googleCalendar = "google_calendar_error"
+        case googleDrive = "google_drive_error"
+        case googleDriveExportFolder = "google_drive_export_folder_error"
+        case googleDocsExport = "google_docs_export_error"
+    }
+
     struct ReleaseMetadata: Equatable {
         let name: String
         let distribution: String
@@ -51,6 +58,18 @@ enum ErrorReportingService {
                 scope.setTag(value: value, key: key)
             }
         }
+    }
+
+    static func captureSanitized(_ category: SanitizedCategory) {
+        capture(sanitizedError(for: category), context: ["source": category.rawValue])
+    }
+
+    static func sanitizedError(for category: SanitizedCategory) -> NSError {
+        NSError(
+            domain: "com.dahlia.app.sanitized-diagnostic",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: category.rawValue]
+        )
     }
 
     static func recordScreenshotCollectionState(countBucket: Int, minimumWidthBucket: Int) {

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 @testable import Dahlia
 
 #if canImport(Testing)
@@ -78,6 +79,124 @@ struct GoogleCalendarConfigurationTests {
         #expect(GoogleAuthSessionKind.drive.keychainKey == "googleDriveOAuthSession")
         #expect(GoogleAuthSessionKind.calendar.sessionDidChangeNotification == .googleCalendarSessionDidChange)
         #expect(GoogleAuthSessionKind.drive.sessionDidChangeNotification == .googleDriveSessionDidChange)
+    }
+
+    @Test
+    func pendingDisconnectBlocksAutomaticSessionRestore() {
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: true, hasStoredSession: true) == false)
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: true))
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: false) == false)
+    }
+
+    @Test
+    func disconnectSuppressionIsScopedPerGoogleService() {
+        let calendarKey = GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .calendar)
+        let driveKey = GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .drive)
+
+        #expect(calendarKey != driveKey)
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: true))
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: true, hasStoredSession: true) == false)
+    }
+
+    @Test
+    func revocationRequiresASuccessfulHTTPResponse() throws {
+        let url = try #require(URL(string: "https://oauth2.googleapis.com/revoke"))
+        let success = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        let failure = try #require(HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil))
+        let serverFailure = try #require(HTTPURLResponse(url: url, statusCode: 503, httpVersion: nil, headerFields: nil))
+
+        try GoogleSignInAdapter.validateRevocationResponse(success)
+        try GoogleSignInAdapter.validateRevocationResponse(
+            failure,
+            data: Data(#"{"error":"invalid_token"}"#.utf8)
+        )
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(failure)
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(serverFailure)
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil))
+        }
+    }
+
+    @Test
+    func revocationTokensAreDeduplicatedPerGoogleAccount() {
+        let groups = GoogleSignInAdapter.groupRevocationTokens([
+            (accountID: "account-b", token: "token-b"),
+            (accountID: "account-a", token: "token-a2"),
+            (accountID: "account-a", token: "token-a1"),
+            (accountID: "account-a", token: "token-a1"),
+        ])
+
+        #expect(groups == [["token-a1", "token-a2"], ["token-b"]])
+    }
+
+    @Test
+    func keychainDeletionAcceptsMissingItems() throws {
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecItemNotFound,
+            legacyStatus: errSecItemNotFound
+        )
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecMissingEntitlement,
+            legacyStatus: errSecSuccess
+        )
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecInternalComponent,
+            legacyStatus: errSecItemNotFound
+        )
+    }
+
+    @Test
+    func keychainDeletionRejectsUnexpectedFailures() {
+        #expect(throws: KeychainService.KeychainError.self) {
+            try KeychainService.validateDeletionStatuses(
+                protectedStatus: errSecAuthFailed,
+                legacyStatus: errSecItemNotFound
+            )
+        }
+        #expect(throws: KeychainService.KeychainError.self) {
+            try KeychainService.validateDeletionStatuses(
+                protectedStatus: errSecSuccess,
+                legacyStatus: errSecAuthFailed
+            )
+        }
+    }
+
+    @Test
+    func loopbackRequestParserDistinguishesCallbacksFromUnrelatedRequests() throws {
+        let callback = GoogleOAuthLoopbackRequestParser.parse(
+            "GET /oauth2redirect?code=abc&state=expected HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        )
+        let expectedURL = try #require(URL(string: "http://127.0.0.1/oauth2redirect?code=abc&state=expected"))
+
+        #expect(callback == .callback(expectedURL))
+        #expect(GoogleOAuthLoopbackRequestParser.parse("GET /favicon.ico HTTP/1.1\r\n\r\n") == .unrelated)
+        #expect(GoogleOAuthLoopbackRequestParser.parse("POST /oauth2redirect HTTP/1.1\r\n\r\n") == .invalid)
+    }
+
+    @Test
+    func callbackTimeoutHasAnActionableLocalizedMessage() {
+        #expect(GoogleSignInError.authorizationTimedOut.errorDescription == L10n.googleAccountAuthorizationTimedOut)
+    }
+
+    @Test
+    func authorizationCallbackRejectsWrongPathsAndDuplicateParameters() throws {
+        let callback = try #require(URL(string: "http://127.0.0.1:54321/oauth2redirect?code=abc&state=expected"))
+        let wrongPath = try #require(URL(string: "http://127.0.0.1:54321/favicon.ico?code=abc&state=expected"))
+        let duplicateState = try #require(
+            URL(string: "http://127.0.0.1:54321/oauth2redirect?code=abc&state=expected&state=other")
+        )
+
+        #expect(try GoogleSignInAdapter.extractAuthorizationCode(from: callback, expectedState: "expected") == "abc")
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.extractAuthorizationCode(from: wrongPath, expectedState: "expected")
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.extractAuthorizationCode(from: duplicateState, expectedState: "expected")
+        }
     }
 }
 

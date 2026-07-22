@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f5f1" />
+    <meta name="description" content="Dahlia Privacy Policy, including how Dahlia handles Google Calendar and Google Drive data." />
+    <meta property="og:title" content="Privacy Policy — Dahlia" />
+    <meta property="og:description" content="How Dahlia handles meeting, Google Calendar, and Google Drive data." />
+    <meta property="og:url" content="https://dahlia-ai.org/privacy/" />
+    <meta property="og:image" content="https://dahlia-ai.org/assets/og-ai.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://dahlia-ai.org/privacy/" />
+    <link rel="alternate" hreflang="ja" href="https://dahlia-ai.org/ja/privacy/" />
+    <link rel="alternate" hreflang="en" href="https://dahlia-ai.org/privacy/" />
+    <link rel="alternate" hreflang="x-default" href="https://dahlia-ai.org/privacy/" />
+    <link rel="icon" type="image/png" href="../assets/app-icon.png" />
+    <link rel="stylesheet" href="../styles.css" />
+    <title>Privacy Policy — Dahlia</title>
+  </head>
+  <body class="legal-page">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header scrolled">
+      <div class="nav-shell">
+        <a class="brand" href="../" aria-label="Dahlia home">
+          <img src="../assets/app-icon.png" alt="" width="36" height="36" />
+          <span>Dahlia</span>
+        </a>
+        <nav class="site-nav legal-nav" aria-label="Privacy navigation">
+          <a href="../">Home</a>
+          <a href="../ja/privacy/" lang="ja">日本語</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="legal-main">
+      <article class="section-shell legal-document">
+        <header class="legal-heading">
+          <p class="section-index">PRIVACY</p>
+          <h1>Privacy Policy</h1>
+          <p class="legal-effective-date">Effective July 22, 2026</p>
+          <p>
+            Dahlia is a macOS meeting transcription and note-taking application. This policy explains what data Dahlia
+            accesses, how it is used and stored, when it leaves your Mac, and how you can manage or delete it.
+          </p>
+        </header>
+
+        <aside class="legal-summary" aria-label="Privacy summary">
+          <strong>Local by default.</strong>
+          <p>
+            Meeting recordings, transcripts, notes, screenshots, and linked calendar details are stored on your Mac.
+            Data is sent to another service only when you enable a connected feature or perform an action that requires it.
+          </p>
+        </aside>
+
+        <section>
+          <h2>1. Data Dahlia handles</h2>
+          <h3>Meeting data</h3>
+          <p>
+            Dahlia can store audio recordings, transcripts, summaries, notes, screenshots, project information, tags,
+            and application settings. This data is created and kept locally on your Mac and in backups you configure.
+          </p>
+          <h3>Google account and Calendar data</h3>
+          <p>
+            If you connect Google Calendar, Dahlia accesses your Google account identifier, display name, email address,
+            calendar list, and upcoming events from calendars you select. Event data can include the title, description,
+            start and end times, attendance status, event type, calendar and event identifiers, conference link, and
+            Google Calendar link. Calendar access is read-only; Dahlia does not create, edit, or delete calendar events.
+          </p>
+          <h3>Google Drive data</h3>
+          <p>
+            If you connect Google Drive, Dahlia creates and manages a <q>Meeting Notes</q> folder and Google Docs exported
+            by Dahlia. Access is limited to files and folders created by, or explicitly used with, Dahlia. Dahlia does not
+            request access to unrelated Drive files.
+          </p>
+          <h3>Diagnostics</h3>
+          <p>
+            Dahlia may send crash reports and explicitly captured technical errors to its diagnostics provider. Automatic
+            network capture and default personal information are disabled, and request, user, and extra fields are removed.
+            Dahlia does not intentionally attach meeting content or credentials. For Google integration failures, Dahlia
+            sends a fixed error category instead of the Google API response body or Calendar and Drive details.
+          </p>
+        </section>
+
+        <section>
+          <h2>2. How data is used</h2>
+          <p>Dahlia uses data only to provide user-facing features you choose, including:</p>
+          <ul>
+            <li>recording, transcribing, organizing, searching, and displaying your meetings;</li>
+            <li>showing your selected upcoming calendars and preparing a meeting from an event;</li>
+            <li>associating an event with a meeting and using that context in a summary or AI chat you initiate; and</li>
+            <li>exporting a summary to a Google Doc when you request it.</li>
+          </ul>
+          <p>
+            Dahlia does not sell Google user data, use it for advertising or credit decisions, or use it to train or
+            improve a general-purpose AI model.
+          </p>
+        </section>
+
+        <section>
+          <h2>3. Storage and retention</h2>
+          <ul>
+            <li>
+              OAuth access and refresh tokens, Google account identifier, display name, and email address are stored as an
+              OAuth session in the macOS Keychain until Google access is disconnected.
+            </li>
+            <li>Upcoming Google Calendar events are cached in memory while Dahlia is running.</li>
+            <li>
+              When you associate an event with a saved meeting, the event title, description, times, identifiers, and
+              links are stored in Dahlia's active local meeting database and in any database backups you create. The active
+              record remains while at least one saved meeting refers to the event and is removed after the last referring
+              meeting is deleted. Existing backups retain their earlier copy until you delete the backup.
+            </li>
+            <li>
+              Selected calendar identifiers and the Drive export folder and account identifiers are stored in local
+              settings. Exported document URLs and identifiers are stored with the related meeting in the local database
+              and in any database backups you create.
+            </li>
+            <li>Exported Google Docs remain in your Google Drive until you delete them there.</li>
+          </ul>
+          <p>
+            Dahlia does not operate a developer server that receives or stores your Google Calendar events, Google Drive
+            documents, meeting recordings, or transcripts.
+          </p>
+        </section>
+
+        <section>
+          <h2>4. AI services and other transfers</h2>
+          <p>
+            When you generate a summary, enable automatic summary generation after batch transcription, or use AI chat,
+            Dahlia sends the content required for that request to the AI connection you configured. If the meeting is
+            linked to a calendar event, that content can include the event title, description, start time, and end time.
+            The applicable provider processes that data under your account and its terms and privacy policy. Dahlia does
+            not send Google Calendar data to an AI service merely because you connected your account or viewed your schedule.
+          </p>
+          <p>
+            When you export to Google Docs, the rendered summary and included images are sent directly from Dahlia on your
+            Mac to Google Drive. Dahlia does not otherwise disclose Google user data, except where necessary for security,
+            to comply with law, or with your explicit consent.
+          </p>
+        </section>
+
+        <section id="manage-google-data">
+          <h2>5. Manage and delete your Google data</h2>
+          <ol>
+            <li>
+              <strong>Stop future access:</strong> In Dahlia, open Calendar or Export settings and choose
+              <q>Disconnect</q>. Dahlia removes both locally stored Google OAuth sessions and attempts to revoke all Google
+              access granted to Dahlia. Google revocation applies to the whole OAuth project, so disconnecting Calendar or
+              Drive disconnects both services. Dahlia also clears saved Calendar and Drive selection identifiers. If
+              revocation cannot be completed, remove Dahlia from your Google Account's third-party connections page.
+            </li>
+            <li>
+              <strong>Delete saved calendar details:</strong> Delete the meetings linked to those events. Dahlia removes a
+              saved calendar event from the active database after no remaining meeting refers to it. Delete any Dahlia
+              database backups separately to remove copies retained in those backups. Removing Dahlia's local app data does
+              not remove backups you exported elsewhere.
+            </li>
+            <li>
+              <strong>Delete exported documents:</strong> Disconnecting does not delete documents already exported to
+              Google Drive. Delete those documents or the <q>Meeting Notes</q> folder in Google Drive. Delete the related
+              meeting and database backups to remove locally stored document URLs and identifiers.
+            </li>
+            <li>
+              <strong>Review Google access:</strong> You can also remove Dahlia from your Google Account's third-party
+              connections page.
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>6. Security</h2>
+          <p>
+            Dahlia uses Google's OAuth authorization flow with PKCE, HTTPS for Google and AI service requests, macOS
+            Keychain for OAuth credentials, code signing, and macOS access controls. You are responsible for securing your
+            Mac, local backups, Google account, and configured AI accounts.
+          </p>
+        </section>
+
+        <section>
+          <h2>7. Google API Services User Data Policy</h2>
+          <p>
+            Dahlia's use and transfer of information received from Google APIs adheres to the
+            <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+            including the Limited Use requirements.
+          </p>
+        </section>
+
+        <section>
+          <h2>8. Changes and contact</h2>
+          <p>
+            This policy will be updated when Dahlia's data practices materially change. For questions, requests, or
+            reports, contact the Dahlia maintainers through the
+            <a href="https://github.com/dahlia-org/dahlia/issues">Dahlia issue tracker</a>. Do not include private meeting
+            content, credentials, or other sensitive information in a public issue.
+          </p>
+        </section>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <div class="section-shell footer-inner">
+        <a class="brand footer-brand" href="../">
+          <img src="../assets/app-icon.png" alt="" width="32" height="32" />
+          <span>Dahlia</span>
+        </a>
+        <p>Stay present. Ask later.</p>
+        <div class="footer-links">
+          <a href="../">Home</a>
+          <a href="../ja/privacy/" lang="ja">日本語</a>
+          <a href="https://github.com/dahlia-org/dahlia">GitHub ↗</a>
+        </div>
+        <small>© 2026 Dahlia. All rights reserved.</small>
+      </div>
+    </footer>
+  </body>
+</html>

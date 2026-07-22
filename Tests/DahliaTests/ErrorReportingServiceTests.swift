@@ -58,5 +58,15 @@ struct ErrorReportingServiceTests {
 
         #expect(metadata == nil)
     }
+
+    @Test
+    func sanitizedGoogleDiagnosticsContainOnlyAFixedCategory() {
+        let error = ErrorReportingService.sanitizedError(for: .googleCalendar)
+
+        #expect(error.domain == "com.dahlia.app.sanitized-diagnostic")
+        #expect(error.code == 1)
+        #expect(error.userInfo.keys.count == 1)
+        #expect(error.localizedDescription == "google_calendar_error")
+    }
 }
 #endif

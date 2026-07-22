@@ -475,7 +475,7 @@ import GRDB
         }
 
         @Test
-        func sameCalendarEventCanLinkMultipleMeetingsAndSurvivesMeetingDeletion() throws {
+        func sameCalendarEventIsRetainedOnlyWhileAStoredMeetingReferencesIt() throws {
             let database = try makeDatabase()
             let firstMeetingId = UUID.v7()
             let secondMeetingId = UUID.v7()
@@ -538,6 +538,14 @@ import GRDB
             }
 
             #expect(calendarEventCount == 1)
+
+            try repository.deleteMeeting(id: secondMeetingId)
+
+            let finalCalendarEventCount = try database.dbQueue.read { db in
+                try CalendarEventRecord.fetchCount(db)
+            }
+
+            #expect(finalCalendarEventCount == 0)
         }
 
         @Test

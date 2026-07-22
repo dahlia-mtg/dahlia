@@ -186,6 +186,11 @@ import Foundation
             guard self.accountID == accountID else { return }
             folderID = nil
         }
+
+        func clearGoogleDriveExportFolder() {
+            folderID = nil
+            accountID = nil
+        }
     }
 
     private actor FolderConfigurationAPIClient: GoogleDriveAPIClientProviding {
