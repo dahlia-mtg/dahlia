@@ -297,7 +297,7 @@ final class CaptionViewModel: ObservableObject {
                 defaultMessage: L10n.googleDocsExportFailed
             )
             googleDocsExportErrorsByMeetingId[meetingId] = message
-            ErrorReportingService.capture(error, context: ["source": "googleDocsExport"])
+            ErrorReportingService.captureSanitized(.googleDocsExport)
             return false
         }
     }
@@ -2866,7 +2866,7 @@ final class CaptionViewModel: ObservableObject {
                 )
                 job.progress.googleDocsExport = .failed(message)
                 googleDocsExportErrorsByMeetingId[meetingId] = message
-                ErrorReportingService.capture(error, context: ["source": "batchGoogleDocsExport"])
+                ErrorReportingService.captureSanitized(.googleDocsExport)
             }
         }
     }

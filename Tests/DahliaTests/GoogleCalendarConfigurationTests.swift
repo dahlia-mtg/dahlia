@@ -1,4 +1,5 @@
 import Foundation
+import Security
 @testable import Dahlia
 
 #if canImport(Testing)
@@ -78,6 +79,95 @@ struct GoogleCalendarConfigurationTests {
         #expect(GoogleAuthSessionKind.drive.keychainKey == "googleDriveOAuthSession")
         #expect(GoogleAuthSessionKind.calendar.sessionDidChangeNotification == .googleCalendarSessionDidChange)
         #expect(GoogleAuthSessionKind.drive.sessionDidChangeNotification == .googleDriveSessionDidChange)
+    }
+
+    @Test
+    func pendingDisconnectBlocksAutomaticSessionRestore() {
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: true, hasStoredSession: true) == false)
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: true))
+        #expect(GoogleSignInAdapter.shouldRestoreStoredSession(disconnectPending: false, hasStoredSession: false) == false)
+    }
+
+    @Test
+    func disconnectSuppressionIsScopedPerGoogleService() {
+        #expect(
+            GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .calendar)
+                != GoogleSignInAdapter.disconnectPendingUserDefaultsKey(for: .drive)
+        )
+    }
+
+    @Test
+    func revocationRequiresASuccessfulHTTPResponse() throws {
+        let url = try #require(URL(string: "https://oauth2.googleapis.com/revoke"))
+        let success = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        let failure = try #require(HTTPURLResponse(url: url, statusCode: 400, httpVersion: nil, headerFields: nil))
+
+        try GoogleSignInAdapter.validateRevocationResponse(success)
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(failure)
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.validateRevocationResponse(URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil))
+        }
+    }
+
+    @Test
+    func revocationTokensAreDeduplicatedPerGoogleAccount() {
+        let groups = GoogleSignInAdapter.groupRevocationTokens([
+            (accountID: "account-b", token: "token-b"),
+            (accountID: "account-a", token: "token-a2"),
+            (accountID: "account-a", token: "token-a1"),
+            (accountID: "account-a", token: "token-a1"),
+        ])
+
+        #expect(groups == [["token-a1", "token-a2"], ["token-b"]])
+    }
+
+    @Test
+    func keychainDeletionAcceptsMissingItems() throws {
+        try KeychainService.validateDeletionStatuses(
+            protectedStatus: errSecItemNotFound,
+            legacyStatus: errSecItemNotFound
+        )
+    }
+
+    @Test
+    func keychainDeletionRejectsUnexpectedFailures() {
+        #expect(throws: KeychainService.KeychainError.self) {
+            try KeychainService.validateDeletionStatuses(
+                protectedStatus: errSecMissingEntitlement,
+                legacyStatus: errSecSuccess
+            )
+        }
+        #expect(throws: KeychainService.KeychainError.self) {
+            try KeychainService.validateDeletionStatuses(
+                protectedStatus: errSecAuthFailed,
+                legacyStatus: errSecItemNotFound
+            )
+        }
+        #expect(throws: KeychainService.KeychainError.self) {
+            try KeychainService.validateDeletionStatuses(
+                protectedStatus: errSecSuccess,
+                legacyStatus: errSecAuthFailed
+            )
+        }
+    }
+
+    @Test
+    func authorizationCallbackRejectsWrongPathsAndDuplicateParameters() throws {
+        let callback = try #require(URL(string: "http://127.0.0.1:54321/oauth2redirect?code=abc&state=expected"))
+        let wrongPath = try #require(URL(string: "http://127.0.0.1:54321/favicon.ico?code=abc&state=expected"))
+        let duplicateState = try #require(
+            URL(string: "http://127.0.0.1:54321/oauth2redirect?code=abc&state=expected&state=other")
+        )
+
+        #expect(try GoogleSignInAdapter.extractAuthorizationCode(from: callback, expectedState: "expected") == "abc")
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.extractAuthorizationCode(from: wrongPath, expectedState: "expected")
+        }
+        #expect(throws: GoogleSignInError.self) {
+            try GoogleSignInAdapter.extractAuthorizationCode(from: duplicateState, expectedState: "expected")
+        }
     }
 }
 

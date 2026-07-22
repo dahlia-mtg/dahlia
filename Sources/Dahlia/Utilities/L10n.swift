@@ -992,6 +992,85 @@ enum L10n {
         localized: "Sign in with Google to export summaries to Google Docs.",
         bundle: bundle
     ) }
+    static var googleCalendarOAuthDisclosureTitle: String { String(localized: "Connect Google Calendar", bundle: bundle) }
+    static var googleDriveOAuthDisclosureTitle: String { String(localized: "Connect Google Drive", bundle: bundle) }
+    static var googleCalendarOAuthDisclosureOverview: String { String(
+        localized: """
+        Dahlia requests read-only access to your Google account and the upcoming events in calendars you choose.
+        """,
+        bundle: bundle
+    ) }
+    static var googleDriveOAuthDisclosureOverview: String { String(
+        localized: """
+        Dahlia requests access only to the Google Drive files and folders it creates or that you explicitly use with Dahlia.
+        """,
+        bundle: bundle
+    ) }
+    static var googleOAuthDisclosureDataAccess: String { String(localized: "Data Dahlia Accesses", bundle: bundle) }
+    static var googleCalendarOAuthDisclosureAccess: String { String(
+        localized: """
+        Your Google account name and email address, calendar names, and event titles, descriptions, dates, attendance status, and meeting links.
+        """,
+        bundle: bundle
+    ) }
+    static var googleDriveOAuthDisclosureAccess: String { String(
+        localized: """
+        Your Google account name and email address, a Meeting Notes folder, and Google Docs summaries created by Dahlia. \
+        Other Drive files are not accessible to Dahlia.
+        """,
+        bundle: bundle
+    ) }
+    static var googleOAuthDisclosureUseAndStorage: String { String(localized: "How Dahlia Uses and Stores It", bundle: bundle) }
+    static var googleCalendarOAuthDisclosureUseAndStorage: String { String(
+        localized: """
+        OAuth tokens and your account ID, name, and email address are stored in Keychain. Upcoming events are shown in Dahlia. \
+        Linked event details are stored in the local meeting database and any database backups you create while a saved meeting refers to them.
+        """,
+        bundle: bundle
+    ) }
+    static var googleDriveOAuthDisclosureUseAndStorage: String { String(
+        localized: """
+        OAuth tokens and your account ID, name, and email address are stored in Keychain. \
+        The export folder and account IDs are stored in local settings. \
+        Exported document URLs and IDs are stored with the related meeting and in any database backups you create.
+        """,
+        bundle: bundle
+    ) }
+    static var googleOAuthDisclosureExternalSharing: String { String(localized: "External Sharing", bundle: bundle) }
+    static var googleCalendarOAuthDisclosureExternalSharing: String { String(
+        localized: """
+        When you generate a summary, enable automatic summary generation, or use AI chat, \
+        the linked event's title, description, and dates may be sent \
+        to the AI provider you configured. Dahlia does not use Google data to train general-purpose AI models.
+        """,
+        bundle: bundle
+    ) }
+    static var googleDriveOAuthDisclosureExternalSharing: String { String(
+        localized: """
+        When you request an export, the summary and included images are sent directly from this Mac to Google Drive. \
+        Dahlia does not send unrelated Drive content to an AI provider or developer server.
+        """,
+        bundle: bundle
+    ) }
+    static var googleOAuthDisclosureManageAndDelete: String { String(localized: "Manage and Delete", bundle: bundle) }
+    static var googleCalendarOAuthDisclosureDeletion: String { String(
+        localized: """
+        Disconnecting Calendar or Drive removes both local OAuth sessions and attempts to revoke all Dahlia Google access, \
+        which disconnects both services and clears saved Calendar and Drive selection identifiers. \
+        Delete linked meetings to remove saved calendar details from the active database, and delete database backups separately.
+        """,
+        bundle: bundle
+    ) }
+    static var googleDriveOAuthDisclosureDeletion: String { String(
+        localized: """
+        Disconnecting Calendar or Drive removes both local OAuth sessions and attempts to revoke all Dahlia Google access, \
+        which disconnects both services and clears saved Calendar and Drive selection identifiers. \
+        Exported documents remain in Drive; delete them there, and delete related meetings and database backups to remove local document references.
+        """,
+        bundle: bundle
+    ) }
+    static var viewPrivacyPolicy: String { String(localized: "View Privacy Policy", bundle: bundle) }
+    static var continueToGoogle: String { String(localized: "Continue to Google", bundle: bundle) }
     static var googleDocsConnected: String { String(localized: "Google Docs connected", bundle: bundle) }
     static var googleDocsNotConnected: String { googleCalendarNotConnected }
     static var googleDriveExportDestination: String { String(localized: "Export Destination", bundle: bundle) }

@@ -155,6 +155,11 @@ final class AppSettings: ObservableObject, GoogleDriveExportFolderSettingsProvid
         googleDriveExportFolderID = ""
     }
 
+    func clearGoogleDriveExportFolder() {
+        googleDriveExportFolderID = ""
+        googleDriveExportFolderAccountID = ""
+    }
+
     // MARK: - 音声認識設定
 
     @AppStorage("transcriptionLocale") var transcriptionLocale: String = Locale.current.identifier

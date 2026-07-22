@@ -4,6 +4,7 @@ struct CalendarSettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var googleCalendarStore = GoogleCalendarStore.shared
     @ObservedObject private var macCalendarStore = MacCalendarStore.shared
+    @State private var googleOAuthConsent = GoogleOAuthConsentState()
 
     var body: some View {
         Form {
@@ -65,11 +66,23 @@ struct CalendarSettingsView: View {
                 await refreshEnabledSources(force: true)
             }
         }
+        .sheet(item: $googleOAuthConsent.pendingDisclosure, onDismiss: startGoogleOAuthIfConsented) { disclosure in
+            GoogleOAuthConsentSheet(disclosure: disclosure) {
+                googleOAuthConsent.grantConsent()
+            }
+        }
         .formStyle(.grouped)
     }
 
     private var displayedCalendarSources: [CalendarSource] {
         [.macOS, .google]
+    }
+
+    private func startGoogleOAuthIfConsented() {
+        guard googleOAuthConsent.consumeConsent() else { return }
+        Task {
+            await googleCalendarStore.signIn()
+        }
     }
 
     @ViewBuilder
@@ -167,9 +180,7 @@ struct CalendarSettingsView: View {
     private var googleActionButton: some View {
         if !googleCalendarStore.isAuthorized {
             Button(L10n.googleCalendarConnect) {
-                Task {
-                    await googleCalendarStore.signIn()
-                }
+                googleOAuthConsent.request(.calendar)
             }
             .buttonStyle(.borderedProminent)
             .disabled(!googleCalendarStore.isConfigured || googleCalendarStore.isBusy)

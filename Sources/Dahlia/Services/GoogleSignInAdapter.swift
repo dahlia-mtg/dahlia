@@ -70,6 +70,10 @@ enum GoogleAuthSessionKind: CaseIterable {
     }
 }
 
+enum GoogleAuthSessionChangeReason: Equatable, Sendable {
+    case disconnected
+}
+
 enum GoogleSignInError: LocalizedError {
     case notConfigured
     case missingPresentingWindow
@@ -110,6 +114,7 @@ protocol GoogleSignInProviding: AnyObject {
 @MainActor
 final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
     private static let legacyKeychainKey = "googleOAuthSession"
+    private static let disconnectPendingUserDefaultsKeyPrefix = "googleOAuthDisconnectPending"
     private static let authorizationEndpoint = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
     private static let tokenEndpoint = URL(string: "https://oauth2.googleapis.com/token")!
     private static let revokeEndpoint = URL(string: "https://oauth2.googleapis.com/revoke")!
@@ -124,7 +129,10 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
     }
 
     var hasPreviousSignIn: Bool {
-        storedSession != nil
+        Self.shouldRestoreStoredSession(
+            disconnectPending: isDisconnectPending,
+            hasStoredSession: storedSession != nil
+        )
     }
 
     var sessionDidChangeNotification: Notification.Name {
@@ -194,6 +202,7 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
             grantedScopes: authorizationScopes
         )
         save(session)
+        clearDisconnectPending()
         if let previousSessionLookup {
             deleteLegacySessionIfNeeded(previousSessionLookup)
         }
@@ -213,12 +222,33 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
     }
 
     func disconnect() async throws {
-        if let storedSessionLookup {
-            try await revokeIfPossible(token: storedSessionLookup.session.refreshToken ?? storedSessionLookup.session.accessToken)
-            KeychainService.delete(key: storedSessionLookup.keychainKey)
+        Self.markAllDisconnectsPending()
+        var firstRevocationError: Error?
+        for tokens in revocationTokensByAccount() {
+            var accountWasRevoked = false
+            var accountError: Error?
+            for token in tokens {
+                do {
+                    try await revoke(token: token)
+                    accountWasRevoked = true
+                    break
+                } catch {
+                    accountError = accountError ?? error
+                }
+            }
+            if !accountWasRevoked {
+                firstRevocationError = firstRevocationError ?? accountError
+            }
         }
-        KeychainService.delete(key: sessionKind.keychainKey)
-        NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+
+        do {
+            try clearAllStoredSessions()
+        } catch {
+            throw error
+        }
+        if let firstRevocationError {
+            throw firstRevocationError
+        }
     }
 
     private var storedSession: StoredGoogleSession? {
@@ -226,6 +256,7 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
     }
 
     private var storedSessionLookup: StoredGoogleSessionLookup? {
+        guard !isDisconnectPending else { return nil }
         if let session = Self.loadStoredSession(key: sessionKind.keychainKey) {
             return StoredGoogleSessionLookup(session: session, keychainKey: sessionKind.keychainKey)
         }
@@ -259,6 +290,28 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
         return try? JSONDecoder().decode(StoredGoogleSession.self, from: data)
     }
 
+    private var isDisconnectPending: Bool {
+        UserDefaults.standard.bool(forKey: Self.disconnectPendingUserDefaultsKey(for: sessionKind))
+    }
+
+    private static func markAllDisconnectsPending() {
+        for kind in GoogleAuthSessionKind.allCases {
+            UserDefaults.standard.set(true, forKey: disconnectPendingUserDefaultsKey(for: kind))
+        }
+    }
+
+    private func clearDisconnectPending() {
+        UserDefaults.standard.removeObject(forKey: Self.disconnectPendingUserDefaultsKey(for: sessionKind))
+    }
+
+    static func disconnectPendingUserDefaultsKey(for kind: GoogleAuthSessionKind) -> String {
+        "\(disconnectPendingUserDefaultsKeyPrefix).\(kind.keychainKey)"
+    }
+
+    static func shouldRestoreStoredSession(disconnectPending: Bool, hasStoredSession: Bool) -> Bool {
+        !disconnectPending && hasStoredSession
+    }
+
     private func deleteLegacySessionIfNeeded(_ lookup: StoredGoogleSessionLookup) {
         guard lookup.keychainKey == Self.legacyKeychainKey else { return }
         // 旧セッションは Calendar/Drive 共用の可能性があるため、削除する前に
@@ -270,6 +323,46 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
             save(lookup.session, key: kind.keychainKey)
         }
         KeychainService.delete(key: Self.legacyKeychainKey)
+    }
+
+    private func revocationTokensByAccount() -> [[String]] {
+        let keys = [Self.legacyKeychainKey] + GoogleAuthSessionKind.allCases.map(\.keychainKey)
+        let sessions = keys.compactMap { key -> (accountID: String, token: String)? in
+            guard let session = Self.loadStoredSession(key: key) else { return nil }
+            return (session.account.id, session.refreshToken ?? session.accessToken)
+        }
+        return Self.groupRevocationTokens(sessions)
+    }
+
+    static func groupRevocationTokens(_ sessions: [(accountID: String, token: String)]) -> [[String]] {
+        var tokensByAccount: [String: Set<String>] = [:]
+        for session in sessions {
+            tokensByAccount[session.accountID, default: []].insert(session.token)
+        }
+        return tokensByAccount.keys.sorted().compactMap { accountID in
+            tokensByAccount[accountID]?.sorted()
+        }
+    }
+
+    private func clearAllStoredSessions() throws {
+        let keys = [Self.legacyKeychainKey] + GoogleAuthSessionKind.allCases.map(\.keychainKey)
+        var firstError: Error?
+        for key in keys {
+            do {
+                try KeychainService.deleteOrThrow(key: key)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        for kind in GoogleAuthSessionKind.allCases {
+            NotificationCenter.default.post(
+                name: kind.sessionDidChangeNotification,
+                object: GoogleAuthSessionChangeReason.disconnected
+            )
+        }
+        if let firstError {
+            throw firstError
+        }
     }
 
     private func authorizationScopesForSignIn(requestedScopes: Set<String>) -> Set<String> {
@@ -400,12 +493,24 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
         )
     }
 
-    private func revokeIfPossible(token: String) async throws {
+    private func revoke(token: String) async throws {
         var request = URLRequest(url: Self.revokeEndpoint)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.formEncoded(["token": token]).data(using: .utf8)
-        _ = try await urlSession.data(for: request)
+        let (_, response) = try await urlSession.data(for: request)
+        try Self.validateRevocationResponse(response)
+    }
+
+    static func validateRevocationResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GoogleSignInError.invalidAuthorizationResponse
+        }
+        guard (200 ..< 300).contains(httpResponse.statusCode) else {
+            throw GoogleSignInError.authorizationFailed(
+                L10n.googleAccountHTTPError(httpResponse.statusCode, L10n.googleAccountUnexpectedResponse)
+            )
+        }
     }
 
     private static func makeAuthorizationURL(
@@ -431,16 +536,20 @@ final class GoogleSignInAdapter: NSObject, GoogleSignInProviding {
         return components.url!
     }
 
-    private static func extractAuthorizationCode(from callbackURL: URL, expectedState: String) throws -> String {
-        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+    static func extractAuthorizationCode(from callbackURL: URL, expectedState: String) throws -> String {
+        guard callbackURL.host == "127.0.0.1",
+              callbackURL.path == "/oauth2redirect",
+              let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
             throw GoogleSignInError.invalidAuthorizationResponse
         }
 
-        let queryItems = Dictionary(
-            uniqueKeysWithValues: components.queryItems?.compactMap { item in
-                item.value.map { (item.name, $0) }
-            } ?? []
-        )
+        var queryItems: [String: String] = [:]
+        for item in components.queryItems ?? [] {
+            guard let value = item.value, queryItems[item.name] == nil else {
+                throw GoogleSignInError.invalidAuthorizationResponse
+            }
+            queryItems[item.name] = value
+        }
         if let error = queryItems["error"] {
             let description = queryItems["error_description"] ?? error
             throw GoogleSignInError.authorizationFailed(description)
@@ -566,15 +675,21 @@ private extension CharacterSet {
 }
 
 private final class LoopbackRedirectServer: @unchecked Sendable {
+    private static let callbackTimeout: TimeInterval = 300
+
     private(set) var redirectURL: URL
 
     private let listener: NWListener
     private let queue = DispatchQueue(label: "com.dahlia.google-oauth-loopback")
     private var callbackContinuation: CheckedContinuation<URL, Error>?
+    private var pendingCallbackResult: Result<URL, Error>?
+    private var callbackCompleted = false
     private var readinessContinuation: CheckedContinuation<Void, Error>?
 
     init() async throws {
-        let listener = try NWListener(using: .tcp, on: .any)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        let listener = try NWListener(using: parameters)
         self.listener = listener
         redirectURL = URL(string: "http://127.0.0.1")!
 
@@ -587,8 +702,12 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
                     self?.readinessContinuation?.resume()
                     self?.readinessContinuation = nil
                 case let .failed(error):
-                    self?.readinessContinuation?.resume(throwing: error)
-                    self?.readinessContinuation = nil
+                    if let continuation = self?.readinessContinuation {
+                        self?.readinessContinuation = nil
+                        continuation.resume(throwing: error)
+                    } else {
+                        self?.completeCallback(with: .failure(error))
+                    }
                 default:
                     break
                 }
@@ -609,8 +728,31 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
     }
 
     func waitForCallback() async throws -> URL {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-            callbackContinuation = continuation
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                queue.async { [weak self] in
+                    guard let self else {
+                        continuation.resume(throwing: GoogleSignInError.invalidAuthorizationResponse)
+                        return
+                    }
+                    if let result = pendingCallbackResult {
+                        pendingCallbackResult = nil
+                        callbackCompleted = true
+                        continuation.resume(with: result)
+                    } else if callbackCompleted || callbackContinuation != nil {
+                        continuation.resume(throwing: GoogleSignInError.invalidAuthorizationResponse)
+                    } else {
+                        callbackContinuation = continuation
+                        queue.asyncAfter(deadline: .now() + Self.callbackTimeout) { [weak self] in
+                            self?.completeCallback(with: .failure(GoogleSignInError.invalidAuthorizationResponse))
+                        }
+                    }
+                }
+            }
+        } onCancel: { [weak self] in
+            self?.queue.async { [weak self] in
+                self?.completeCallback(with: .failure(CancellationError()))
+            }
         }
     }
 
@@ -618,10 +760,8 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
         connection.start(queue: queue)
         connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, _, error in
             guard let self else { return }
-            if let error {
-                callbackContinuation?.resume(throwing: error)
-                callbackContinuation = nil
-                shutdown()
+            if error != nil {
+                connection.cancel()
                 return
             }
 
@@ -630,25 +770,34 @@ private final class LoopbackRedirectServer: @unchecked Sendable {
                   let url = parseRequestURL(from: request)
             else {
                 reply(to: connection, status: "400 Bad Request", body: "Invalid OAuth redirect.")
-                callbackContinuation?.resume(throwing: GoogleSignInError.invalidAuthorizationResponse)
-                callbackContinuation = nil
-                shutdown()
                 return
             }
 
             reply(to: connection, status: "200 OK", body: "Dahlia authorization completed. You can close this window.")
-            callbackContinuation?.resume(returning: url)
-            callbackContinuation = nil
-            shutdown()
+            completeCallback(with: .success(url))
         }
+    }
+
+    private func completeCallback(with result: Result<URL, Error>) {
+        guard !callbackCompleted, pendingCallbackResult == nil else { return }
+        if let continuation = callbackContinuation {
+            callbackContinuation = nil
+            callbackCompleted = true
+            continuation.resume(with: result)
+        } else {
+            pendingCallbackResult = result
+        }
+        shutdown()
     }
 
     private func parseRequestURL(from request: String) -> URL? {
         guard let firstLine = request.split(separator: "\r\n").first else { return nil }
         let components = firstLine.split(separator: " ")
-        guard components.count >= 2 else { return nil }
+        guard components.count >= 2, components[0] == "GET" else { return nil }
         let path = String(components[1])
-        return URL(string: "http://127.0.0.1\(path)")
+        guard let url = URL(string: "http://127.0.0.1\(path)"),
+              url.path == "/oauth2redirect" else { return nil }
+        return url
     }
 
     private func reply(to connection: NWConnection, status: String, body: String) {

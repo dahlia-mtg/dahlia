@@ -6,6 +6,7 @@ struct CloudStorageSettingsView: View {
     @State private var exportFolderStatusMessage: String?
     @State private var exportFolderAlertMessage = ""
     @State private var isShowingExportFolderAlert = false
+    @State private var googleOAuthConsent = GoogleOAuthConsentState()
 
     var body: some View {
         Form {
@@ -76,6 +77,11 @@ struct CloudStorageSettingsView: View {
         } message: {
             Text(exportFolderAlertMessage)
         }
+        .sheet(item: $googleOAuthConsent.pendingDisclosure, onDismiss: startGoogleOAuthIfConsented) { disclosure in
+            GoogleOAuthConsentSheet(disclosure: disclosure) {
+                googleOAuthConsent.grantConsent()
+            }
+        }
     }
 
     private var connectionRow: some View {
@@ -87,13 +93,18 @@ struct CloudStorageSettingsView: View {
         }
     }
 
+    private func startGoogleOAuthIfConsented() {
+        guard googleOAuthConsent.consumeConsent() else { return }
+        Task {
+            await driveStore.signIn()
+        }
+    }
+
     @ViewBuilder
     private var actionButton: some View {
         if !driveStore.isAuthorized {
             Button(L10n.googleDriveConnect) {
-                Task {
-                    await driveStore.signIn()
-                }
+                googleOAuthConsent.request(.drive)
             }
             .buttonStyle(.borderedProminent)
             .disabled(!driveStore.isConfigured || driveStore.isBusy)
