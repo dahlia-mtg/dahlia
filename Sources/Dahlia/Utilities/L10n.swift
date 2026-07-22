@@ -616,6 +616,15 @@ enum L10n {
         localized: "Review the context and export options before generating the summary.",
         bundle: bundle
     ) }
+    static var regenerateSummaries: String { String(localized: "Regenerate Summaries", bundle: bundle) }
+    static var regenerateSelectedSummariesConfirmationTitle: String { String(
+        localized: "Regenerate selected summaries?",
+        bundle: bundle
+    ) }
+    static var regenerateSelectedSummariesConfirmationDescription: String { String(
+        localized: "Each selected meeting is regenerated independently. Existing summaries are replaced only after generation succeeds.",
+        bundle: bundle
+    ) }
     static var exportBatchSummaryToVault: String { String(
         localized: "Export Summary to Vault",
         bundle: bundle
@@ -1344,7 +1353,9 @@ enum L10n {
 
     // MARK: - Summary
 
+    static var runningTasks: String { String(localized: "Running Tasks", bundle: bundle) }
     static var generatingSummary: String { String(localized: "Generating summary...", bundle: bundle) }
+    static var summaryGenerationFailed: String { String(localized: "Could not generate the summary.", bundle: bundle) }
     static var noSummaryYet: String { String(localized: "No summary has been generated yet.", bundle: bundle) }
     static var summaryImageUnavailable: String { String(localized: "Summary image unavailable", bundle: bundle) }
     static var summaryGenerated: String { String(localized: "Summary generated", bundle: bundle) }

@@ -485,6 +485,7 @@
 
 /* Summary */
 "Generating summary..." = "要約を生成中...";
+"Running Tasks" = "実行中のタスク";
 "No summary has been generated yet." = "要約はまだ生成されていません。";
 "Summary image unavailable" = "要約の画像を表示できません";
 "Summary generated" = "要約が生成されました";
@@ -641,6 +642,9 @@
 "Include the latest meetings from the same calendar series in the summary context." = "同じカレンダー予定系列の直近ミーティングを要約コンテキストに含めます。";
 "Generate this summary?" = "要約を生成しますか？";
 "Review the context and export options before generating the summary." = "要約を生成する前に、コンテキストと書き出し設定を確認してください。";
+"Regenerate Summaries" = "要約を再生成";
+"Regenerate selected summaries?" = "選択したミーティングの要約を再生成しますか？";
+"Each selected meeting is regenerated independently. Existing summaries are replaced only after generation succeeds." = "選択したミーティングごとに要約を再生成します。既存の要約は、再生成に成功した場合のみ置き換えられます。";
 "Export Summary to Vault" = "要約を Vault へ書き出す";
 "Write the generated summary and related files to the current Vault." = "生成した要約と関連ファイルを現在の Vault へ書き出します。";
 "Export Summary to Google Docs" = "要約を Google Docs へ書き出す";
@@ -814,6 +818,7 @@
 "No matching meetings" = "一致するミーティングはありません";
 "Meeting unavailable" = "利用できないミーティング";
 "Show meeting details" = "ミーティングの詳細を表示";
+"Could not generate the summary." = "要約を生成できませんでした。";
 
 /* MCP */
 "MCP" = "MCP";

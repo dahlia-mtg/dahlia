@@ -485,6 +485,7 @@
 
 /* Summary */
 "Generating summary..." = "Generating summary...";
+"Running Tasks" = "Running Tasks";
 "No summary has been generated yet." = "No summary has been generated yet.";
 "Summary image unavailable" = "Summary image unavailable";
 "Summary generated" = "Summary generated";
@@ -641,6 +642,9 @@
 "Include the latest meetings from the same calendar series in the summary context." = "Include the latest meetings from the same calendar series in the summary context.";
 "Generate this summary?" = "Generate this summary?";
 "Review the context and export options before generating the summary." = "Review the context and export options before generating the summary.";
+"Regenerate Summaries" = "Regenerate Summaries";
+"Regenerate selected summaries?" = "Regenerate selected summaries?";
+"Each selected meeting is regenerated independently. Existing summaries are replaced only after generation succeeds." = "Each selected meeting is regenerated independently. Existing summaries are replaced only after generation succeeds.";
 "Export Summary to Vault" = "Export Summary to Vault";
 "Write the generated summary and related files to the current Vault." = "Write the generated summary and related files to the current Vault.";
 "Export Summary to Google Docs" = "Export Summary to Google Docs";
@@ -814,6 +818,7 @@
 "No matching meetings" = "No matching meetings";
 "Meeting unavailable" = "Meeting unavailable";
 "Show meeting details" = "Show meeting details";
+"Could not generate the summary." = "Could not generate the summary.";
 
 /* MCP */
 "MCP" = "MCP";

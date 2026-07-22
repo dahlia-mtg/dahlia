@@ -76,6 +76,17 @@ struct ContentView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .bottomTrailing)))
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if !viewModel.summaryGenerationJobs.isEmpty {
+                SummaryProgressToastView(
+                    jobs: viewModel.summaryGenerationJobs,
+                    onDismiss: viewModel.dismissSummaryGenerationJob
+                )
+                .padding(16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.3), value: viewModel.summaryGenerationJobs.map(\.id))
+            }
+        }
         .sheet(item: $viewModel.pendingBatchTranscriptionConfirmation) { confirmation in
             BatchTranscriptionConfirmationView(
                 locales: viewModel.batchTranscriptionLocaleOptions(
@@ -147,7 +158,10 @@ struct ContentView: View {
     @ViewBuilder
     private var detailView: some View {
         if sidebarViewModel.selectedMeetingIds.count > 1 {
-            MultipleMeetingSelectionView(sidebarViewModel: sidebarViewModel)
+            MultipleMeetingSelectionView(
+                viewModel: viewModel,
+                sidebarViewModel: sidebarViewModel
+            )
         } else if sidebarViewModel.selectedMeetingId != nil || viewModel.hasDraftMeeting || viewModel.currentMeetingId != nil {
             ControlPanelView(
                 viewModel: viewModel,
@@ -198,54 +212,5 @@ struct ContentView: View {
         } catch {
             viewModel.errorMessage = error.localizedDescription
         }
-    }
-}
-
-private struct MultipleMeetingSelectionView: View {
-    var sidebarViewModel: SidebarViewModel
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "checklist")
-                .font(.system(size: 42, weight: .regular))
-                .foregroundStyle(.secondary)
-
-            Text(L10n.selectedCount(sidebarViewModel.selectedMeetingIds.count))
-                .font(.title2.weight(.semibold))
-
-            HStack(spacing: 10) {
-                Menu {
-                    Button(L10n.noProject) {
-                        sidebarViewModel.moveMeetings(ids: sidebarViewModel.selectedMeetingIds, toProjectId: nil)
-                    }
-
-                    Divider()
-
-                    ForEach(sidebarViewModel.allProjectItems) { project in
-                        Button(project.projectName) {
-                            sidebarViewModel.moveMeetings(
-                                ids: sidebarViewModel.selectedMeetingIds,
-                                toProjectId: project.projectId
-                            )
-                        }
-                    }
-                } label: {
-                    Label(L10n.moveToProject, systemImage: "folder")
-                }
-
-                Button(role: .destructive) {
-                    sidebarViewModel.deleteMeetings(ids: sidebarViewModel.selectedMeetingIds)
-                } label: {
-                    Label(L10n.deleteCount(sidebarViewModel.selectedMeetingIds.count), systemImage: "trash")
-                }
-
-                Button(L10n.clear) {
-                    sidebarViewModel.clearMeetingSelection()
-                }
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 }
