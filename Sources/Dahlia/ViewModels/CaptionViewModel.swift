@@ -2468,16 +2468,23 @@ final class CaptionViewModel: ObservableObject {
 
     // MARK: - Summary Generation
 
+    private var canStartManualSummaryGeneration: Bool {
+        !isListening && !isFinalizingRecording && !isDeletingScreenshots
+    }
+
     /// 手動で要約を実行できるかどうか。
     var canGenerateSummary: Bool {
-        guard !isListening,
-              !isFinalizingRecording,
-              !isDeletingScreenshots,
+        guard canStartManualSummaryGeneration,
               let currentMeetingId,
               !isSummaryGenerating(meetingId: currentMeetingId),
               currentVaultURL != nil,
               batchTranscriptionState?.blocksSummaryGeneration != true else { return false }
         return currentMeetingHasTranscriptSegments
+    }
+
+    func canRegenerateSummaries(meetingIds: Set<UUID>) -> Bool {
+        canStartManualSummaryGeneration
+            && meetingIds.contains { !isSummaryGenerating(meetingId: $0) }
     }
 
     func isSummaryGenerating(meetingId: UUID) -> Bool {
@@ -2529,6 +2536,37 @@ final class CaptionViewModel: ObservableObject {
     /// 確認画面で選択した設定を使って手動要約を実行する。
     func triggerManualSummary(options: SummaryGenerationOptions = .manual) {
         triggerSummary(options: options)
+    }
+
+    /// DB に保存済みの複数ミーティングを、現在の画面選択を変更せず個別ジョブとして再生成する。
+    func triggerManualSummaries(
+        meetingIds: Set<UUID>,
+        dbQueue: DatabaseQueue?,
+        vaultURL: URL?,
+        options: SummaryGenerationOptions = .manual
+    ) {
+        guard canStartManualSummaryGeneration,
+              let dbQueue,
+              let vaultURL else { return }
+
+        for meetingId in meetingIds.sorted(by: { $0.uuidString < $1.uuidString })
+            where !isSummaryGenerating(meetingId: meetingId) {
+            do {
+                let request = try makePersistedSummaryRequest(
+                    meetingId: meetingId,
+                    dbQueue: dbQueue,
+                    vaultURL: vaultURL,
+                    options: options
+                )
+                startSummaryGeneration(request)
+            } catch {
+                recordSummaryPreparationFailure(
+                    error.localizedDescription,
+                    meetingId: meetingId,
+                    dbQueue: dbQueue
+                )
+            }
+        }
     }
 
     private func triggerSummary(options: SummaryGenerationOptions) {

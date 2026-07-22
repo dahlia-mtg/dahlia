@@ -6,9 +6,20 @@ struct SummaryGenerationConfirmationView: View {
     @State private var exportsToVault = SummaryExportOptions.manual.exportsToVault
     @State private var exportsToGoogleDocs = SummaryExportOptions.manual.exportsToGoogleDocs
 
+    let title: String
+    let description: String
+    let actionTitle: String
     let onGenerate: (SummaryGenerationOptions) -> Void
 
-    init(onGenerate: @escaping (SummaryGenerationOptions) -> Void) {
+    init(
+        title: String = L10n.summaryGenerationConfirmationTitle,
+        description: String = L10n.summaryGenerationConfirmationDescription,
+        actionTitle: String = L10n.generateSummary,
+        onGenerate: @escaping (SummaryGenerationOptions) -> Void
+    ) {
+        self.title = title
+        self.description = description
+        self.actionTitle = actionTitle
         self.onGenerate = onGenerate
         _previousMeetingCount = State(initialValue: AppSettings.shared.summaryPreviousMeetingCount)
     }
@@ -16,9 +27,9 @@ struct SummaryGenerationConfirmationView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.summaryGenerationConfirmationTitle)
+                Text(title)
                     .font(.headline)
-                Text(L10n.summaryGenerationConfirmationDescription)
+                Text(description)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -44,7 +55,7 @@ struct SummaryGenerationConfirmationView: View {
                 Spacer()
                 Button(L10n.cancel, role: .cancel, action: dismiss.callAsFunction)
                     .keyboardShortcut(.cancelAction)
-                Button(L10n.generateSummary, action: generateSummary)
+                Button(actionTitle, action: generateSummary)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(20)

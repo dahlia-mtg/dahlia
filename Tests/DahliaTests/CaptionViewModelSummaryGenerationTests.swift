@@ -9,6 +9,73 @@ import GRDB
     @Suite(.serialized)
     struct CaptionViewModelSummaryGenerationTests {
         @Test
+        func selectedMeetingsRegenerateConcurrentlyWithoutChangingCurrentMeeting() async throws {
+            let fixture = try SummaryGenerationFixture()
+            defer { fixture.removeFiles() }
+            let runner = BlockingSummaryRunner()
+            let viewModel = CaptionViewModel(summaryGenerationRunner: runner.run)
+            let meetingIDs: Set<UUID> = [fixture.first.id, fixture.second.id]
+            let options = SummaryGenerationOptions(
+                previousMeetingCount: 0,
+                exportOptions: SummaryExportOptions(exportsToVault: false, exportsToGoogleDocs: false)
+            )
+
+            #expect(viewModel.canRegenerateSummaries(meetingIds: meetingIDs))
+            viewModel.triggerManualSummaries(
+                meetingIds: meetingIDs,
+                dbQueue: fixture.database.dbQueue,
+                vaultURL: fixture.vaultURL,
+                options: options
+            )
+            await runner.waitForCallCount(2)
+
+            #expect(Set(runner.calls.map(\.meetingID)) == meetingIDs)
+            #expect(viewModel.summaryGeneratingMeetingIDs == meetingIDs)
+            #expect(!viewModel.canRegenerateSummaries(meetingIds: meetingIDs))
+            #expect(viewModel.currentMeetingId == nil)
+
+            runner.complete(meetingID: fixture.first.id, title: "First regenerated")
+            runner.complete(meetingID: fixture.second.id, title: "Second regenerated")
+            #expect(await waitUntil { viewModel.summaryGeneratingMeetingIDs.isEmpty })
+            #expect(try fixture.summary(for: fixture.first.id) != nil)
+            #expect(try fixture.summary(for: fixture.second.id) != nil)
+            #expect(viewModel.currentMeetingId == nil)
+        }
+
+        @Test
+        func selectedMeetingRegenerationSkipsMeetingAlreadyGenerating() async throws {
+            let fixture = try SummaryGenerationFixture()
+            defer { fixture.removeFiles() }
+            let runner = BlockingSummaryRunner()
+            let viewModel = CaptionViewModel(summaryGenerationRunner: runner.run)
+            let meetingIDs: Set<UUID> = [fixture.first.id, fixture.second.id]
+            let options = SummaryGenerationOptions(
+                previousMeetingCount: 0,
+                exportOptions: SummaryExportOptions(exportsToVault: false, exportsToGoogleDocs: false)
+            )
+
+            await fixture.select(fixture.first, in: viewModel, note: "first")
+            viewModel.triggerManualSummary(options: options)
+            await runner.waitForCallCount(1)
+
+            #expect(viewModel.canRegenerateSummaries(meetingIds: meetingIDs))
+            viewModel.triggerManualSummaries(
+                meetingIds: meetingIDs,
+                dbQueue: fixture.database.dbQueue,
+                vaultURL: fixture.vaultURL,
+                options: options
+            )
+            await runner.waitForCallCount(2)
+
+            #expect(runner.calls.count(where: { $0.meetingID == fixture.first.id }) == 1)
+            #expect(runner.calls.count(where: { $0.meetingID == fixture.second.id }) == 1)
+
+            runner.complete(meetingID: fixture.first.id, title: "First")
+            runner.complete(meetingID: fixture.second.id, title: "Second")
+            #expect(await waitUntil { viewModel.summaryGeneratingMeetingIDs.isEmpty })
+        }
+
+        @Test
         func differentMeetingsRunConcurrentlyAndOnlyUpdateTheirOwnSelection() async throws {
             let fixture = try SummaryGenerationFixture()
             defer { fixture.removeFiles() }
