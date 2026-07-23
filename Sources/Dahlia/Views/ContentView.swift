@@ -88,7 +88,6 @@ struct ContentView: View {
             }
         }
         .sheet(item: $viewModel.pendingBatchTranscriptionConfirmation) { confirmation in
-            let projectSelection = viewModel.batchTranscriptionProjectSelection(for: confirmation)
             BatchTranscriptionConfirmationView(
                 locales: viewModel.batchTranscriptionLocaleOptions(
                     preferredIdentifier: confirmation.suggestedLocaleIdentifier
@@ -97,9 +96,9 @@ struct ContentView: View {
                     snapshot: confirmation.automaticLanguageCandidateSnapshot
                 ).locales,
                 displayLocale: AppSettings.shared.appLanguage.locale,
-                projects: projectSelection.projects,
-                initialProjectId: projectSelection.selectedProjectId,
-                initialErrorMessage: projectSelection.errorMessage,
+                projects: confirmation.projectSelection.projects,
+                initialProjectId: confirmation.projectSelection.selectedProjectId,
+                initialErrorMessage: confirmation.projectSelection.errorMessage,
                 initialLanguageSelection: confirmation.initialLanguageSelection,
                 initiallyRetainsAudioAfterBatch: confirmation.retainAudioAfterBatch,
                 initiallyGeneratesSummary: confirmation.initiallyGeneratesSummary,

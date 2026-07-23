@@ -9,10 +9,9 @@ struct SummaryProjectPicker: View {
             Text(L10n.noProject)
                 .tag(nil as UUID?)
 
-            ForEach(projects) { project in
+            ForEach(projects.filter { !$0.missingOnDisk || $0.id == selection }) { project in
                 Text(project.name)
                     .tag(project.id as UUID?)
-                    .disabled(project.missingOnDisk && project.id != selection)
             }
         }
         .pickerStyle(.menu)

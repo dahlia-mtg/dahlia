@@ -611,11 +611,13 @@ final class CaptionViewModel: ObservableObject {
         sessionIds: [UUID],
         meetingId: UUID
     ) {
+        var context: BatchSummaryContext?
         if let currentDbQueue, let currentVaultURL {
-            batchSummaryContextsBySessionId[sessionId] = BatchSummaryContext(
+            context = BatchSummaryContext(
                 dbQueue: currentDbQueue,
                 vaultURL: currentVaultURL
             )
+            batchSummaryContextsBySessionId[sessionId] = context
         }
         let preferences = batchConfirmationPreferences(
             sessionId: sessionId,
@@ -631,7 +633,8 @@ final class CaptionViewModel: ObservableObject {
             automaticLanguageCandidateSnapshot: preferences.automaticLanguageCandidateSnapshot,
             purpose: .retranscription(sessionIds: sessionIds),
             initiallyGeneratesSummary: hasCurrentMeetingSummary
-                || AppSettings.shared.generateSummaryAfterBatchTranscription
+                || AppSettings.shared.generateSummaryAfterBatchTranscription,
+            projectSelection: makeBatchTranscriptionProjectSelection(meetingId: meetingId, context: context)
         )
     }
 
@@ -662,20 +665,15 @@ final class CaptionViewModel: ObservableObject {
         )
     }
 
-    func batchTranscriptionProjectSelection(
-        for confirmation: BatchTranscriptionConfirmation
+    private func makeBatchTranscriptionProjectSelection(
+        meetingId: UUID,
+        context: BatchSummaryContext?
     ) -> BatchTranscriptionProjectSelection {
-        guard let context = batchSummaryContextsBySessionId[confirmation.sessionId] else {
-            return BatchTranscriptionProjectSelection(
-                projects: [],
-                selectedProjectId: nil,
-                errorMessage: L10n.meetingUnavailable
-            )
-        }
+        guard let context else { return .unavailable }
 
         do {
             let snapshot = try context.dbQueue.read { db -> (MeetingRecord, [ProjectRecord]) in
-                guard let meeting = try MeetingRecord.fetchOne(db, key: confirmation.meetingId) else {
+                guard let meeting = try MeetingRecord.fetchOne(db, key: meetingId) else {
                     throw SummaryGenerationPreparationError.meetingUnavailable
                 }
                 let projects = try ProjectRecord
@@ -699,10 +697,9 @@ final class CaptionViewModel: ObservableObject {
     }
 
     func assignPendingBatchTranscriptionProject(_ projectId: UUID?) -> String? {
-        guard let confirmation = pendingBatchTranscriptionConfirmation,
-              let context = batchSummaryContextsBySessionId[confirmation.sessionId] else {
-            return L10n.meetingUnavailable
-        }
+        guard let confirmation = pendingBatchTranscriptionConfirmation else { return L10n.meetingUnavailable }
+        if let errorMessage = confirmation.projectSelection.errorMessage { return errorMessage }
+        guard let context = batchSummaryContextsBySessionId[confirmation.sessionId] else { return nil }
 
         do {
             let repository = MeetingRepository(dbQueue: context.dbQueue)
@@ -724,6 +721,36 @@ final class CaptionViewModel: ObservableObject {
                     projectName: project?.name
                 )
             }
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func assignCurrentMeetingProject(_ projectId: UUID?) -> String? {
+        guard let meetingId = currentMeetingId,
+              let dbQueue = currentDbQueue,
+              let vaultURL = currentVaultURL else {
+            return L10n.meetingUnavailable
+        }
+
+        do {
+            let repository = MeetingRepository(dbQueue: dbQueue)
+            guard let meeting = try repository.fetchMeeting(id: meetingId),
+                  let vault = try repository.fetchAllVaults().first(where: { $0.id == meeting.vaultId }),
+                  vault.url.standardizedFileURL == vaultURL.standardizedFileURL else {
+                return L10n.meetingUnavailable
+            }
+            guard meeting.projectId != projectId else { return nil }
+
+            try ProjectWorkspaceService(repository: repository, vault: vault)
+                .moveMeeting(id: meeting.id, toProjectId: projectId)
+            let project = try projectId.flatMap(repository.fetchProject(id:))
+            setExplicitProjectContext(
+                projectURL: project.map { vaultURL.appending(path: $0.name, directoryHint: .isDirectory) },
+                projectId: projectId,
+                projectName: project?.name
+            )
             return nil
         } catch {
             return error.localizedDescription
@@ -781,7 +808,11 @@ final class CaptionViewModel: ObservableObject {
             initialLanguageSelection: languageSelection,
             automaticLanguageCandidateSnapshot: automaticLanguageCandidates.snapshot,
             purpose: confirmation.purpose,
-            initiallyGeneratesSummary: summaryGenerationOptions != nil
+            initiallyGeneratesSummary: summaryGenerationOptions != nil,
+            projectSelection: makeBatchTranscriptionProjectSelection(
+                meetingId: confirmation.meetingId,
+                context: batchSummaryContextsBySessionId[confirmation.sessionId]
+            )
         )
         let batchSummaryContext = batchSummaryContextsBySessionId[confirmation.sessionId]
         updatePendingBatchSummaryRequest(
@@ -2357,11 +2388,13 @@ final class CaptionViewModel: ObservableObject {
         dbQueue: DatabaseQueue?,
         vaultURL: URL?
     ) {
+        var context: BatchSummaryContext?
         if let dbQueue, let vaultURL {
-            batchSummaryContextsBySessionId[sessionId] = BatchSummaryContext(
+            context = BatchSummaryContext(
                 dbQueue: dbQueue,
                 vaultURL: vaultURL
             )
+            batchSummaryContextsBySessionId[sessionId] = context
         }
         let preferences = batchConfirmationPreferences(
             sessionId: sessionId,
@@ -2375,7 +2408,8 @@ final class CaptionViewModel: ObservableObject {
             retainAudioAfterBatch: preferences.retainsAudio,
             initialLanguageSelection: preferences.languageSelection,
             automaticLanguageCandidateSnapshot: preferences.automaticLanguageCandidateSnapshot,
-            initiallyGeneratesSummary: AppSettings.shared.generateSummaryAfterBatchTranscription
+            initiallyGeneratesSummary: AppSettings.shared.generateSummaryAfterBatchTranscription,
+            projectSelection: makeBatchTranscriptionProjectSelection(meetingId: meetingId, context: context)
         )
         MainWindowOpener.shared.openMainWindow()
     }

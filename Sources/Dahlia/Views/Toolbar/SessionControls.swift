@@ -87,28 +87,11 @@ struct GenerateSummaryToolbarButton: View {
     }
 
     private func generateSummary(options: SummaryGenerationOptions, projectId: UUID?) -> String? {
-        if let error = assignCurrentMeeting(to: projectId) {
+        if let error = viewModel.assignCurrentMeetingProject(projectId) {
             return error
         }
-        return viewModel.triggerManualSummary(options: options) ? nil : L10n.summaryGenerationFailed
-    }
-
-    private func assignCurrentMeeting(to projectId: UUID?) -> String? {
-        guard projectId != viewModel.currentProjectId else { return nil }
-        guard let meetingId = viewModel.currentMeetingId,
-              sidebarViewModel.moveMeeting(id: meetingId, toProjectId: projectId) else {
-            return sidebarViewModel.lastError ?? L10n.projectOperationFailedDescription
-        }
-
-        let project = projectId.flatMap { id in
-            sidebarViewModel.flatProjects.first(where: { $0.id == id })
-        }
-        viewModel.setExplicitProjectContext(
-            projectURL: project.map { sidebarViewModel.projectURL(for: $0.name) },
-            projectId: projectId,
-            projectName: project?.name
-        )
-        return nil
+        guard !viewModel.triggerManualSummary(options: options) else { return nil }
+        return viewModel.isSummaryGenerating ? nil : L10n.summaryGenerationFailed
     }
 }
 

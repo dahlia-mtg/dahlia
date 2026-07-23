@@ -15,18 +15,13 @@ import GRDB
             let runner = BlockingSummaryRunner()
             let viewModel = CaptionViewModel(summaryGenerationRunner: runner.run)
             let project = try fixture.insertProject(name: "Selected", description: "Selected context")
-            try fixture.assign(fixture.first, to: project)
             let options = SummaryGenerationOptions(
                 previousMeetingCount: 0,
                 exportOptions: SummaryExportOptions(exportsToVault: false, exportsToGoogleDocs: false)
             )
 
             await fixture.select(fixture.first, in: viewModel, note: "note")
-            viewModel.setExplicitProjectContext(
-                projectURL: fixture.vaultURL.appending(path: project.name, directoryHint: .isDirectory),
-                projectId: project.id,
-                projectName: project.name
-            )
+            #expect(viewModel.assignCurrentMeetingProject(project.id) == nil)
             viewModel.triggerManualSummary(options: options)
             await runner.waitForCallCount(1)
 
@@ -34,6 +29,24 @@ import GRDB
             #expect(runner.calls[0].projectDescription == "Selected context")
             runner.complete(meetingID: fixture.first.id, title: "Summary")
             #expect(await waitUntil { !viewModel.isSummaryGenerating(meetingId: fixture.first.id) })
+        }
+
+        @Test
+        func batchConfirmationWithoutPersistenceContextDoesNotBlockTranscription() throws {
+            let fixture = try SummaryGenerationFixture()
+            defer { fixture.removeFiles() }
+            let viewModel = CaptionViewModel()
+            let sessionID = try fixture.insertRecordingSession(for: fixture.first, offset: 0)
+
+            viewModel.presentBatchTranscriptionConfirmation(
+                sessionId: sessionID,
+                meetingId: fixture.first.id,
+                dbQueue: fixture.database.dbQueue
+            )
+
+            let confirmation = try #require(viewModel.pendingBatchTranscriptionConfirmation)
+            #expect(confirmation.projectSelection == .unavailable)
+            #expect(viewModel.assignPendingBatchTranscriptionProject(nil) == nil)
         }
 
         @Test
@@ -469,7 +482,7 @@ import GRDB
 
             await destination.select(destination.first, in: viewModel, note: "destination")
             let confirmation = try #require(viewModel.pendingBatchTranscriptionConfirmation)
-            let projectSelection = viewModel.batchTranscriptionProjectSelection(for: confirmation)
+            let projectSelection = confirmation.projectSelection
             #expect(projectSelection.projects.map(\.id) == [project.id])
             #expect(projectSelection.selectedProjectId == nil)
             #expect(projectSelection.errorMessage == nil)
