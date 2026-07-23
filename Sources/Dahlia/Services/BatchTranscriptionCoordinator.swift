@@ -52,11 +52,13 @@ actor BatchTranscriptionCoordinator {
 
     private struct TranscriptionWorkItem: Sendable {
         let index: Int
+        let fileIndex: Int
         let request: BatchSpeechTranscriptionRequest
     }
 
     private struct TranscriptionWorkResult: Sendable {
         let index: Int
+        let fileIndex: Int
         var segments: [TranscriptSegment]
         let localeIdentifier: String
     }
@@ -71,7 +73,10 @@ actor BatchTranscriptionCoordinator {
     let onStateChange: StateHandler
     private var pendingSessionIds: [UUID] = []
     private var runningSessionId: UUID?
+    private var runningProgress: BatchTranscriptionProgress?
     private var processorTask: Task<Void, Never>?
+    private var pendingProgressUpdate: BatchTranscriptionUpdate?
+    private var progressNotificationTask: Task<Void, Never>?
 
     init(
         dbQueue: DatabaseQueue,
@@ -135,8 +140,9 @@ actor BatchTranscriptionCoordinator {
         }
     }
 
-    func isRunning(sessionId: UUID) -> Bool {
-        runningSessionId == sessionId
+    func runningState(sessionId: UUID) -> BatchTranscriptionState? {
+        guard runningSessionId == sessionId else { return nil }
+        return .running(sessionId: sessionId, progress: runningProgress)
     }
 
     func recordRecordingFailure(sessionId: UUID, message: String) async {
@@ -152,6 +158,7 @@ actor BatchTranscriptionCoordinator {
             while !pendingSessionIds.isEmpty {
                 let sessionId = pendingSessionIds.removeFirst()
                 runningSessionId = sessionId
+                runningProgress = nil
                 do {
                     try await markAttemptStarted(sessionId: sessionId)
                     let meetingId = try meetingId(for: sessionId)
@@ -164,6 +171,7 @@ actor BatchTranscriptionCoordinator {
                     await recordFailure(sessionId: sessionId, error: error)
                 }
                 runningSessionId = nil
+                runningProgress = nil
             }
             await languageDetector.unload()
             await speechRecognizer.unload()
@@ -288,8 +296,9 @@ actor BatchTranscriptionCoordinator {
         let automaticLanguageCandidateLocales = automaticLanguageCandidates.map {
             BatchLanguageDetectionCandidateResolver.candidates(snapshot: $0, supportedLocales: supportedLocales).locales
         }
+        let totalFileCount = verifiedSegments.count
         var workItems: [TranscriptionWorkItem] = []
-        for verified in verifiedSegments {
+        for (fileIndex, verified) in verifiedSegments.enumerated() {
             let ranges = try BatchTranscriptionAudioRangePlanner.ranges(
                 for: verified,
                 mode: job.session.batchLanguageDetectionMode
@@ -298,6 +307,7 @@ actor BatchTranscriptionCoordinator {
                 workItems.append(
                     TranscriptionWorkItem(
                         index: workItems.count,
+                        fileIndex: fileIndex,
                         request: BatchSpeechTranscriptionRequest(
                             audioURL: verified.url,
                             startFrame: range.startFrame,
@@ -316,13 +326,22 @@ actor BatchTranscriptionCoordinator {
                 )
             }
         }
+        await notifyProgress(
+            meetingId: job.meeting.id,
+            sessionId: job.session.id,
+            completedFileCount: 0,
+            totalFileCount: totalFileCount
+        )
         let recognitionState = Self.signposter.beginInterval("Recognize CAF files")
         let fallbackCollector = BatchLanguageFallbackCollector()
         var workResults: [TranscriptionWorkResult]
         do {
             workResults = try await transcribeConcurrently(
                 workItems: workItems,
-                fallbackCollector: fallbackCollector
+                fallbackCollector: fallbackCollector,
+                meetingId: job.meeting.id,
+                sessionId: job.session.id,
+                totalFileCount: totalFileCount
             )
             .sorted { $0.index < $1.index }
             Self.signposter.endInterval("Recognize CAF files", recognitionState)
@@ -397,39 +416,6 @@ actor BatchTranscriptionCoordinator {
         return workResults
     }
 
-    private func transcribeConcurrently(
-        workItems: [TranscriptionWorkItem],
-        fallbackCollector: BatchLanguageFallbackCollector
-    ) async throws -> [TranscriptionWorkResult] {
-        try await withThrowingTaskGroup(of: TranscriptionWorkResult.self) { group in
-            let initialCount = min(BatchTranscriptionConcurrency.appleSpeechMaximum, workItems.count)
-            for workItem in workItems.prefix(initialCount) {
-                group.addTask { [self] in
-                    try await transcribe(workItem: workItem, fallbackCollector: fallbackCollector)
-                }
-            }
-
-            var nextIndex = initialCount
-            var results: [TranscriptionWorkResult] = []
-            do {
-                while let result = try await group.next() {
-                    results.append(result)
-                    if nextIndex < workItems.count {
-                        let workItem = workItems[nextIndex]
-                        nextIndex += 1
-                        group.addTask { [self] in
-                            try await transcribe(workItem: workItem, fallbackCollector: fallbackCollector)
-                        }
-                    }
-                }
-                return results
-            } catch {
-                group.cancelAll()
-                throw error
-            }
-        }
-    }
-
     private func transcribe(
         workItem: TranscriptionWorkItem,
         fallbackCollector: BatchLanguageFallbackCollector
@@ -444,6 +430,7 @@ actor BatchTranscriptionCoordinator {
         )
         return TranscriptionWorkResult(
             index: workItem.index,
+            fileIndex: workItem.fileIndex,
             segments: result.segments,
             localeIdentifier: result.localeIdentifier
         )
@@ -557,6 +544,130 @@ actor BatchTranscriptionCoordinator {
 }
 
 extension BatchTranscriptionCoordinator {
+    private func transcribeConcurrently(
+        workItems: [TranscriptionWorkItem],
+        fallbackCollector: BatchLanguageFallbackCollector,
+        meetingId: UUID,
+        sessionId: UUID,
+        totalFileCount: Int
+    ) async throws -> [TranscriptionWorkResult] {
+        try await withThrowingTaskGroup(of: TranscriptionWorkResult.self) { group in
+            let initialCount = min(BatchTranscriptionConcurrency.appleSpeechMaximum, workItems.count)
+            for workItem in workItems.prefix(initialCount) {
+                group.addTask { [self] in
+                    try await transcribe(workItem: workItem, fallbackCollector: fallbackCollector)
+                }
+            }
+
+            var nextIndex = initialCount
+            var results: [TranscriptionWorkResult] = []
+            var remainingWorkItemCountByFile = Dictionary(
+                grouping: workItems,
+                by: \.fileIndex
+            ).mapValues(\.count)
+            var completedFileCount = 0
+            do {
+                while let result = try await group.next() {
+                    results.append(result)
+                    let didCompleteFile: Bool
+                    if remainingWorkItemCountByFile[result.fileIndex] == 1 {
+                        remainingWorkItemCountByFile[result.fileIndex] = nil
+                        completedFileCount += 1
+                        didCompleteFile = true
+                    } else if let remainingCount = remainingWorkItemCountByFile[result.fileIndex] {
+                        remainingWorkItemCountByFile[result.fileIndex] = remainingCount - 1
+                        didCompleteFile = false
+                    } else {
+                        didCompleteFile = false
+                    }
+                    if nextIndex < workItems.count {
+                        let workItem = workItems[nextIndex]
+                        nextIndex += 1
+                        group.addTask { [self] in
+                            try await transcribe(workItem: workItem, fallbackCollector: fallbackCollector)
+                        }
+                    }
+                    if didCompleteFile {
+                        enqueueProgressNotification(
+                            meetingId: meetingId,
+                            sessionId: sessionId,
+                            completedFileCount: completedFileCount,
+                            totalFileCount: totalFileCount
+                        )
+                    }
+                }
+                await finishProgressNotifications()
+                return results
+            } catch {
+                group.cancelAll()
+                await finishProgressNotifications()
+                throw error
+            }
+        }
+    }
+
+    private func enqueueProgressNotification(
+        meetingId: UUID,
+        sessionId: UUID,
+        completedFileCount: Int,
+        totalFileCount: Int
+    ) {
+        pendingProgressUpdate = recordProgress(
+            meetingId: meetingId,
+            sessionId: sessionId,
+            completedFileCount: completedFileCount,
+            totalFileCount: totalFileCount
+        )
+        guard progressNotificationTask == nil else { return }
+        progressNotificationTask = Task { [weak self] in
+            await self?.deliverPendingProgressUpdates()
+        }
+    }
+
+    private func deliverPendingProgressUpdates() async {
+        while let update = pendingProgressUpdate {
+            pendingProgressUpdate = nil
+            await onStateChange(update)
+        }
+        progressNotificationTask = nil
+    }
+
+    private func finishProgressNotifications() async {
+        await progressNotificationTask?.value
+    }
+
+    private func notifyProgress(
+        meetingId: UUID,
+        sessionId: UUID,
+        completedFileCount: Int,
+        totalFileCount: Int
+    ) async {
+        let update = recordProgress(
+            meetingId: meetingId,
+            sessionId: sessionId,
+            completedFileCount: completedFileCount,
+            totalFileCount: totalFileCount
+        )
+        await onStateChange(update)
+    }
+
+    private func recordProgress(
+        meetingId: UUID,
+        sessionId: UUID,
+        completedFileCount: Int,
+        totalFileCount: Int
+    ) -> BatchTranscriptionUpdate {
+        let progress = BatchTranscriptionProgress(
+            completedFileCount: completedFileCount,
+            totalFileCount: totalFileCount
+        )
+        runningProgress = progress
+        return BatchTranscriptionUpdate(
+            meetingId: meetingId,
+            state: .running(sessionId: sessionId, progress: progress)
+        )
+    }
+
     /// Resumes the delete-after-transcription policy if the app stopped after committing a result.
     private func recoverCompletedAudioPurges() async {
         guard let recordingAudioStore else { return }
