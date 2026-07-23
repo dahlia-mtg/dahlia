@@ -10,11 +10,34 @@ protocol AppPermissionProviding {
 }
 
 @MainActor
-final class SystemAppPermissionProvider: AppPermissionProviding {
-    private let calendarStore: MacCalendarStore
+protocol CalendarPermissionRequesting {
+    func requestFullAccess() async
+}
 
-    init(calendarStore: MacCalendarStore = .shared) {
-        self.calendarStore = calendarStore
+@MainActor
+final class EventKitCalendarPermissionRequester: CalendarPermissionRequesting {
+    private let eventStore = EKEventStore()
+
+    func requestFullAccess() async {
+        _ = try? await eventStore.requestFullAccessToEvents()
+    }
+}
+
+@MainActor
+final class SystemAppPermissionProvider: AppPermissionProviding {
+    private let calendarPermissionRequester: any CalendarPermissionRequesting
+    private let preflightScreenCapture: () -> Bool
+    private let requestScreenCapture: () -> Bool
+    private var screenCaptureDeniedInSession = false
+
+    init(
+        calendarPermissionRequester: any CalendarPermissionRequesting = EventKitCalendarPermissionRequester(),
+        preflightScreenCapture: @escaping () -> Bool = CGPreflightScreenCaptureAccess,
+        requestScreenCapture: @escaping () -> Bool = CGRequestScreenCaptureAccess
+    ) {
+        self.calendarPermissionRequester = calendarPermissionRequester
+        self.preflightScreenCapture = preflightScreenCapture
+        self.requestScreenCapture = requestScreenCapture
     }
 
     func status(for permission: AppPermission) -> AppPermissionStatus {
@@ -31,7 +54,9 @@ final class SystemAppPermissionProvider: AppPermissionProviding {
     func request(_ permission: AppPermission) async -> AppPermissionStatus {
         switch permission {
         case .screenAndSystemAudio:
-            return CGRequestScreenCaptureAccess() ? .granted : .denied
+            let granted = requestScreenCapture()
+            screenCaptureDeniedInSession = !granted
+            return granted ? .granted : .denied
         case .microphone:
             if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
                 _ = await AVCaptureDevice.requestAccess(for: .audio)
@@ -39,19 +64,20 @@ final class SystemAppPermissionProvider: AppPermissionProviding {
             return microphoneStatus()
         case .calendar:
             if EKEventStore.authorizationStatus(for: .event) == .notDetermined {
-                await calendarStore.requestAuthorizationOnly()
+                await calendarPermissionRequester.requestFullAccess()
             }
             return calendarStatus()
         }
     }
 
     private func screenCaptureStatus() -> AppPermissionStatus {
-        if CGPreflightScreenCaptureAccess() {
+        if preflightScreenCapture() {
+            screenCaptureDeniedInSession = false
             return .granted
         }
         // CoreGraphics exposes only a Boolean preflight result, so a false value
         // cannot reliably distinguish an initial request from a previous denial.
-        return .requiresReview
+        return screenCaptureDeniedInSession ? .denied : .requiresReview
     }
 
     private func microphoneStatus() -> AppPermissionStatus {

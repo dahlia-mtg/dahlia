@@ -53,9 +53,6 @@ struct PermissionSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .task {
-            model.refresh()
-        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             model.refresh()
@@ -91,24 +88,24 @@ private struct PermissionSettingsRow: View {
         }
     }
 
-    @ViewBuilder
     private var actionButton: some View {
-        if status == .notDetermined || status == .requiresReview {
-            Button(action: action) {
-                actionButtonLabel
+        Group {
+            if isRequestable {
+                baseButton
+                    .buttonStyle(.borderedProminent)
+            } else {
+                baseButton
+                    .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(actionsDisabled)
-            .accessibilityLabel(accessibilityActionLabel)
-            .accessibilityHint(permission.description)
-        } else {
-            Button(action: action) {
-                actionButtonLabel
-            }
-            .buttonStyle(.bordered)
-            .disabled(actionsDisabled)
-            .accessibilityLabel(accessibilityActionLabel)
-            .accessibilityHint(permission.description)
+        }
+        .disabled(actionsDisabled)
+        .accessibilityLabel(accessibilityActionLabel)
+        .accessibilityHint(permission.description)
+    }
+
+    private var baseButton: some View {
+        Button(action: action) {
+            actionButtonLabel
         }
     }
 
@@ -117,7 +114,7 @@ private struct PermissionSettingsRow: View {
         if isRequesting {
             ProgressView()
                 .controlSize(.small)
-                .accessibilityLabel(L10n.allowAccess)
+                .accessibilityLabel(actionLabel)
         } else {
             Text(actionLabel)
         }
@@ -132,6 +129,10 @@ private struct PermissionSettingsRow: View {
         case .granted, .denied, .restricted:
             L10n.openSystemSettings
         }
+    }
+
+    private var isRequestable: Bool {
+        status == .notDetermined || status == .requiresReview
     }
 
     private var accessibilityActionLabel: Text {

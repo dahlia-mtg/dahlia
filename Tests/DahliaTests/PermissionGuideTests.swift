@@ -39,6 +39,18 @@
         }
 
         @Test
+        func screenCaptureDenialSurvivesStatusRefreshInTheSameSession() async {
+            let provider = SystemAppPermissionProvider(
+                preflightScreenCapture: { false },
+                requestScreenCapture: { false }
+            )
+
+            #expect(provider.status(for: .screenAndSystemAudio) == .requiresReview)
+            #expect(await provider.request(.screenAndSystemAudio) == .denied)
+            #expect(provider.status(for: .screenAndSystemAudio) == .denied)
+        }
+
+        @Test
         func resolvedPermissionOpensSystemSettings() async {
             let provider = StubAppPermissionProvider(statuses: [.calendar: .denied])
             let opener = StubSystemSettingsOpener()

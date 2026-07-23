@@ -94,7 +94,7 @@ extension AppPermission {
         case .notDetermined, .granted:
             nil
         case .requiresReview:
-            L10n.screenCapturePermissionReviewGuidance
+            self == .screenAndSystemAudio ? L10n.screenCapturePermissionReviewGuidance : nil
         case .denied:
             switch self {
             case .screenAndSystemAudio:
