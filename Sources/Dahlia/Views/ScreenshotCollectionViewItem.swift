@@ -1,5 +1,34 @@
 import AppKit
 import CoreGraphics
+import Foundation
+
+/// MainActor 上で画像全体を比較せず、同じ backing storage の再利用だけを識別する。
+///
+/// 小さな `Data` は inline storage を使うため、比較量を固定上限内に抑えて値で比較する。
+struct ScreenshotImageContentIdentity: Equatable {
+    private static let boundedValueComparisonLimit = 64
+
+    let data: Data
+    let mimeType: String
+
+    init(_ screenshot: MeetingScreenshotRecord) {
+        data = screenshot.imageData
+        mimeType = screenshot.mimeType
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        guard lhs.mimeType == rhs.mimeType,
+              lhs.data.count == rhs.data.count else { return false }
+        guard lhs.data.count > boundedValueComparisonLimit else {
+            return lhs.data == rhs.data
+        }
+        return lhs.data.withUnsafeBytes { lhsBytes in
+            rhs.data.withUnsafeBytes { rhsBytes in
+                lhsBytes.baseAddress == rhsBytes.baseAddress
+            }
+        }
+    }
+}
 
 @MainActor
 private final class PassthroughImageView: NSImageView {
@@ -43,7 +72,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     }
 
     struct Actions {
-        let activate: () -> Void
+        let activate: (CGImage?) -> Void
         let download: () -> Void
         let delete: () -> Void
     }
@@ -67,10 +96,11 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private var thumbnailTask: Task<Void, Never>?
     private var thumbnailLoadState = ThumbnailLoadState.idle
     private var loadGeneration: UInt64 = 0
-    private var activationHandler: (() -> Void)?
+    private var activationHandler: ((CGImage?) -> Void)?
     private var downloadHandler: (() -> Void)?
     private var deleteHandler: (() -> Void)?
-    private var representedImageData: Data?
+    private var representedImageIdentity: ScreenshotImageContentIdentity?
+    private var loadedThumbnailImage: CGImage?
 
     private(set) var representedScreenshotID: UUID?
     private(set) var renderedState: RenderedState?
@@ -137,7 +167,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     private func releaseRepresentedContent() {
         releaseThumbnail()
         representedScreenshotID = nil
-        representedImageData = nil
+        representedImageIdentity = nil
         renderedState = nil
         activationHandler = nil
         downloadHandler = nil
@@ -155,11 +185,12 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     ) {
         loadViewIfNeeded()
         let screenshot = configuration.screenshot
+        let imageIdentity = ScreenshotImageContentIdentity(screenshot)
         let shouldStartThumbnailLoad = representedScreenshotID != screenshot.id
-            || representedImageData != screenshot.imageData
+            || representedImageIdentity != imageIdentity
             || thumbnailLoadState == .idle
         representedScreenshotID = screenshot.id
-        representedImageData = screenshot.imageData
+        representedImageIdentity = imageIdentity
         timestampLabel.stringValue = configuration.timestamp
         timestampLabel.toolTip = configuration.timestamp
         activationHandler = actions.activate
@@ -216,6 +247,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
         thumbnailTask = nil
         thumbnailLoadState = .idle
         loadGeneration &+= 1
+        loadedThumbnailImage = nil
         thumbnailButton.image = nil
     }
 
@@ -277,6 +309,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
                 return
             }
             self.thumbnailLoadState = .loaded
+            self.loadedThumbnailImage = image
             self.thumbnailButton.image = NSImage(
                 cgImage: image,
                 size: NSSize(width: image.width, height: image.height)
@@ -293,7 +326,7 @@ final class ScreenshotCollectionViewItem: NSCollectionViewItem {
     }
 
     @objc private func activateThumbnail() {
-        activationHandler?()
+        activationHandler?(loadedThumbnailImage)
     }
 
     @objc private func downloadScreenshot() {

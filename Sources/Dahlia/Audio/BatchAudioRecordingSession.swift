@@ -178,10 +178,6 @@ actor BatchAudioRecordingSession {
         return result
     }
 
-    func endActiveRanges() async throws {
-        // Open ranges are sealed atomically with their physical segment during finish.
-    }
-
     func endRangeForReconfiguration(source: RecordingAudioSource) async throws {
         guard let writer = writers.removeValue(forKey: source) else { return }
         try await writer.finish()

@@ -65,7 +65,6 @@ private struct PersistenceStartRequest {
     let vaultId: UUID
     let projectId: UUID?
     let existingMeetingId: UUID?
-    let appendContext: MeetingRepository.AppendRecordingContext?
     let recordingStartTime: Date
     let recordingSessionId: UUID
     let transcriptionMode: TranscriptionMode
@@ -78,6 +77,18 @@ private struct RecordingStartRollbackState {
     let segments: [TranscriptSegment]
     let recordingSessions: [RecordingSessionTimeline]
     let recordingStartTime: Date?
+}
+
+private struct RecordingStopContext {
+    let configurationTasks: [Task<Void, Never>]
+    let store: TranscriptStore
+    let meetingId: UUID?
+    let projectName: String?
+    let vaultURL: URL?
+    let dbQueue: DatabaseQueue?
+    let recordingStart: Date
+    let transcriptionMode: TranscriptionMode
+    let recordingSessionId: UUID?
 }
 
 private struct RecordingControllerStartRequest {
@@ -1830,32 +1841,16 @@ final class CaptionViewModel: ObservableObject {
 
     private func prepareRecordingStart(
         existingMeetingId: UUID?,
-        dbQueue: DatabaseQueue,
         recordingStartTime: Date
-    ) -> MeetingRepository.AppendRecordingContext? {
+    ) {
         persistenceService = nil
         transcriptionEventPipeline = nil
         liveTranscriptRelay = nil
         stopAutomaticScreenshotCapture()
 
-        guard let existingMeetingId else {
+        if existingMeetingId == nil {
             store.recordingStartTime = recordingStartTime
-            return nil
         }
-
-        let repository = MeetingRepository(dbQueue: dbQueue)
-        let context = try? repository.fetchAppendRecordingContext(forMeetingId: existingMeetingId)
-        if let sessions = context?.recordingSessions, !sessions.isEmpty {
-            store.loadRecordingSessions(sessions.map(RecordingSessionTimeline.init))
-        }
-        guard store.recordingStartTime == nil else { return context }
-        if let firstSegmentStartTime = context?.firstSegmentStartTime {
-            store.recordingStartTime = context?.meetingCreatedAt ?? firstSegmentStartTime
-        } else {
-            store.recordingStartTime = recordingStartTime
-            try? repository.updateMeetingCreatedAt(id: existingMeetingId, createdAt: recordingStartTime)
-        }
-        return context
     }
 
     private func batchRecordingSampleRate(for plan: TranscriptionSessionPlan) -> Double? {
@@ -1920,15 +1915,14 @@ final class CaptionViewModel: ObservableObject {
         syncAutomaticScreenshotCaptureState()
     }
 
-    private func startPersistence(_ request: PersistenceStartRequest) throws {
+    private func startPersistence(_ request: PersistenceStartRequest) async throws {
         if let existingMeetingId = request.existingMeetingId {
-            let service = try MeetingPersistenceService(
+            let service = try await MeetingPersistenceService.createAppending(
                 store: store,
                 dbQueue: request.dbQueue,
                 existingMeetingId: existingMeetingId,
-                existingSegmentIds: request.appendContext?.segmentIds ?? [],
                 recordingStartDate: request.recordingStartTime,
-                recordingOffsetSeconds: request.appendContext?.nextOffsetSeconds ?? 0,
+                updatesMeetingStartWhenTranscriptIsEmpty: true,
                 recordingSessionId: request.recordingSessionId,
                 transcriptionMode: request.transcriptionMode,
                 persistencePolicy: request.persistencePolicy,
@@ -1945,7 +1939,7 @@ final class CaptionViewModel: ObservableObject {
         }
 
         let initialName = request.draftMeeting?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let service = try MeetingPersistenceService(
+        let service = try await MeetingPersistenceService.createNew(
             store: store,
             dbQueue: request.dbQueue,
             vaultId: request.vaultId,
@@ -1966,11 +1960,11 @@ final class CaptionViewModel: ObservableObject {
             loader: TranscriptPageLoader(dbQueue: request.dbQueue)
         )
 
-        let resolvedProject = currentVaultURL.flatMap { vaultURL in
-            Self.projectContext(
-                projectId: service.projectId,
-                dbQueue: request.dbQueue,
-                vaultURL: vaultURL
+        let resolvedProject = currentVaultURL.flatMap { vaultURL -> (url: URL, name: String)? in
+            guard let projectName = service.projectName else { return nil }
+            return (
+                vaultURL.appending(path: projectName, directoryHint: .isDirectory),
+                projectName
             )
         }
         let projectWasInherited = service.projectId != request.projectId
@@ -2121,11 +2115,8 @@ final class CaptionViewModel: ObservableObject {
               canStartRecording() else { return }
         let previousBatchTranscriptionState = batchTranscriptionState
 
-        self.currentProjectURL = projectURL
-        self.currentProjectId = projectId
-        self.currentProjectName = projectName
-        self.currentVaultURL = vaultURL
-        self.currentDbQueue = dbQueue
+        (currentProjectURL, currentProjectId, currentProjectName) = (projectURL, projectId, projectName)
+        (currentVaultURL, currentDbQueue) = (vaultURL, dbQueue)
         resetSummaryState()
         let activeDraftMeeting = draftMeeting
 
@@ -2170,19 +2161,17 @@ final class CaptionViewModel: ObservableObject {
             try ensureSessionIsActive(recordingSessionId)
 
             let recordingStartTime = Date.now
-            let appendContext = prepareRecordingStart(
+            prepareRecordingStart(
                 existingMeetingId: existingMeetingId,
-                dbQueue: dbQueue,
                 recordingStartTime: recordingStartTime
             )
 
-            try startPersistence(
+            try await startPersistence(
                 PersistenceStartRequest(
                     dbQueue: dbQueue,
                     vaultId: vaultId,
                     projectId: projectId,
                     existingMeetingId: existingMeetingId,
-                    appendContext: appendContext,
                     recordingStartTime: recordingStartTime,
                     recordingSessionId: recordingSessionId,
                     transcriptionMode: transcriptionMode,
@@ -2241,100 +2230,113 @@ final class CaptionViewModel: ObservableObject {
         // ナビゲーション済みの場合、録音コンテキストからデータを取得
         let ctx = recordingContext
         let activeStore = ctx?.store ?? store
-        let meetingId = ctx?.meetingId ?? currentMeetingId
-        let projectName = ctx?.projectName ?? selectedProjectName
-        let vaultURL = ctx?.vaultURL ?? currentVaultURL
-        let dbQueue = ctx?.dbQueue ?? currentDbQueue
-        let recordingStart = activeStore.timeBase
-        let transcriptionMode = activeTranscriptionMode ?? .realtime
-        let recordingSessionId = persistenceService?.recordingSessionId
+        let stopContext = RecordingStopContext(
+            configurationTasks: configurationTasks,
+            store: activeStore,
+            meetingId: ctx?.meetingId ?? currentMeetingId,
+            projectName: ctx?.projectName ?? selectedProjectName,
+            vaultURL: ctx?.vaultURL ?? currentVaultURL,
+            dbQueue: ctx?.dbQueue ?? currentDbQueue,
+            recordingStart: activeStore.timeBase,
+            transcriptionMode: activeTranscriptionMode ?? .realtime,
+            recordingSessionId: persistenceService?.recordingSessionId
+        )
 
         Task {
-            var stopResult: RecordingSessionController.StopResult?
-            do {
-                stopResult = try await recordingSessionController.stop()
-            } catch {
-                ErrorReportingService.capture(error, context: ["source": "stopRecordingSession"])
-                await recordingSessionController.abort()
-            }
-            for task in configurationTasks {
-                await task.value
-            }
-            let stoppingTranscriptionEventPipeline = transcriptionEventPipeline
-            let stoppingLiveTranscriptRelay = liveTranscriptRelay
-            if let stoppingTranscriptionEventPipeline {
-                do {
-                    try await stoppingTranscriptionEventPipeline.finish()
-                } catch {
-                    ErrorReportingService.capture(error, context: ["source": "stopTranscriptionPersistence"])
-                }
-            }
-            await stoppingLiveTranscriptRelay?.finish()
-            transcriptionEventPipeline = nil
-            liveTranscriptRelay = nil
-            let stoppingPersistenceService = persistenceService
-            let persistenceResult = await stoppingPersistenceService?.stop()
-                ?? .failure(message: L10n.recordingSessionNotActive)
-            if persistenceResult.succeeded {
-                await stoppingTranscriptionEventPipeline?.notifyPersistenceRecoveredAfterFinish()
-            }
-            failedPersistenceService = persistenceResult.succeeded ? nil : stoppingPersistenceService
-            failedTranscriptionEventPipeline = persistenceResult.succeeded
-                ? nil
-                : stoppingTranscriptionEventPipeline
-            persistenceService = nil
-            recordingContext = nil
-            if let persistenceFailureMessage = persistenceResult.failureMessage {
-                errorMessage = persistenceFailureMessage
-            }
-            await recordingSessionController.completeStop()
-            activeTranscriptionMode = nil
-            activeTranscriptionPlan = nil
-            activeRecordingSessionId = nil
-            activeControllerSources.removeAll()
-            pendingRealtimeRecognitionFailure = nil
-            pendingLiveSubtitleWarning = nil
-            startingMicrophoneSelection = nil
-            startingSystemAudioEnabled = nil
-            startingLocaleIdentifier = nil
-            liveCaptionStore.clear()
-            recordingLifecycle = .idle
-            var segments = activeStore.segments
-            let recordingSessions = activeStore.recordingSessions
-            isFinalizingRecording = false
-
-            if transcriptionMode == .batch, let recordingSessionId {
-                await finishStoppedBatchRecording(
-                    recordingSessionId: recordingSessionId,
-                    stopResult: stopResult,
-                    persistenceResult: persistenceResult,
-                    meetingId: meetingId,
-                    vaultURL: vaultURL,
-                    dbQueue: dbQueue
-                )
-                return
-            }
-
-            if let meetingId, let dbQueue {
-                segments = await mergedSegmentsForExport(
-                    meetingId: meetingId,
-                    dbQueue: dbQueue,
-                    activeSegments: segments
-                )
-                if currentMeetingId == meetingId {
-                    currentMeetingHasTranscriptSegments = !segments.isEmpty
-                }
-            }
-            guard let vaultURL, let meetingId, !segments.isEmpty else { return }
-            await exportFiles(
-                vaultURL: vaultURL,
-                meetingId: meetingId,
-                projectName: projectName ?? "",
-                createdAt: recordingStart,
-                segments: segments,
-                recordingSessions: recordingSessions
-            )
+            await finishRecordingStop(stopContext)
         }
+    }
+
+    private func finishRecordingStop(_ context: RecordingStopContext) async {
+        var stopResult: RecordingSessionController.StopResult?
+        var firstFailureMessage: String?
+        do {
+            stopResult = try await recordingSessionController.stop()
+            firstFailureMessage = stopResult?.captureFailureMessage
+        } catch {
+            firstFailureMessage = error.localizedDescription
+            ErrorReportingService.capture(error, context: ["source": "stopRecordingSession"])
+            await recordingSessionController.abort()
+        }
+        for task in context.configurationTasks {
+            await task.value
+        }
+        let stoppingPipeline = transcriptionEventPipeline
+        let stoppingLiveTranscriptRelay = liveTranscriptRelay
+        if let stoppingPipeline {
+            do {
+                try await stoppingPipeline.finish()
+            } catch {
+                firstFailureMessage = firstFailureMessage ?? error.localizedDescription
+                ErrorReportingService.capture(error, context: ["source": "stopTranscriptionPersistence"])
+            }
+        }
+        await stoppingLiveTranscriptRelay?.finish()
+        transcriptionEventPipeline = nil
+        liveTranscriptRelay = nil
+        let stoppingPersistenceService = persistenceService
+        let persistenceResult = await stoppingPersistenceService?.stop()
+            ?? .failure(message: L10n.recordingSessionNotActive)
+        if persistenceResult.succeeded {
+            await stoppingPipeline?.notifyPersistenceRecoveredAfterFinish()
+        }
+        failedPersistenceService = persistenceResult.succeeded ? nil : stoppingPersistenceService
+        failedTranscriptionEventPipeline = persistenceResult.succeeded ? nil : stoppingPipeline
+        persistenceService = nil
+        recordingContext = nil
+        firstFailureMessage = firstFailureMessage ?? persistenceResult.failureMessage
+        if let firstFailureMessage {
+            errorMessage = firstFailureMessage
+        }
+        await recordingSessionController.completeStop()
+        activeTranscriptionMode = nil
+        activeTranscriptionPlan = nil
+        activeRecordingSessionId = nil
+        activeControllerSources.removeAll()
+        pendingRealtimeRecognitionFailure = nil
+        pendingLiveSubtitleWarning = nil
+        startingMicrophoneSelection = nil
+        startingSystemAudioEnabled = nil
+        startingLocaleIdentifier = nil
+        liveCaptionStore.clear()
+        recordingLifecycle = .idle
+        var segments = context.store.segments
+        let recordingSessions = context.store.recordingSessions
+        isFinalizingRecording = false
+
+        if context.transcriptionMode == .batch, let recordingSessionId = context.recordingSessionId {
+            await finishStoppedBatchRecording(
+                recordingSessionId: recordingSessionId,
+                stopResult: stopResult,
+                persistenceResult: persistenceResult,
+                meetingId: context.meetingId,
+                vaultURL: context.vaultURL,
+                dbQueue: context.dbQueue
+            )
+            return
+        }
+
+        if let meetingId = context.meetingId, let dbQueue = context.dbQueue {
+            segments = await mergedSegmentsForExport(
+                meetingId: meetingId,
+                dbQueue: dbQueue,
+                activeSegments: segments
+            )
+            if currentMeetingId == meetingId {
+                currentMeetingHasTranscriptSegments = !segments.isEmpty
+            }
+        }
+        guard let vaultURL = context.vaultURL,
+              let meetingId = context.meetingId,
+              !segments.isEmpty else { return }
+        await exportFiles(
+            vaultURL: vaultURL,
+            meetingId: meetingId,
+            projectName: context.projectName ?? "",
+            createdAt: context.recordingStart,
+            segments: segments,
+            recordingSessions: recordingSessions
+        )
     }
 
     private func retryFailedPersistenceIfNeeded() async -> Bool {
