@@ -1,25 +1,25 @@
-# Database — GRDB とマイグレーション
+# Database GRDB and Migration Guide
 
-この階層の最優先成果は、リリース済みユーザーの全データを保持したまま目的のスキーマへ移行できること。
+The highest-priority outcome in this subtree is reaching the intended schema while preserving every released user's data.
 
-本番 DB は `~/Library/Application Support/Dahlia/dahlia.sqlite`（`AppDatabaseManager.databaseURL`）にある。開発・テストからこのファイルを直接読み書きせず、`AppDatabaseManager(path: ":memory:")` または一時パスを使う。
+The production database is at `~/Library/Application Support/Dahlia/dahlia.sqlite` (`AppDatabaseManager.databaseURL`). Never read or write that file during development or testing. Use `AppDatabaseManager(path: ":memory:")` or a temporary path.
 
-## マイグレーションの不変条件
+## Migration Invariants
 
-- `migrator.eraseDatabaseOnSchemaChange = false` を変更しない。破壊的なスキーマリセットは禁止する。
-- 登録済みの `registerMigration` は、名前、順序、処理内容を変更しない。
-- スキーマ変更は、現在の末尾を確認してから `v<次の番号>_<目的>` の新しいマイグレーションを末尾へ 1 つ追加する。固定の「次バージョン」を文書から推測しない。
-- カラム追加は既存の `add...ColumnIfNeeded` パターンに従い、再実行しても安全な処理にする。
-- 既存行の削除、テーブル再作成、値の不可逆変換が必要に見える場合は実装を止め、非破壊案と移行リスクを示して確認を取る。
+- Keep `migrator.eraseDatabaseOnSchemaChange = false`. Destructive schema resets are prohibited.
+- Do not change the name, order, or body of any registered `registerMigration`.
+- For a schema change, inspect the current final migration and append exactly one new migration named `v<next number>_<purpose>`. Never infer a fixed "next version" from documentation.
+- Follow the existing `add...ColumnIfNeeded` pattern for added columns and keep migration work safe to rerun.
+- If the change appears to require deleting existing rows, recreating a table, or irreversibly transforming values, stop before implementation and request confirmation with a non-destructive alternative and the migration risks.
 
-## モデルとアクセス
+## Models and Access
 
-- `<Name>Record.swift` は 1 テーブル 1 ファイルとし、`Codable`、`FetchableRecord`、`PersistableRecord` に準拠する。
-- UI からの DB 読み書きは `@MainActor` の `MeetingRepository` を経由する。
-- `projects` は vault 配下のファイルシステム上のフォルダに対応し、`VaultSyncService` が FSEvents から同期する。この対応関係をスキーマ変更で崩さない。
+- Keep one table per `<Name>Record.swift` file, conforming to `Codable`, `FetchableRecord`, and `PersistableRecord`.
+- UI database access goes through the `@MainActor`-isolated `MeetingRepository`.
+- A `projects` row maps to a filesystem directory under the vault, synchronized from FSEvents by `VaultSyncService`. Schema changes must preserve this relationship.
 
-## 検証
+## Verification
 
-- 新しいマイグレーションには、旧スキーマと既存行を用意し、移行後も値と関連が保たれることを確認するテストを追加する。
-- 空の DB から全マイグレーションを適用する経路と、直前のスキーマから更新する経路の両方を確認する。
-- 最低限 `swift test --filter AppDatabaseManagerTests` を実行し、変更対象に専用の migration / repository テストがある場合はそれも実行する。
+- Add a test for each new migration that starts from the prior schema with existing rows and verifies that values and relationships survive.
+- Verify both applying every migration to an empty database and upgrading from the immediately preceding schema.
+- Run at least `swift test --filter AppDatabaseManagerTests` plus any migration- or repository-specific tests for the changed behavior.

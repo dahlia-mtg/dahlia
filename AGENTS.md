@@ -1,60 +1,57 @@
-# Dahlia — リポジトリ作業ガイド
+# Dahlia Repository Guide
 
-## 目的
+## Goal
 
-Dahlia は、マイクとシステム音声を同時にキャプチャし、Apple Speech framework でリアルタイム文字起こしを行う macOS アプリ。任意で LLM 要約も生成する。
+Dahlia is a macOS app that captures microphone and system audio simultaneously, transcribes it in real time with the Apple Speech framework, and can optionally generate LLM summaries.
 
-依頼された成果を、既存の録音・文字起こし品質とユーザーデータを保ちながら完成させる。明示的に変更を求められていない挙動は維持する。
+Complete the requested outcome while preserving recording and transcription quality, user data, and behavior that the request does not explicitly change.
 
-## 指示の適用範囲
+## Instruction Scope
 
-このファイルはリポジトリ全体に適用する。編集対象により近い `AGENTS.md` がある場合は、作業前に読み、より具体的な指示を優先する。
+This file applies to the entire repository. Before editing a path covered by a more specific `AGENTS.md`, read that file and follow its additional instructions.
 
-| 対象 | 追加の指示 |
-|------|------------|
-| `Sources/Dahlia/` | アーキテクチャ、並行処理、UI: `Sources/Dahlia/AGENTS.md` |
-| `Sources/Dahlia/Database/` | GRDB とマイグレーション: `Sources/Dahlia/Database/AGENTS.md` |
-| `Tests/DahliaTests/` | テスト実装と実行確認: `Tests/DahliaTests/AGENTS.md` |
-| `scripts/` | SwiftPM のビルド、署名、notarize、lint スクリプト |
+| Scope | Additional guidance |
+| --- | --- |
+| `Sources/Dahlia/` | Architecture, concurrency, and UI: `Sources/Dahlia/AGENTS.md` |
+| `Sources/Dahlia/Database/` | GRDB and migrations: `Sources/Dahlia/Database/AGENTS.md` |
+| `Tests/DahliaTests/` | Test implementation and verification: `Tests/DahliaTests/AGENTS.md` |
+| `scripts/` | SwiftPM build, signing, notarization, and lint scripts |
 
-`CLAUDE.md` は同じ階層の `AGENTS.md` への互換シンボリックリンクであり、内容を二重管理しない。
+`CLAUDE.md` is a compatibility symlink to the `AGENTS.md` in the same directory. Do not maintain duplicate content.
 
-## 実装方針
+## Engineering Constraints
 
-IMPORTANT: Do not write overly defensive code. Always prefer simplicity over pathological complexity.
+- **IMPORTANT:** Do not write overly defensive code. Always prefer simplicity over pathological complexity.
+- Use Swift 6.2, SwiftUI, macOS 26+, and Swift 6 strict concurrency.
+- Use Swift Package Manager only. Do not generate an Xcode project.
+- The app has exactly four SwiftPM runtime dependencies: GRDB.swift, sentry-cocoa, Sparkle, and WhisperKit. The separate `BuildTools` package pins SwiftFormat. The app also verifies and bundles a pinned official arm64 release of the OpenAI Codex CLI as a runtime helper. Get confirmation before adding or updating dependencies.
+- Never destroy a released user's database. Do not modify registered migrations; add a new migration according to `Sources/Dahlia/Database/AGENTS.md`.
 
-## 技術と不変条件
+## Authorization
 
-- Swift 6.2 / SwiftUI / macOS 26+ / Swift 6 strict concurrency。
-- ビルドシステムは Swift Package Manager のみ。Xcode プロジェクトは生成しない。
-- アプリ本体の SwiftPM 外部依存は GRDB.swift、sentry-cocoa、Sparkle、WhisperKit の 4 つ。独立した `BuildTools` Swift package は
-  SwiftFormat を固定バージョンで管理する。加えて、固定バージョンの OpenAI Codex CLI の公式 arm64 Release
-  バイナリを検証し、アプリの実行時ヘルパーとして同梱する。依存の追加・更新は事前に確認を取る。
-- リリース済みユーザーの DB を破壊しない。登録済みマイグレーションは変更せず、Database の `AGENTS.md` に従って新しいマイグレーションを追加する。
+- For requests to answer, explain, review, diagnose, or plan, inspect the relevant files and logs and report the result. Do not edit unless the request also asks for a change.
+- For requests to change, implement, or fix, make the in-scope local edits and run relevant non-destructive validation without asking first. Preserve existing uncommitted work and leave unrelated changes untouched.
+- Get confirmation before destructive actions, external writes, dependency changes, or a material expansion of scope.
 
-## 作業範囲と承認
-
-- 回答、説明、レビュー、診断、計画の依頼では、必要なファイルやログを調査して結果を報告する。変更も明示された場合だけ編集する。
-- 変更、実装、修正の依頼では、必要なローカル編集と非破壊的な検証を進める。既存の未コミット変更を保持し、依頼と無関係な差分を直さない。
-- 破壊的操作、外部への書き込み、または依頼範囲の実質的な拡大には、実行前に確認を取る。
-
-## コマンド
+## Commands
 
 ```bash
-swift build                       # Debug ビルド
-swift run Dahlia                  # 未署名 Debug 実行
-./scripts/run-dev.sh              # Debug + codesign（フル機能の動作確認に推奨）
-./scripts/build-app.sh            # Release .app バンドル
-swift test                        # 全テスト
-swift test --filter SummaryServiceTests  # 対象スイートの例
-CI=true ./scripts/lint.sh         # 変更せず SwiftFormat / SwiftLint を検査
+swift build                            # Debug build
+swift run Dahlia                       # Unsigned debug run
+./scripts/run-dev.sh                   # Debug + codesign; preferred for full-feature testing
+./scripts/build-app.sh                 # Release .app bundle
+swift test                             # Full test suite
+swift test --filter SummaryServiceTests # Example targeted suite
+CI=true ./scripts/lint.sh              # Check SwiftFormat and SwiftLint without modifying files
 ```
 
-`swift run Dahlia` は未署名のため Data Protection Keychain を使えない。Keychain と Touch ID を含む動作確認には `run-dev.sh` を使う。
+`swift run Dahlia` is unsigned and cannot use the Data Protection Keychain. Use `./scripts/run-dev.sh` to verify Keychain or Touch ID behavior.
 
-## 完了条件
+## Definition of Done
 
-- 依頼された成果と、このファイルおよび対象階層の制約を満たしている。
-- Swift の変更は `swift build`、変更した挙動は対象テスト、広範な変更は必要に応じて `swift test` で検証している。Swift ソースの変更では `CI=true ./scripts/lint.sh` も確認する。
-- テストは終了コードだけでなく、出力の集計行で対象テストが実際に実行されたことを確認する。
-- 公開挙動、設定、スキーマが変わる場合は、対応するテスト、ローカライズ、ドキュメントも更新する。検証できない項目は、未実行のコマンド、理由、次の確認を明記し、成功と扱わない。
+- The requested outcome and all applicable repository instructions are satisfied.
+- Swift changes pass `swift build`, behavior changes pass targeted tests, and broader changes run `swift test` when warranted. Swift source changes also pass `CI=true ./scripts/lint.sh`.
+- Confirm from the test summary—not only exit code 0—that the intended tests actually ran.
+- Changes to public behavior, settings, or schemas include the corresponding tests, localization, and documentation.
+- Review the final diff for unintended changes and regressions.
+- If a check cannot run, report the exact command, reason, and next verification step. Do not describe an unverified check as passing.

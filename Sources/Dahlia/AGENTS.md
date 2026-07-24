@@ -1,61 +1,61 @@
-# Sources/Dahlia — アプリ実装ガイド
+# Sources/Dahlia Application Guide
 
-このファイルは `Sources/Dahlia/` 配下に適用する。`Database/` の変更には、さらに `Database/AGENTS.md` を適用する。
+This file applies under `Sources/Dahlia/`. Changes under `Database/` must also follow `Database/AGENTS.md`.
 
-## アーキテクチャ上の完了条件
+## Architecture Invariants
 
-録音経路は次の所有関係を保つ。
+Preserve the following ownership model for the recording pipeline:
 
 ```text
-MicrophoneAudioCaptureSession (マイク / ScreenCaptureKit raw + 必要時 AEC3)
-SystemAudioCaptureManager (システム音声 / ScreenCaptureKit)
+MicrophoneAudioCaptureSession (microphone / raw ScreenCaptureKit + AEC3 when needed)
+SystemAudioCaptureManager (system audio / ScreenCaptureKit)
     ↓ onAudioBuffer
-AudioSourcePipeline → CapturedAudioChunk (セッション相対時刻付き)
+AudioSourcePipeline → CapturedAudioChunk (with session-relative timestamp)
     ↓ AudioFrameRouter
-    ├─ SegmentedAudioSourceWriter (欠落禁止、bounded immutable segment)
-    └─ AudioBufferBridge → SpeechTranscriberService (低遅延、音源ごとに最大 1 つ)
+    ├─ SegmentedAudioSourceWriter (lossless, bounded immutable segments)
+    └─ AudioBufferBridge → SpeechTranscriberService (low latency, at most one per source)
         ↓ TranscriptionEvent
         ↓ TranscriptionEventPipeline
-        ├─ UI lane (preview は音源ごとに最新値、確定 backlog は再読込通知へ集約)
-        │   ├─ TranscriptStore (最大 300 件の再読込可能な表示 projection)
-        │   └─ LiveCaptionStore (録音中だけの一時字幕)
-        └─ persistence lane (確定・翻訳イベントは欠落禁止)
+        ├─ UI lane (latest preview per source; finalized backlog coalesces into reload notices)
+        │   ├─ TranscriptStore (reloadable display projection, maximum 300 entries)
+        │   └─ LiveCaptionStore (temporary captions during recording only)
+        └─ persistence lane (finalized and translation events must not be dropped)
             ↓ TranscriptPersistenceWriter
-            GRDB/SQLite (確定済みセグメントの durable source of truth)
+            GRDB/SQLite (durable source of truth for finalized segments)
 ```
 
-- `RecordingSessionController` actor が capture、recognizer、CAF recorder、batch scheduler の実行リソースを所有する。
-- `CaptionViewModel` はセッション要求、UI 状態、store へのイベント投影、Meeting persistence を担当し、AVFoundation / Speech の実行リソースを保持しない。
-- 認識イベントは `TranscriptionEventPipeline` で UI と永続化へ分岐し、MainActor の描画停滞を確定セグメントの保存へ伝播させない。
-- 全文を必要とする要約・export は bounded な `TranscriptStore` ではなく、MainActor 外で SQLite から取得する。
+- The `RecordingSessionController` actor owns the runtime resources for capture, recognition, CAF recording, and batch scheduling.
+- `CaptionViewModel` owns session requests, UI state, event projection into stores, and meeting persistence. It must not retain AVFoundation or Speech runtime resources.
+- `TranscriptionEventPipeline` splits recognition events into UI and persistence lanes so MainActor rendering stalls cannot delay finalized-segment persistence.
+- Summaries and exports that require the complete transcript must read SQLite off the MainActor, not the bounded `TranscriptStore`.
 
-## コンポーネントの配置
+## Component Placement
 
-| レイヤ | 主なコンポーネント |
-|--------|--------------------|
-| Audio | `AudioCaptureManager`、`SystemAudioCaptureManager`、`AudioSourcePipeline`、`AudioFrameRouter`、`AudioBufferBridge` |
-| Speech | `SpeechTranscriberService`、`PreviewTranslationCoordinator` |
-| Models / Storage | `TranscriptStore`、`MeetingPersistenceService`、`MeetingRepository`、`AppDatabaseManager` |
-| Services | `RecordingSessionController`、`SummaryService`、`VaultSyncService`、Google Calendar / Drive、各種 Export |
-| UI | `CaptionViewModel`、`SidebarViewModel`、`ContentView`、`MeetingListSidebarView`、`ControlPanelView`、`SettingsView` |
+| Layer | Primary components |
+| --- | --- |
+| Audio | `AudioCaptureManager`, `SystemAudioCaptureManager`, `AudioSourcePipeline`, `AudioFrameRouter`, `AudioBufferBridge` |
+| Speech | `SpeechTranscriberService`, `PreviewTranslationCoordinator` |
+| Models / Storage | `TranscriptStore`, `MeetingPersistenceService`, `MeetingRepository`, `AppDatabaseManager` |
+| Services | `RecordingSessionController`, `SummaryService`, `VaultSyncService`, Google Calendar / Drive, exports |
+| UI | `CaptionViewModel`, `SidebarViewModel`, `ContentView`, `MeetingListSidebarView`, `ControlPanelView`, `SettingsView` |
 
-既存の所有関係に収まらない新しい責務を加える場合は、類似コンポーネントを先に確認し、重複する coordinator、store、repository を作らない。
+Before adding a responsibility that does not fit these ownership boundaries, inspect similar components and avoid creating a duplicate coordinator, store, or repository.
 
-## 並行処理
+## Concurrency
 
-- UI に公開する状態、ViewModel、Store、Repository は `@MainActor` に隔離する。
-- capture、音声認識、長寿命の可変 runtime は actor で所有し、既存の `RecordingSessionController` の所有境界を迂回しない。
-- 新しい `@unchecked Sendable` は原則として導入しない。Apple framework やデリゲート境界で必要な場合は、小さな adapter に閉じ込め、可変状態の隔離根拠をコード上に残す。
-- `@preconcurrency import` は Apple framework 側の Sendable 適合不足を吸収する import 境界に限定し、アプリ自身のデータ競合を隠すために使わない。
+- Isolate UI-exposed state, view models, stores, and repositories to `@MainActor`.
+- Actors own capture, recognition, and other long-lived mutable runtimes. Do not bypass the existing `RecordingSessionController` ownership boundary.
+- Avoid new `@unchecked Sendable` conformances. When an Apple framework or delegate boundary requires one, confine it to a small adapter and document the mutable-state isolation in code.
+- Use `@preconcurrency import` only at import boundaries that compensate for missing Sendable conformance in Apple frameworks. Do not use it to hide application data races.
 
-## 共通実装規約
+## Implementation Conventions
 
-- 新しいテーブル行・ドメインエンティティの ID は、時系列ソート可能な `UUID.v7()` を使う。
-- SwiftFormat / SwiftLint の設定（4 スペース、150 文字行制限、trailing comma）に従う。
-- UI 文字列は `Utilities/L10n.swift` に computed property を追加し、`Resources/ja.lproj` と `Resources/en.lproj` の両方へ同じキーを追加する。日本語をプライマリとする。
-- 設定画面は `Form` + `.formStyle(.grouped)`、`Section`、`LabeledContent`、標準コントロールを使う。独自カード、独自行、コントロールの固定幅 `frame` は追加しない。トグルは `.toggleStyle(.switch)`、複数選択は `.checkbox` を使う。
+- Use time-sortable `UUID.v7()` values for new table-row and domain-entity IDs.
+- Follow the SwiftFormat and SwiftLint configuration: four-space indentation, 150-character line limit, and trailing commas.
+- Add UI strings as computed properties in `Utilities/L10n.swift`, then add the same key to both `Resources/ja.lproj` and `Resources/en.lproj`. Japanese is the primary localization.
+- Settings screens use `Form` with `.formStyle(.grouped)`, `Section`, `LabeledContent`, and standard controls. Do not add custom cards, custom rows, or fixed-width control frames. Use `.toggleStyle(.switch)` for toggles and `.checkbox` for multiple selection.
 
-## 検証
+## Verification
 
-- 変更したレイヤに対応するテストを先に実行する。録音経路では、開始、停止、再構成、音源別ルーティング、バッチ保存の境界まで確認する。
-- UI の変更では Debug ビルドに加え、可能なら対象画面の通常、空、エラー、無効状態を確認する。
+- Run tests for the changed layer first. Recording-pipeline changes must cover start, stop, reconfiguration, per-source routing, and batch-persistence boundaries as applicable.
+- For UI changes, run a debug build and, when practical, inspect the affected screen in normal, empty, error, and disabled states.
