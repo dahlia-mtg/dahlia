@@ -13,7 +13,7 @@ struct CodexChatMarkdownProjectionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        LazyVStack(alignment: .leading, spacing: 10) {
             ForEach(blocks.indices, id: \.self) { index in
                 CodexChatMarkdownBlockView(block: block(at: index))
             }

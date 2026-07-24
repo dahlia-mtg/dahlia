@@ -267,6 +267,46 @@
             actions = await runtime.probe.actions
             #expect(!actions.contains(.batchEnqueue))
         }
+    }
+
+    extension RecordingSessionControllerTests {
+        @Test
+        func captureStopFailureIsReturnedAfterRemainingWorkDrains() async throws {
+            let runtime = try await makeRuntime(
+                mode: .batch,
+                liveSubtitlesEnabled: true,
+                failingCaptureStopSource: .microphone
+            )
+            let result = try await runtime.controller.stop()
+            let actions = await runtime.probe.actions
+            let lastCaptureStop = try #require(actions.lastIndex(where: { $0.isCaptureStop }))
+            let firstRecognitionFinish = try #require(actions.firstIndex(where: { $0.isRecognitionFinish }))
+            let batchFinish = try #require(actions.firstIndex(of: .batchFinish))
+
+            #expect(result.captureFailureMessage == FakeRuntimeError.captureStop.localizedDescription)
+            #expect(result.batchRecordingSucceeded)
+            #expect(lastCaptureStop < firstRecognitionFinish)
+            #expect(firstRecognitionFinish < batchFinish)
+            await runtime.controller.completeStop()
+        }
+
+        @Test
+        func realtimeCaptureStopFailureThrowsAfterRecognitionDrains() async throws {
+            let runtime = try await makeRuntime(
+                mode: .realtime,
+                liveSubtitlesEnabled: true,
+                failingCaptureStopSource: .microphone
+            )
+            await #expect(throws: FakeRuntimeError.self) {
+                try await runtime.controller.stop()
+            }
+
+            let actions = await runtime.probe.actions
+            let lastCaptureStop = try #require(actions.lastIndex(where: { $0.isCaptureStop }))
+            let firstRecognitionFinish = try #require(actions.firstIndex(where: { $0.isRecognitionFinish }))
+            #expect(lastCaptureStop < firstRecognitionFinish)
+            await runtime.controller.completeStop()
+        }
 
         @Test
         func localeChangeKeepsCaptureAndSourceChangeTouchesOnlyRequestedSource() async throws {
@@ -517,6 +557,7 @@
             recognitionFailureMode: FakeRecognitionFailureMode = .none,
             failingRecognitionFinishSource: RecordingAudioSource? = nil,
             failingCaptureDeviceID: AudioDeviceID? = nil,
+            failingCaptureStopSource: RecordingAudioSource? = nil,
             forcesExternalMicrophoneEchoCancellation: Bool = false,
             failureRecorder: RuntimeFailureRecorder? = nil,
             warningStore: FakeCaptureWarningStore? = nil
@@ -527,6 +568,7 @@
                 captureFactory: FakeAudioCaptureFactory(
                     probe: probe,
                     failingDeviceID: failingCaptureDeviceID,
+                    failingStopSource: failingCaptureStopSource,
                     warningStore: warningStore
                 ),
                 recognitionFactory: FakeRecognitionFactory(
@@ -678,17 +720,20 @@
         let probe: RecordingRuntimeProbe
         let failingSource: RecordingAudioSource?
         let failingDeviceID: AudioDeviceID?
+        let failingStopSource: RecordingAudioSource?
         let warningStore: FakeCaptureWarningStore?
 
         init(
             probe: RecordingRuntimeProbe,
             failingSource: RecordingAudioSource? = nil,
             failingDeviceID: AudioDeviceID? = nil,
+            failingStopSource: RecordingAudioSource? = nil,
             warningStore: FakeCaptureWarningStore? = nil
         ) {
             self.probe = probe
             self.failingSource = failingSource
             self.failingDeviceID = failingDeviceID
+            self.failingStopSource = failingStopSource
             self.warningStore = warningStore
         }
 
@@ -705,7 +750,8 @@
                 source: pipeline.source,
                 probe: probe,
                 forcesEchoCancellation: pipeline.forcesEchoCancellationForExternalMicrophone,
-                shouldFail: pipeline.source == failingSource || deviceShouldFail
+                shouldFailStart: pipeline.source == failingSource || deviceShouldFail,
+                shouldFailStop: pipeline.source == failingStopSource
             )
         }
     }
@@ -714,18 +760,21 @@
         let source: RecordingAudioSource
         let probe: RecordingRuntimeProbe
         let forcesEchoCancellation: Bool
-        let shouldFail: Bool
+        let shouldFailStart: Bool
+        let shouldFailStop: Bool
 
         init(
             source: RecordingAudioSource,
             probe: RecordingRuntimeProbe,
             forcesEchoCancellation: Bool,
-            shouldFail: Bool
+            shouldFailStart: Bool,
+            shouldFailStop: Bool
         ) {
             self.source = source
             self.probe = probe
             self.forcesEchoCancellation = forcesEchoCancellation
-            self.shouldFail = shouldFail
+            self.shouldFailStart = shouldFailStart
+            self.shouldFailStop = shouldFailStop
         }
 
         func start() async throws {
@@ -734,13 +783,16 @@
                 forcesEchoCancellation: forcesEchoCancellation
             ))
             await probe.append(.captureStart(source))
-            if shouldFail {
+            if shouldFailStart {
                 throw FakeRuntimeError.captureStart
             }
         }
 
         func stop() async throws {
             await probe.append(.captureStop(source))
+            if shouldFailStop {
+                throw FakeRuntimeError.captureStop
+            }
         }
     }
 
@@ -939,6 +991,7 @@
 
     private enum FakeRuntimeError: Error {
         case captureStart
+        case captureStop
         case recognitionModelPreparation
         case recognitionSessionPreparation
         case recognitionStart
